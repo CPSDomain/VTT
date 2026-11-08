@@ -45,6 +45,7 @@ function onMessage(msg) {
       document.body.classList.toggle('dm', me.isDM);
       const st = msg.state;
       if (st.table) table = st.table;
+      handouts = st.handouts || []; renderHandouts();
       if (!me.isDM && passcode) trySet('tt-code', passcode);
       $('gate').hidden = true;
       active = st.activeScene;
@@ -64,6 +65,18 @@ function onMessage(msg) {
       sceneChanged(true);
       break;
     }
+    case 'sight': if (s) { s.sight = msg.data; } break;
+    case 'doors': if (s) { s.doors = msg.doors; } break;
+    case 'doorFlash': pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.open ? 'Door opened' : 'Door closed', dm: false, t0: performance.now() }); break;
+    case 'handouts': handouts = msg.handouts; renderHandouts(); break;
+    case 'handout': {
+      const i = handouts.findIndex((h) => h.id === msg.handout.id);
+      if (i >= 0) handouts[i] = msg.handout; else handouts.push(msg.handout);
+      renderHandouts();
+      if (msg.show) { openHandout(msg.handout); }
+      break;
+    }
+    case 'handoutRemove': handouts = handouts.filter((h) => h.id !== msg.id); renderHandouts(); if (viewing === msg.id) $('handoutView').hidden = true; break;
     case 'presence': players = msg.players; renderPlayers(); renderTablePanel(); break;
     case 'table': table = msg.table; renderTablePanel(); renderPlayers(); break;
     case 'denied': showDenied(msg.reason); break;
@@ -106,7 +119,7 @@ function onMessage(msg) {
       if (msg.points) remoteRulers.set(key, { sceneId: msg.sceneId, points: msg.points, name: msg.who, dm: msg.dm, t: Date.now() }); else remoteRulers.delete(key);
       break;
     }
-    case 'sceneMeta': if (s) { Object.assign(s, msg.patch); if (msg.sceneId === editing) sceneChanged(false); } break;
+    case 'sceneMeta': if (s) { Object.assign(s, msg.patch); if (msg.patch.vision && !me.isDM) { s.sight = null; visionMask = null; } if (msg.sceneId === editing) sceneChanged(false); } break;
     case 'sceneFull':
       if (msg.active) { const switched = active !== msg.scene.id; scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(switched); }
       else { scenes[msg.scene.id] = msg.scene; if (msg.scene.id === editing) sceneChanged(false); }
@@ -207,7 +220,7 @@ function sceneChanged(refit) {
   fogDirty = true;
   if (refit) { selTpl = null; tplDraft = null; ruler = null; if (labelEdit) closeLabelEditor(); }
   renderInit(); renderEditor();
-  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); if (refit) clearMapSelection(); }
+  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); renderVisionPop(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
   if (s.bg) loadImg(s.bg.url);
   if (refit) fitView();
@@ -325,7 +338,7 @@ function render() {
   // props (torch light first so it sits under everything else)
   const props = Object.values(s.props).filter((p) => p.x >= x0 - 1 && p.x <= x1 + 1 && p.y >= y0 - 1 && p.y <= y1 + 1)
     .sort((a, b) => (a.kind === 'torch' ? -1 : 0) - (b.kind === 'torch' ? -1 : 0) || a.y - b.y);
-  for (const p of props) drawProp(ctx, p);
+  for (const p of props) drawProp(ctx, p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? { ...p, kind: 'dooropen' } : p);
 
   // grid
   if (s.showGrid !== false) {
@@ -337,6 +350,8 @@ function render() {
   }
   ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(0, 0, W, Hh);
 
+  drawTokenLights(s);
+  drawVision(s);
   drawFog(s);
   drawTemplates(s);
   drawLabels(s);
@@ -350,7 +365,8 @@ function render() {
       ctx.save(); ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 18; ctx.lineWidth = 5; ctx.strokeStyle = '#fbbf24';
       ctx.beginPath(); ctx.arc(cx, cy, rad - 1, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
-    ctx.globalAlpha = t.hidden ? 0.5 : 1;
+    const unseen = previewSight && !(t.owner && t.owner !== '') && !tokenSeen(s, t, previewSight);
+    ctx.globalAlpha = t.hidden || unseen ? (unseen ? 0.3 : 0.5) : 1;
     drawTokenArt(ctx, t, cx, cy, rad - 4, draw);
     const pct = hpFraction(t);
     if (pct === 0) { // down: darken and cross out
@@ -558,13 +574,16 @@ $('fogRevealAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of
 $('fogCoverAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of war" first'); sendMsg({ type: 'fogAll', sceneId: editing, reveal: false }); };
 
 function drawWalls(s) {
-  if (!me.isDM || !s.walls || !s.walls.length || !(mode === 'build' || fogTool === 'room')) return;
+  if (!me.isDM || !((s.walls && s.walls.length) || (s.doors && s.doors.length)) || !(mode === 'build' || fogTool === 'room' || tt === 'door')) return;
   const z = view.zoom;
   ctx.save(); ctx.lineCap = 'round';
   ctx.lineWidth = 2.5 / z; ctx.strokeStyle = 'rgba(56,189,248,.85)'; ctx.beginPath();
-  for (const g of s.walls) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); } ctx.stroke();
-  ctx.lineWidth = 4 / z; ctx.strokeStyle = 'rgba(251,146,60,.95)'; ctx.beginPath();
-  for (const g of s.doors || []) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); } ctx.stroke();
+  for (const g of s.walls || []) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); } ctx.stroke();
+  for (const open of [false, true]) {
+    ctx.lineWidth = 4 / z; ctx.strokeStyle = open ? 'rgba(74,222,128,.95)' : 'rgba(251,146,60,.95)'; ctx.beginPath();
+    for (const g of s.doors || []) if (!!g[4] === open) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); }
+    ctx.stroke();
+  }
   ctx.restore();
 }
 function drawToolPreview(s) {
@@ -604,6 +623,148 @@ function drawToolPreview(s) {
     ctx.strokeStyle = '#ff6b35'; ctx.strokeRect(hover.x * CELL, hover.y * CELL, CELL, CELL);
   }
 }
+
+// ---------- lighting and vision ----------
+// Players get "sight" from the table: one byte per square (2 seen, 1 seen dimly, 0 not seen now).
+// Squares they can't see right now are dark (what's there is what they remember). The DM can preview it.
+const VIS = window.TabletopVision;
+let previewSight = null, previewKey = '', visionMask = null;
+const decodeSight = (b64) => { if (!b64) return null; const bin = atob(b64), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; };
+function sightNow(s) {
+  if (!s || !s.vision || !s.vision.on) return null;
+  if (!me.isDM) { if (typeof s.sight === 'string') s.sight = decodeSight(s.sight); return s.sight || null; }
+  const who = $('vPreview').value;
+  if (!who || !VIS) return null;
+  // the DM's preview: worked out here, the same way the table does it for players
+  const key = JSON.stringify([editing, who, s.vision, s.cols, s.rows, Object.values(s.tokens).map((t) => [t.x, t.y, t.size, t.owner, t.light, t.darkvision, t.hidden]), (s.doors || []).map((d) => d[4] ? 1 : 0), Object.keys(s.tiles).length, Object.values(s.props).map((p) => p.kind + p.x + ',' + p.y + (p.open ? 'o' : ''))]);
+  if (key !== previewKey) { previewKey = key; const name = who === '*' ? '' : who; const sc2 = who === '*' ? { ...s, vision: { ...s.vision, shared: true } } : s; previewSight = VIS.sight(sc2, VIS.viewersFor(sc2, name)); visionMask = null; }
+  return previewSight;
+}
+function tokenSeen(s, t, S) { for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (S[y * s.cols + x]) return true; return false; }
+let noTokenNote = false;
+function drawVision(s) {
+  const S = sightNow(s);
+  // a player with vision on but no token of their own sees nothing: say why
+  const lonely = !me.isDM && !!S && !Object.values(s.tokens).some((t) => t.owner === me.name);
+  if (lonely !== noTokenNote) { noTokenNote = lonely; $('status').textContent = lonely ? 'You see what your character sees: ask the DM to give you a token on this map' : ''; $('status').style.display = lonely ? '' : 'none'; }
+  if (!me.isDM) previewSight = null; else if (!S) previewSight = null;
+  if (!S || S.length !== s.cols * s.rows) return;
+  const P = 2, Z = 4;
+  if (!visionMask || visionMask.src !== S) {
+    const w = (s.cols + 2 * P) * Z, h = (s.rows + 2 * P) * Z, c1 = document.createElement('canvas'); c1.width = w; c1.height = h;
+    const g = c1.getContext('2d'); g.fillStyle = 'rgba(6,6,10,.8)'; g.fillRect(0, 0, w, h);
+    for (let y = 0; y < s.rows; y++) for (let x = 0; x < s.cols; x++) {
+      const v = S[y * s.cols + x]; if (!v) continue;
+      g.clearRect((x + P) * Z, (y + P) * Z, Z, Z);
+      if (v === 1) { g.fillStyle = 'rgba(10,12,30,.42)'; g.fillRect((x + P) * Z, (y + P) * Z, Z, Z); }
+    }
+    const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+    const g2 = c2.getContext('2d'); g2.filter = 'blur(1.2px)'; g2.drawImage(c1, 0, 0);
+    visionMask = c2; visionMask.src = S;
+  }
+  ctx.save(); ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(visionMask, -P * CELL, -P * CELL, (s.cols + 2 * P) * CELL, (s.rows + 2 * P) * CELL);
+  ctx.restore();
+}
+// light from tokens carrying it: a soft warm glow everyone sees
+function drawTokenLights(s) {
+  for (const t of Object.values(s.tokens)) {
+    if (!t.light || !(t.light[1] > 0)) continue;
+    const cx = (t.x + t.size / 2) * CELL, cy = (t.y + t.size / 2) * CELL, r = (t.light[1] / 5) * CELL;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(255,196,110,.20)'); g.addColorStop((t.light[0] / t.light[1]) || 0.5, 'rgba(255,180,90,.10)'); g.addColorStop(1, 'rgba(255,170,80,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+  }
+}
+// The DM's vision settings
+function renderVisionPop() {
+  const s = sc(); if (!s || !me.isDM) return;
+  const v = { on: false, ambient: 'bright', shared: true, explore: true, ...(s.vision || {}) };
+  $('vOn').checked = v.on; $('vAmbient').value = v.ambient; $('vShared').checked = v.shared; $('vExplore').checked = v.explore;
+  $('visionBtn').classList.toggle('on', v.on);
+  const owners = [...new Set(Object.values(s.tokens).map((t) => t.owner).filter((o) => o && o !== '*'))].sort();
+  const cur = $('vPreview').value, sel = $('vPreview');
+  sel.innerHTML = '<option value="">Nobody: I see everything</option><option value="*">The whole party</option>' + owners.map((o) => `<option value="${o.replace(/"/g, '&quot;')}"></option>`).join('');
+  [...sel.options].slice(2).forEach((o, i) => { o.textContent = owners[i]; });
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+  sel.disabled = !v.on;
+}
+const setVision = (patch) => { const s = sc(); s.vision = { on: false, ambient: 'bright', shared: true, explore: true, ...(s.vision || {}), ...patch }; sendMsg({ type: 'sceneUpdate', sceneId: editing, vision: patch }); renderVisionPop(); draw(); };
+$('visionBtn').onclick = () => { $('visionPop').hidden = !$('visionPop').hidden; renderVisionPop(); };
+$('vClose').onclick = () => { $('visionPop').hidden = true; };
+$('vOn').onchange = () => { setVision({ on: $('vOn').checked }); toast($('vOn').checked ? 'Vision on: players see only what their characters can see. Players see through tokens they own.' : 'Vision off: players see the whole map (apart from fog)', 5000); };
+$('vAmbient').onchange = () => setVision({ ambient: $('vAmbient').value });
+$('vShared').onchange = () => setVision({ shared: $('vShared').checked });
+$('vExplore').onchange = () => setVision({ explore: $('vExplore').checked });
+$('vPreview').onchange = () => { previewKey = ''; draw(); };
+
+// ---------- handouts ----------
+let handouts = [], viewing = null, hEdit = null;
+function renderHandouts() {
+  const list = $('handoutList'); list.innerHTML = '';
+  $('handoutSec').classList.toggle('none', !handouts.length);
+  if (me.isDM && !handouts.length) list.innerHTML = '<div class="hint" style="margin-top:0">Letters, pictures and clues to show the players.</div>';
+  for (const h of [...handouts].reverse()) {
+    const row = document.createElement('div'); row.className = 'hitem';
+    const t = document.createElement('span'); t.className = 'ht'; t.textContent = h.title; t.title = 'Open'; t.onclick = () => openHandout(h);
+    row.appendChild(t);
+    if (me.isDM) {
+      const who = document.createElement('small'); who.textContent = h.to === 'all' ? 'everyone' : h.to.join(', '); row.appendChild(who);
+      const show = document.createElement('button'); show.textContent = 'Show'; show.title = 'Pop it up on their screens again'; show.onclick = () => { sendMsg({ type: 'handoutShow', id: h.id }); toast(`Showing "${h.title}" to ${h.to === 'all' ? 'everyone' : h.to.join(', ')}`); };
+      const ed = document.createElement('button'); ed.textContent = 'Edit'; ed.onclick = () => editHandout(h);
+      row.append(show, ed);
+    }
+    list.appendChild(row);
+  }
+}
+function openHandout(h) {
+  viewing = h.id;
+  $('hvTitle').textContent = h.title; $('hvText').textContent = h.text || '';
+  if (h.img) $('hvImg').src = h.img; else $('hvImg').removeAttribute('src');
+  $('handoutView').hidden = false;
+}
+function editHandout(h) {
+  hEdit = h ? { ...h } : { title: '', text: '', img: null, to: 'all' };
+  $('hmTitle').textContent = h ? 'Edit handout' : 'New handout';
+  $('hTitle').value = hEdit.title; $('hText').value = hEdit.text || '';
+  if (hEdit.img) $('hImgPrev').src = hEdit.img; else $('hImgPrev').removeAttribute('src');
+  $('hImgDel').style.display = hEdit.img ? '' : 'none';
+  $('hDel').style.display = h ? '' : 'none';
+  document.querySelector(`input[name="hTo"][value="${hEdit.to === 'all' ? 'all' : 'some'}"]`).checked = true;
+  // everyone the DM might give it to: players here now and owners of tokens
+  const names = [...new Set([...players, ...Object.values(scenes).flatMap((x) => Object.values(x.tokens).map((t) => t.owner)).filter((o) => o && o !== '*'), ...(Array.isArray(hEdit.to) ? hEdit.to : [])])].sort();
+  $('hWho').innerHTML = names.length ? '' : '<div class="hint" style="margin:0">No players yet. Give tokens owners, or wait for players to join.</div>';
+  for (const n of names) {
+    const l = document.createElement('label'); l.className = 'check';
+    const cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = n; cb.checked = Array.isArray(hEdit.to) && hEdit.to.includes(n);
+    cb.onchange = () => { if (cb.checked) document.querySelector('input[name="hTo"][value="some"]').checked = true; };
+    l.append(cb, ' ' + n); $('hWho').appendChild(l);
+  }
+  $('handoutModal').hidden = false; setTimeout(() => $('hTitle').focus(), 0);
+}
+function saveHandout(show) {
+  const to = document.querySelector('input[name="hTo"]:checked').value === 'all' ? 'all' : [...$('hWho').querySelectorAll('input:checked')].map((c) => c.value);
+  if (to !== 'all' && !to.length) return toast('Tick who gets it, or choose Everyone');
+  const h = { id: hEdit.id, title: $('hTitle').value.trim() || 'Handout', text: $('hText').value, img: hEdit.img || null, to };
+  if (!h.text.trim() && !h.img) return toast('Add some text or a picture');
+  sendMsg({ type: 'handoutSave', handout: h, show });
+  $('handoutModal').hidden = true;
+  toast(show ? `Showing "${h.title}" to ${to === 'all' ? 'everyone' : to.join(', ')}` : 'Handout saved. Click Show when you want the players to see it.', 4000);
+}
+$('newHandout').onclick = () => editHandout(null);
+$('hDel').onclick = () => {
+  if (!hEdit || !hEdit.id) return;
+  if ($('hDel').dataset.sure !== '1') { $('hDel').dataset.sure = '1'; $('hDel').textContent = 'Sure?'; setTimeout(() => { $('hDel').dataset.sure = ''; $('hDel').textContent = 'Delete'; }, 3000); return; }
+  sendMsg({ type: 'handoutDelete', id: hEdit.id }); $('handoutModal').hidden = true; $('hDel').dataset.sure = ''; $('hDel').textContent = 'Delete';
+};
+$('hSave').onclick = () => saveHandout(false);
+$('hShow').onclick = () => saveHandout(true);
+$('hImgBtn').onclick = () => $('hImgIn').click();
+$('hImgIn').onchange = async () => {
+  const f = $('hImgIn').files[0]; $('hImgIn').value = ''; if (!f) return;
+  try { toast('Uploading picture…', 10000); hEdit.img = await uploadFile(f); $('hImgPrev').src = hEdit.img; $('hImgDel').style.display = ''; toast('Picture added'); } catch (e) { toast('Upload failed: ' + e.message); }
+};
+$('hImgDel').onclick = () => { hEdit.img = null; $('hImgPrev').removeAttribute('src'); $('hImgDel').style.display = 'none'; };
 
 // ---------- table tools (Play mode): ruler, spell templates, ping, labels ----------
 // Positions here are in squares (1 = one 5-ft square), so they don't depend on zoom.
@@ -1049,6 +1210,9 @@ function renderEditor() {
     const c = sc().combat; $('eToInit').textContent = c && c.active && c.entries.some((e) => e.id === t.id) ? '✓ In initiative' : '⚔ Add to initiative';
   }
   setv('eHp', t.hp); setv('eMaxHp', t.maxHp); setv('eTemp', t.tempHp || ''); setv('eInit', t.initBonus ?? '');
+  const lv = t.light && t.light[1] > 0 ? t.light.join(',') : '';
+  if (keep !== $('eLight')) { $('eLight').value = lv; if ($('eLight').value !== lv) { const o = document.createElement('option'); o.value = lv; o.textContent = `${t.light[0]} / ${t.light[1]} ft`; $('eLight').appendChild(o); $('eLight').value = lv; } }
+  setv('eDark', String(t.darkvision || 0));
   const on = new Set(t.conditions || []);
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
 }
@@ -1070,6 +1234,8 @@ $('eHp').onchange = () => updateSelected({ hp: numOrNull($('eHp').value) });
 $('eMaxHp').onchange = () => { const t = sc().tokens[selected]; const max = numOrNull($('eMaxHp').value); updateSelected(t && t.hp == null && max != null ? { maxHp: max, hp: max } : { maxHp: max }); };
 $('eTemp').onchange = () => updateSelected({ tempHp: Number($('eTemp').value) || 0 });
 $('eInit').onchange = () => updateSelected({ initBonus: Number($('eInit').value) || 0 });
+$('eLight').onchange = () => { const v = $('eLight').value.split(',').map(Number); updateSelected({ light: v[1] > 0 ? [v[0], v[1]] : null }); };
+$('eDark').onchange = () => updateSelected({ darkvision: Number($('eDark').value) || 0 });
 $('eHpShow').onchange = () => updateSelected({ hpShow: $('eHpShow').value || null });
 const applyHp = (sign) => {
   const n = Math.abs(parseInt($('eAmt').value, 10)); if (!n || !selected) return;
@@ -1240,6 +1406,7 @@ canvas.addEventListener('pointerdown', (e) => {
   if (!building) { // Play mode: the table tools
     if (e.altKey || tt === 'ping') { sendPing(p, e.shiftKey && me.isDM); return; }
     if (tt === 'ruler') { const c0 = centreOf(c); ruler = { points: [c0], cur: c0 }; draw(); return; }
+    if (tt === 'door') { const q = toSq(p); sendMsg({ type: 'doorToggle', sceneId: editing, x: q.x, y: q.y }); return; }
     if (tt === 'template') {
       const h = onTplHandle(s, p);
       if (h) { tplAim = { id: h.id, angle: h.angle, size: h.size }; return; }
@@ -1470,7 +1637,7 @@ window.addEventListener('keydown', (e) => {
     const k = e.key.toLowerCase(), s = sc();
     if (e.key === 'Escape' && (selTpl || labelEdit)) { selTpl = null; closeLabelEditor(); return draw(); }
     if ((e.key === 'Delete' || e.key === 'Backspace') && selTpl && s && (s.templates || {})[selTpl]) { e.preventDefault(); sendMsg({ type: 'templateRemove', sceneId: editing, id: selTpl }); selTpl = null; return; }
-    const pick = { v: 'move', r: 'ruler', t: 'template', p: 'ping', l: 'label' }[k];
+    const pick = { v: 'move', r: 'ruler', t: 'template', p: 'ping', l: 'label', d: 'door' }[k];
     if (pick && !(pick === 'label' && !me.isDM)) return setTableTool(pick);
     if (e.key === 'Escape' && tt !== 'move' && !fogTool) return setTableTool('move');
   }

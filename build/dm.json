@@ -38,18 +38,6 @@
     "icon": "build/icon.ico",
     "signAndEditExecutable": false
   },
-  "linux": {
-    "target": [
-      {
-        "target": "AppImage",
-        "arch": [
-          "x64"
-        ]
-      }
-    ],
-    "icon": "build/icon.png",
-    "category": "Game"
-  },
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "nsis": {
     "oneClick": false,
@@ -62,24 +50,5 @@
     "uninstallerIcon": "build/icon.ico",
     "deleteAppDataOnUninstall": false,
     "artifactName": "${productName}-Setup-${version}.${ext}"
-  },
-  "mac": {
-    "target": [
-      {
-        "target": "dmg",
-        "arch": [
-          "universal"
-        ]
-      }
-    ],
-    "icon": "build/icon.png",
-    "category": "public.app-category.games",
-    "identity": null
-  },
-  "dmg": {
-    "artifactName": "${productName}-${version}-mac.${ext}"
-  },
-  "appImage": {
-    "artifactName": "${productName}-${version}-linux-x86_64.${ext}"
   }
 }

@@ -30,9 +30,18 @@ The bar on the left of the map:
 - **Move** (`V`): drag your token. While dragging, it shows how far you've moved, and everyone sees it. Press `Space` mid-drag to go round a corner.
 - **Ruler** (`R`): drag to measure in feet; `Space` adds a corner. Everyone sees your ruler.
 - **Spell** (`T`): spell templates. Pick cone, sphere, cube, line or cylinder in the bar at the bottom, then drag from where the spell starts (or type the size and click). The squares it hits are shaded. Click one of yours to move it, drag its dot to aim or resize it, `Del` removes it. **Clear mine** removes all yours.
+- **Door** (`D`): click a door you can see to open or close it.
 - **Ping** (`P`): click to flash a spot for everyone ("over here!"). `Alt`+click pings with any tool.
 
 `Esc` goes back to Move.
+
+## Seeing in the dark
+
+When the DM turns vision on, you see only what your character can see: walls and closed doors block your view, and in a dark dungeon you see only what's lit. Click your token to set its **Light** (light a torch!) and **Darkvision** (if your character has it; it's on your D&D Beyond sheet). Open doors with the Door tool to see through them.
+
+## Handouts
+
+When the DM shows you a handout (a letter, a picture, a clue), it pops up on your screen. It stays under **Handouts** on the right; click it to read it again.
 
 ## In combat
 

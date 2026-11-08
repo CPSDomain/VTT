@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/CPSDomain/VTT/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/CPSDomain/VTT?label=latest%20release&color=e8390e"></a>
-  <img alt="Platform: Windows, macOS, Linux" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f1f1f">
+  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-1f1f1f">
   <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-what's%20new-ff6b35"></a>
 </p>
 
@@ -31,7 +31,6 @@ Get the latest version from the **[Releases page](https://github.com/CPSDomain/V
 | `Tabletop-DM-Setup-<version>.exe` | The DM: Windows installer |
 | `Tabletop-Player-Setup-<version>.exe` | Each player: Windows installer |
 | `…-Windows.zip` | Windows without installing: unzip anywhere and run the .exe |
-| `…-macOS.dmg`, `…-Linux.AppImage` | Mac and Linux |
 
 The installers need no admin rights and add Start menu and desktop shortcuts. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect. The apps tell you when there's a new version; installing it over the old one keeps your maps and tokens.
 
@@ -79,6 +78,17 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Players can move only their own tokens
 
 ![Token library](docs/images/token-library.jpg)
+
+**Lighting and vision**
+- Players see only what their characters can see: walls and closed doors block sight, darkness hides what isn't lit
+- Torches, braziers and other lights on the map; give tokens a light and darkvision
+- Doors players can open and close; with fog of war, the map reveals itself as the party explores
+- The DM can preview what the party sees
+
+![Lighting and vision: a torch-lit crypt seen by the party, an open door, the rest in shadow](docs/images/vision.jpg)
+
+**Handouts**
+- Letters, pictures and clues popped up on everyone's screen or just one player's, kept to read again
 
 **Combat**
 - Initiative tracker: start combat in one click, roll for all monsters at once, players roll their own; turn order, rounds, and whose turn glows on the map

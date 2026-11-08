@@ -19,7 +19,7 @@ Each version goes to GitHub as a commit, a tag and a Release with the apps attac
 
 ## Publish it: the automatic way (recommended)
 
-The repository has a GitHub Actions workflow (`.github/workflows/release.yml`). Pushing a version tag builds the apps on GitHub's own Windows, Mac and Linux machines and publishes the Release with everything attached and the notes filled in.
+The repository has a GitHub Actions workflow (`.github/workflows/release.yml`). Pushing a version tag builds the apps on one of GitHub's Windows machines and publishes the Release with everything attached and the notes filled in.
 
 ```bash
 git add -A
@@ -28,7 +28,13 @@ git tag v1.1.0
 git push && git push --tags
 ```
 
-Then watch it under the repository's **Actions** tab (about 10 minutes). When it's green, the Release is on the Releases page as the latest version: installers, zips, the Mac `.dmg` and Linux `.AppImage`, for the DM and Player apps.
+**With GitHub Desktop** instead of the command line:
+
+1. Commit the changes (summary e.g. `Release 1.1.0`) and click **Push origin**.
+2. Open the **History** tab, right-click that commit and choose **Create Tag…**. Type `v1.1.0` and click **Create Tag**.
+3. Click **Push origin** again: the tag goes up with it and starts the build.
+
+Then watch it under the repository's **Actions** tab (about 10 minutes). When it's green, the Release is on the Releases page as the latest version: the installers and zips for the DM and Player apps.
 
 - The tag must match `package.json` (`v1.1.0` for `1.1.0`), or the workflow stops and says so.
 - **Actions → Release → Run workflow** builds everything without publishing, to check a build works. The files are under that run's **Artifacts**.
@@ -65,7 +71,7 @@ When you build on your own PC instead:
 
 ## Code signing
 
-The apps aren't code-signed, so Windows shows "Windows protected your PC" the first time (**More info → Run anyway**) and macOS asks to confirm opening (right-click → **Open**). Removing those warnings needs a code-signing certificate: on Windows, for example, Azure Trusted Signing (a monthly subscription) or a certificate from a certificate authority; on Mac, an Apple Developer account. electron-builder signs automatically once one is set up in the workflow's secrets.
+The apps aren't code-signed, so Windows shows "Windows protected your PC" the first time (**More info → Run anyway**). That's a deliberate choice: removing the warning needs a paid code-signing certificate, which isn't worth it for one group.
 
 ## What goes in git, and what doesn't
 

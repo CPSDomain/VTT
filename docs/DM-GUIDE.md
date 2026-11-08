@@ -56,6 +56,26 @@ Nothing under the fog is sent to players' screens. Monsters standing in fog are 
 
 Generated maps can start fogged with only the way in revealed (the **Start with fog of war** box; on by default for dungeons).
 
+## Lighting and vision
+
+Click **👁 Vision** in the bar at the top of the map:
+
+1. Tick **Players see only what their characters can see.** Each player now sees through the tokens they own: walls and closed doors block their sight, and anything they can't see right now is shown dark. Monsters out of sight aren't sent to their screens at all.
+2. Set **Light on this map**: **Bright** (daylight, a lit hall), **Dim** (twilight) or **Dark**. In the dark, characters see only lit squares, plus what their darkvision reaches (as dim light).
+3. **Party shares vision** (on by default): every player sees what any party member sees. Untick it for each player to see only through their own tokens.
+4. With **Fog of war** on too, **what they see stays revealed**: the map uncovers itself as the party explores, so you don't reveal rooms by hand. Untick it to keep revealing yourself.
+5. **Show me what's seen by** previews the map as the whole party or one player sees it. Monsters they can't see show faded. Set it back to **Nobody** to see everything again.
+
+**Lights:** torches, braziers, campfires, fireplaces, candles and lamp posts give light; so do lights brought in with a Universal VTT map. To give a character a light, select the token and pick one under **Light** (candle 5/10 ft, torch 20/40 ft, lamp, lantern, the Light spell, Daylight). Set **Darkvision** the same way (30 to 120 ft). Players can set both on their own characters.
+
+**Doors:** the 🚪 **Door** tool (`D`) opens and closes a door: click it. Closed doors block sight, open ones don't. Players can use it on doors they can see. On an imported Universal VTT map you see its doors while the tool is on: orange closed, green open.
+
+Players need a token of their own to see anything with vision on: give each player's token their name as owner.
+
+## Handouts
+
+Letters, wanted posters, a map of the region: under **Handouts** in the right-hand panel, click **+ New handout**. Give it a title, type the text and/or add a picture, and choose **Everyone** or tick the players it's for. **Save and show** pops it up on their screens straight away; **Save** keeps it for later. Players keep it in their Handouts list to read again. **Show** pops it up again; **Edit** changes it, who gets it, or deletes it.
+
 ## Generate a map
 
 Click **Build map**, then **Generate a map…**.
@@ -170,6 +190,7 @@ The bar on the left of the map in Play mode has the tools you and the players us
 | Move | V | Drag tokens. Dragging a token shows how far it has moved; press `Space` mid-drag to add a corner |
 | Ruler | R | Drag to measure in feet; `Space` adds a corner. Everyone sees it while you measure |
 | Spell | T | Spell templates: cone, sphere, cube, line, cylinder (see below) |
+| Door | D | Click a door to open or close it (see Lighting and vision) |
 | Ping | P | Click to flash a spot for everyone. `Shift`+click also moves everyone's view there. `Alt`+click pings with any tool |
 | Label | L | Text on the map, and notes only you can see (see below) |
 
@@ -189,4 +210,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Lighting and vision, handouts, chat. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).
+Chat and whispers. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).

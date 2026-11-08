@@ -1,6 +1,6 @@
 {
   "name": "tabletop",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Self-hosted virtual tabletop for D&D",
   "main": "apps/dm/main.js",
   "scripts": {
@@ -8,7 +8,6 @@
     "dm": "electron apps/dm/main.js",
     "player": "electron apps/player/main.js",
     "build:win": "electron-builder --win --config build/dm.json && electron-builder --win --config build/player.json",
-    "build:linux": "electron-builder --linux --config build/dm.json && electron-builder --linux --config build/player.json",
     "release": "node scripts/release.js"
   },
   "author": "Tabletop",

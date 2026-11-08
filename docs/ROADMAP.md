@@ -2,7 +2,7 @@
 
 What Tabletop has, what's coming next, and what's on the wish list. The order is a proposal: change it to match what the group needs most. Each version's details go in the [changelog](../CHANGELOG.md) when it ships.
 
-Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
+Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 
 ## Done
 
@@ -18,30 +18,39 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 | 0.9 | Map import: Universal VTT (Dungeon Scrawl, Dungeondraft, Dungeon Alchemist) with walls for Reveal room; map images (Canvas of Kings) with automatic grid finding |
 | 0.10 | MapTool import (campaigns, maps, tokens), export and import single maps, restore from backup |
 | 1.0 | Table passcode, remove and block players, update check, Windows installers, automatic builds on GitHub, macOS and Linux apps |
+| 1.1 | Lighting and vision (line of sight, lights, darkvision, doors, explore-to-reveal, DM preview), handouts; Windows only |
 
 ## Next
 
-Pick what matters most to the group from **Later** below. Suggested for 1.1:
+The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
 
-### 1.1 — Seeing the table 📋
-- **Lighting and vision:** light sources, darkvision, line of sight through walls and doors (imported Universal VTT maps already bring their walls, doors and lights)
-- **Handouts:** show an image or text to all players or one player
+### 1.2 — Talking at the table 📋
+- **Chat and whispers** next to the roll log: table chat, whispers to one player or the DM, the DM speaking as an NPC
+- **D&D Beyond link** on each player's token, to open their character sheet
+- **Player PINs:** each player protects their name with their own PIN, on top of the table passcode
 
-## Later 💡
+### 1.3 — MapTool, part 2 📋
+- Bring the rest of a MapTool map across: revealed fog, vision blocking as walls (for 1.1's line of sight), lights, and drawings
 
-- **Code signing:** no more "Windows protected your PC" (needs a paid certificate; see [RELEASING.md](RELEASING.md))
-- **Player PINs:** each player's name protected by their own PIN
-- **MapTool import, part 2:** revealed fog, vision blocking as walls, lights, drawings
-- **Chat and whispers** next to the roll log
-- **Encounter builder:** SRD monsters with stat blocks, difficulty by party level, drop the encounter on the map
-- **Adventure import** from the TaleSpire DM agent's output (maps, encounters, notes)
-- **D&D Beyond link** on each player's token to open their character sheet
-- **Music and ambience** controlled by the DM
-- **AI map generation:** free-text descriptions read by Claude (needs an API key and internet), on top of the built-in description box
-- **Tablet support:** touch controls for players on tablets
-- **Multi-level maps:** floors linked by stairs
-- **Weather and time-of-day** overlays
+### 1.4 — Encounters and levels 📋
+- **Encounter builder:** pick SRD monsters with their stat blocks, see the difficulty for the party's level, and drop the encounter on the map
+- **Multi-level maps:** floors of a building or dungeon linked by stairs, so tokens move between them
+
+### 1.5 — Atmosphere 📋
+- **Music and ambience** the DM controls for everyone: tavern noise, rain, battle music
+- **Weather and time of day:** rain, snow and fog overlays; dawn, dusk and night tinting
+
+### Last — AI map generation 💬
+- Claude reads a free-text description and designs the map, on top of today's built-in description box. Needs internet and an Anthropic API key. **To discuss first:** how the DM would use it, what it would cost, and what it adds over the built-in generator.
+
+## Not planned
+
+Decided against, so they're off the list:
+- **Code signing** (no more "Windows protected your PC"): needs a paid certificate
+- **Tablet support** (touch controls for players)
+- **Adventure import** from the TaleSpire DM agent
+- **macOS and Linux apps**: Tabletop is built for Windows
 
 ## Suggesting things
 
-Open an issue on GitHub, or add it to this file under Later.
+Open an issue on GitHub, or add it to this file as a new phase.

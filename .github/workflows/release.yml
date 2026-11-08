@@ -1,4 +1,4 @@
-# Builds Tabletop for Windows, macOS and Linux and publishes a GitHub Release when a version tag is pushed:
+# Builds the Tabletop apps for Windows and publishes a GitHub Release when a version tag is pushed:
 #   git tag v1.0.0 && git push --tags
 # The release notes come from that version's section in CHANGELOG.md (see docs/RELEASING.md).
 name: Release
@@ -13,17 +13,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: win
-          - os: macos-latest
-            platform: mac
-          - os: ubuntu-latest
-            platform: linux
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,26 +22,22 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build Tabletop DM
-        run: npx electron-builder --${{ matrix.platform }} --config build/dm.json --publish never
+        run: npx electron-builder --win --config build/dm.json --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - name: Build Tabletop Player
-        run: npx electron-builder --${{ matrix.platform }} --config build/player.json --publish never
+        run: npx electron-builder --win --config build/player.json --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
       - uses: actions/upload-artifact@v4
         with:
-          name: apps-${{ matrix.platform }}
+          name: apps-win
           path: |
             dist/dm/*.exe
             dist/dm/*.zip
-            dist/dm/*.dmg
-            dist/dm/*.AppImage
             dist/player/*.exe
             dist/player/*.zip
-            dist/player/*.dmg
-            dist/player/*.AppImage
-          if-no-files-found: ignore
+          if-no-files-found: error
 
   release:
     needs: build
@@ -62,8 +48,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: dist
-          pattern: apps-*
-          merge-multiple: true
+          name: apps-win
       - name: Check the tag matches the version
         run: |
           v=$(node -p "require('./package.json').version")
@@ -75,6 +60,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           v=$(node -p "require('./package.json').version")
-          shopt -s nullglob
-          files=(dist/release/*.exe dist/release/*.zip dist/release/*.dmg dist/release/*.AppImage)
-          gh release create "v$v" "${files[@]}" --title "Tabletop $v" --notes-file "dist/RELEASE_NOTES-$v.md" --latest
+          gh release create "v$v" dist/release/*.exe dist/release/*.zip --title "Tabletop $v" --notes-file "dist/RELEASE_NOTES-$v.md" --latest

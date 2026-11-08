@@ -2,6 +2,22 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.1.0] - 2026-11-08
+
+### Added
+- **Lighting and vision.** Turn it on per map with **👁 Vision** in the bar at the top of the map. Players then see only what their characters can see:
+  - **Line of sight:** walls and closed doors block it, on built, generated and imported maps (imported Universal VTT walls too). What a player can't see right now is shown dark; monsters out of sight aren't sent to their screen at all.
+  - **Light on the map:** Bright, Dim or Dark. In the dark, characters see only lit squares and what their darkvision reaches.
+  - **Lights:** torches, braziers, campfires, fireplaces, candles and lamp posts light the area around them, as do lights imported with Universal VTT maps. Select a token to give it a **Light** (candle, torch, lamp, lantern, the Light spell, Daylight) and **Darkvision** (30 to 120 ft); players can set these on their own characters.
+  - **Party shares vision** (on by default), or each player sees only through their own tokens.
+  - **With fog of war,** what the party sees stays revealed as they explore, so you don't have to reveal rooms by hand.
+  - **Show me what's seen by:** the DM can preview the map as the whole party or one player sees it; monsters they can't see show faded.
+- **Doors:** the new 🚪 **Door** tool (`D`) opens and closes doors, for the DM and for players (only doors they can see). Open doors let sight through; imported Universal VTT doors work too.
+- **Handouts:** letters, pictures and clues for the players. **+ New handout** in the right-hand panel: a title, text and/or a picture, for everyone or only some players. **Save and show** pops it up on their screens; it stays in their Handouts list to read again. **Show** pops it up again later; Edit to change it or who gets it.
+
+### Changed
+- Tabletop is built for Windows only: the macOS and Linux apps are no longer made. Running the server from source with Node.js still works anywhere.
+
 ## [1.0.0] - 2026-11-08
 
 Version 1.0: ready for any group to use, not only ours.

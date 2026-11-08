@@ -9,8 +9,9 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
+const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
 const PROPS = CATALOG.props.map((p) => p.id);
@@ -37,6 +38,8 @@ const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const SHAPES = ['cone', 'sphere', 'cube', 'line', 'cylinder'];
 const DIAGONALS = ['5', '5105'];
 const LABEL_SIZES = ['s', 'm', 'l'];
+const AMBIENT = ['bright', 'dim', 'dark'];
+const DOOR_KINDS = new Set(['door', 'doubledoor']);
 const color = (c, d) => (/^#[0-9a-f]{6}$/i.test(c) ? c : d);
 
 function newScene(name, cols = 30, rows = 20) {
@@ -44,7 +47,8 @@ function newScene(name, cols = 30, rows = 20) {
     id: uid(), name: str(name || 'New map', 40),
     cols: clamp(int(cols, 30), 5, MAX_SIDE), rows: clamp(int(rows, 20), 5, MAX_SIDE),
     cell: 50, showGrid: true, bg: null, tiles: {}, props: {}, tokens: {}, templates: {}, labels: {},
-    fog: { on: false, data: '' } // data: base64, one byte per cell (1 = revealed), row by row
+    fog: { on: false, data: '' }, // data: base64, one byte per cell (1 = revealed), row by row
+    vision: { on: false, ambient: 'bright', shared: true, explore: true }
   };
 }
 
@@ -108,8 +112,56 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   // Can this player see this token? Never if hidden; under fog only in revealed cells, or if it's theirs.
   function tokVisible(sc, t, u) {
     if (t.hidden) return false;
-    if (!fogOn(sc) || (t.owner && (t.owner === u.name || t.owner === '*'))) return true;
-    return tokenRevealed(sc, t);
+    if (t.owner && (t.owner === u.name || t.owner === '*')) return true;
+    if (fogOn(sc) && !tokenRevealed(sc, t)) return false;
+    if (visionOn(sc)) return inSight(sc, t, sightFor(sc, u.name));
+    return true;
+  }
+
+  // ---------- lighting and vision ----------
+  // With vision on, players see only what their characters can see: line of sight from their tokens,
+  // and in the dark only lit squares (or within darkvision). Kept per player name, worked out again when things move.
+  const visionOn = (sc) => !!(sc && sc.vision && sc.vision.on);
+  const sights = new Map(); // sceneId → Map(name → Uint8Array)
+  const visionKey = (sc, name) => (sc.vision && sc.vision.shared === false ? name || '' : '*');
+  function sightFor(sc, name) {
+    let m = sights.get(sc.id); if (!m) sights.set(sc.id, m = new Map());
+    const key = visionKey(sc, name);
+    if (!m.has(key)) m.set(key, VISION.sight(sc, VISION.viewersFor(sc, name)));
+    return m.get(key);
+  }
+  function inSight(sc, t, S) {
+    if (!S) return false;
+    for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (x < sc.cols && y < sc.rows && S[y * sc.cols + x]) return true;
+    return false;
+  }
+  const sightData = (sc, u) => (visionOn(sc) ? Buffer.from(sightFor(sc, u.name)).toString('base64') : null);
+  const visionTimers = new Map();
+  const scheduleVision = (sc) => { if (!sc || visionTimers.has(sc.id)) return; visionTimers.set(sc.id, setTimeout(() => { visionTimers.delete(sc.id); refreshVision(sc); }, 25)); };
+  // Work sight out again and tell each player what changed: their view, and tokens coming into or out of sight.
+  function refreshVision(sc) {
+    if (!state.scenes[sc.id]) return;
+    const old = sights.get(sc.id) || new Map();
+    sights.delete(sc.id);
+    const players = playersOnScene(sc.id), explore = new Set();
+    for (const c of players) {
+      const key = visionKey(sc, c.user.name), before = old.get(key) || null;
+      const now = visionOn(sc) ? sightFor(sc, c.user.name) : null;
+      if (now && fogOn(sc) && sc.vision.explore !== false) { const a = fogArr(sc); for (let i = 0; i < now.length; i++) if (now[i] && !a[i]) explore.add(i); }
+      if (now && before && now.length === before.length && Buffer.compare(Buffer.from(now), Buffer.from(before)) === 0) continue;
+      send(c, { type: 'sight', sceneId: sc.id, data: now ? Buffer.from(now).toString('base64') : null });
+      for (const t of Object.values(sc.tokens)) {
+        if (t.hidden || (t.owner && (t.owner === c.user.name || t.owner === '*'))) continue;
+        if (fogOn(sc) && !tokenRevealed(sc, t)) continue;
+        const was = !before && !visionOn(sc) ? true : before ? inSight(sc, t, before) : true;
+        const is = now ? inSight(sc, t, now) : true;
+        if (is && !was) send(c, { type: 'token', sceneId: sc.id, token: tokenFor(t, c.user) });
+        else if (!is && was) send(c, { type: 'removeToken', sceneId: sc.id, id: t.id });
+      }
+    }
+    // with fog of war on, what the party sees stays revealed (they've explored it)
+    if (explore.size) revealFog(sc, [...explore].map((i) => [i % sc.cols, Math.floor(i / sc.cols)]), true);
+    else if (sc.combat && sc.combat.active) sendCombat(sc);
   }
 
   function saveNow() {
@@ -153,7 +205,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         name: sc.name, cols: sc.cols, rows: sc.rows, showGrid: sc.showGrid !== false, diag: sc.diag || '5', bg: sc.bg,
         tiles: sc.tiles, props: Object.values(sc.props).map(strip), tokens: Object.values(sc.tokens).map(strip),
         labels: Object.values(sc.labels || {}).map(strip), walls: sc.walls || [], doors: sc.doors || [], lights: sc.lights || [],
-        fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }
+        fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }, vision: sc.vision || null
       };
       const body = JSON.stringify({ app: 'tabletop', kind: 'map', version: VERSION, map, images });
       const file = (sc.name.replace(/[^\w\- ]+/g, '').trim() || 'map') + '.ttmap';
@@ -189,6 +241,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         });
         sc.showGrid = m.showGrid !== false;
         if (DIAGONALS.includes(m.diag)) sc.diag = m.diag;
+        if (m.vision && typeof m.vision === 'object') sc.vision = { on: !!m.vision.on, ambient: AMBIENT.includes(m.vision.ambient) ? m.vision.ambient : 'bright', shared: m.vision.shared !== false, explore: m.vision.explore !== false };
         syncFog(sc);
         state.scenes[sc.id] = sc; state.order.push(sc.id);
         toDMs({ type: 'sceneAdded', scene: sc, order: state.order }); save();
@@ -294,10 +347,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     for (const [k, l] of Object.entries(sc.labels || {})) if (labelVisible(sc, l)) labels[k] = l;
     // walls, doors and lights from imported maps are only for the DM's tools (they'd give away the layout)
     const { walls, doors, lights, ...rest } = sc;
-    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u) };
+    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u), sight: sightData(sc, u) };
   }
   function sendSceneFull(sc) {
-    syncFog(sc);
+    syncFog(sc); sights.delete(sc.id);
     clients().forEach((c) => {
       if (c.user.isDM) send(c, { type: 'sceneFull', scene: sc });
       else if (sc.id === state.activeScene) send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
@@ -316,8 +369,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
   function viewFor(u) {
     const base = { activeScene: state.activeScene, log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
-    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings() }; }
-    return { ...base, scene: playerScene(state.scenes[state.activeScene], u) };
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [] }; }
+    return { ...base, scene: playerScene(state.scenes[state.activeScene], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
   }
 
   // Validated token fields shared by add, update and generated maps.
@@ -336,6 +389,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (m.tempHp !== undefined) t.tempHp = clamp(int(m.tempHp, 0), 0, 9999);
     if (m.hpShow !== undefined) t.hpShow = HP_SHOW.includes(m.hpShow) ? m.hpShow : undefined;
     if (m.initBonus !== undefined) t.initBonus = clamp(int(m.initBonus, 0), -10, 30);
+    if (m.light !== undefined) t.light = Array.isArray(m.light) && int(m.light[1], 0) > 0 ? [clamp(int(m.light[0], 0), 0, 300), clamp(int(m.light[1], 0), 0, 600)] : null;
+    if (m.darkvision !== undefined) t.darkvision = clamp(int(m.darkvision, 0), 0, 300);
     if (m.conditions !== undefined) t.conditions = Array.isArray(m.conditions) ? [...new Set(m.conditions.filter((c) => CONDITIONS.has(c)))].slice(0, 24) : [];
     if (m.x != null) t.x = clamp(int(m.x, 0), 0, sc.cols - (t.size || 1));
     if (m.y != null) t.y = clamp(int(m.y, 0), 0, sc.rows - (t.size || 1));
@@ -408,6 +463,54 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   const tableSettings = () => ({ passcode: state.passcode, blocked: state.blocked });
   const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
   const wrongTries = new Map(); // address → { n, until }: slows down passcode guessing
+  // Reveal (or cover) squares of fog, and send players what's now in view or gone from it.
+  function revealFog(sc, cells, reveal) {
+    const a = fogArr(sc), v = reveal ? 1 : 0, changed = [];
+    for (const c of cells) {
+      const x = int(c && c[0], -1), y = int(c && c[1], -1);
+      if (x < 0 || y < 0 || x >= sc.cols || y >= sc.rows || a[y * sc.cols + x] === v) continue;
+      a[y * sc.cols + x] = v; changed.push([x, y]);
+    }
+    if (!changed.length) return;
+    toDMs({ type: 'fog', sceneId: sc.id, reveal: !!v, cells: changed });
+    if (fogOn(sc)) {
+      const set = new Set(changed.map(([x, y]) => x + ',' + y));
+      const touches = (t) => { for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (set.has(x + ',' + y)) return true; return false; };
+      for (const c of playersOnScene(sc.id)) {
+        if (v) { // send what's now in view
+          const tiles = {}; for (const k of set) if (sc.tiles[k]) tiles[k] = sc.tiles[k];
+          const props = Object.values(sc.props).filter((p) => set.has(p.x + ',' + p.y) && !DM_ONLY.has(p.kind));
+          const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user)).map((t) => tokenFor(t, c.user));
+          const labels = Object.values(sc.labels || {}).filter((l) => set.has(Math.floor(l.x) + ',' + Math.floor(l.y)) && labelVisible(sc, l));
+          send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens, labels });
+        } else { // cover it again: tokens that dropped out of sight go too
+          const gone = Object.values(sc.tokens).filter((t) => touches(t) && !tokVisible(sc, t, c.user)).map((t) => t.id);
+          send(c, { type: 'fogHide', sceneId: sc.id, cells: changed, tokens: gone });
+        }
+      }
+      if (sc.combat && sc.combat.active) sendCombat(sc);
+    }
+    save();
+  }
+  // Handouts: the DM's notes and pictures for the players.
+  const forPlayer = (h, name) => h.to === 'all' || (Array.isArray(h.to) && h.to.some((n) => sameName(n, name)));
+  function handoutFields(m, old) {
+    const h = { id: old ? old.id : uid(), time: old ? old.time : Date.now() };
+    h.title = str(m.title, 80).trim() || 'Handout';
+    h.text = str(m.text, 8000);
+    h.img = typeof m.img === 'string' && UPLOAD_URL.test(m.img) ? m.img : null;
+    h.to = m.to === 'all' ? 'all' : Array.isArray(m.to) ? m.to.map((n) => str(n, 24).trim()).filter(Boolean).slice(0, 50) : 'all';
+    if (!h.text.trim() && !h.img) return null;
+    return h;
+  }
+  // send it to the players it's for (popping up if show); players it's no longer for lose it
+  function showHandout(h, show) {
+    for (const c of clients()) {
+      if (c.user.isDM) continue;
+      if (forPlayer(h, c.user.name)) send(c, { type: 'handout', handout: h, show });
+      else send(c, { type: 'handoutRemove', id: h.id });
+    }
+  }
   wss.on('connection', (ws, req) => {
     ws.addr = (req && req.socket && req.socket.remoteAddress) || '?';
     ws.user = { name: 'Guest', isDM: false, joined: false };
@@ -460,6 +563,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           tok.x = clamp(int(msg.x, tok.x), 0, sc.cols - tok.size);
           tok.y = clamp(int(msg.y, tok.y), 0, sc.rows - tok.size);
           tokenChanged(sc, tok, before); }
+        if (visionOn(sc) && (tok.owner || tok.light)) scheduleVision(sc);
         save();
         break;
       case 'addToken': {
@@ -467,6 +571,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         const id = uid();
         sc.tokens[id] = { id, ...tokenFields({ label: '?', color: '#e8390e', owner: '', size: 1, x: 1, y: 1, ...msg }, sc) };
         tokenChanged(sc, sc.tokens[id], null); save();
+        if (visionOn(sc)) scheduleVision(sc);
         break;
       }
       case 'tokenUpdate': {
@@ -475,9 +580,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!u.isDM && !mine) return;
         const before = { ...tok };
         // players can only change their own character's health, conditions and initiative bonus
-        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus'].filter((k) => k in msg).map((k) => [k, msg[k]]));
+        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision'].filter((k) => k in msg).map((k) => [k, msg[k]]));
         Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
         tokenChanged(sc, tok, before);
+        if (visionOn(sc)) scheduleVision(sc);
         if (sc.combat && sc.combat.active && 'initBonus' in m) { sortCombat(sc); sendCombat(sc); }
         save();
         break;
@@ -498,6 +604,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!u.isDM || !tok) return;
         delete sc.tokens[msg.id];
         toScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: msg.id });
+        if (visionOn(sc)) scheduleVision(sc);
         if (sc.combat && sc.combat.entries.some((e) => e.id === msg.id)) { sortCombat(sc); sendCombat(sc); }
         save();
         break;
@@ -597,6 +704,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           toDMs({ type: 'tiles', sceneId: sc.id, cells: applied });
           const seen = fogOn(sc) ? applied.filter(([x, y]) => revealed(sc, x, y)) : applied; // nothing leaks from under the fog
           if (seen.length) toPlayersOnScene(sc.id, { type: 'tiles', sceneId: sc.id, cells: seen });
+          if (visionOn(sc)) scheduleVision(sc);
           save();
         }
         break;
@@ -607,8 +715,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         const x = int(msg.x, -1), y = int(msg.y, -1);
         if (!inside(x, y)) return;
         if (!sc.props[id] && Object.keys(sc.props).length >= 3000) return;
+        const was = sc.props[id];
         sc.props[id] = { id, kind: msg.kind, x, y, rot: ((int(msg.rot, 0) % 4) + 4) % 4 };
+        if (was && was.open && was.kind === msg.kind) sc.props[id].open = true;
         toDMs({ type: 'prop', sceneId: sc.id, prop: sc.props[id] });
+        if (visionOn(sc)) scheduleVision(sc);
         // players see it only if it's not secret and not under fog; if it moved into fog, they lose it
         toPlayersOnScene(sc.id, !DM_ONLY.has(msg.kind) && revealed(sc, x, y)
           ? { type: 'prop', sceneId: sc.id, prop: sc.props[id] } : { type: 'propRemove', sceneId: sc.id, propId: id });
@@ -713,33 +824,60 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         fogArr(sc).fill(msg.reveal ? 1 : 0);
         sendSceneFull(sc); save();
         break;
-      case 'fog': { // reveal or cover a list of cells
+      case 'fog': // reveal or cover a list of cells
         if (!u.isDM || !sc || !Array.isArray(msg.cells) || msg.cells.length > 30000) return;
-        const a = fogArr(sc), v = msg.reveal ? 1 : 0, changed = [];
-        for (const c of msg.cells) {
-          const x = int(c && c[0], -1), y = int(c && c[1], -1);
-          if (!inside(x, y) || a[y * sc.cols + x] === v) continue;
-          a[y * sc.cols + x] = v; changed.push([x, y]);
+        revealFog(sc, msg.cells, !!msg.reveal);
+        break;
+      case 'doorToggle': { // open or close the door at a point (squares); players only doors they can see
+        if (!sc) return;
+        const px = num(msg.x, -1), py = num(msg.y, -1), cx = Math.floor(px), cy = Math.floor(py);
+        if (!inside(cx, cy)) return;
+        const canSeeAt = (x, y) => u.isDM || ((!fogOn(sc) || revealed(sc, x, y)) && (!visionOn(sc) || sightFor(sc, u.name)[y * sc.cols + x] > 0));
+        const prop = Object.values(sc.props).find((p) => p.x === cx && p.y === cy && DOOR_KINDS.has(p.kind));
+        if (prop) {
+          if (!canSeeAt(cx, cy)) return;
+          prop.open = !prop.open;
+          toScene(sc.id, { type: 'prop', sceneId: sc.id, prop });
+        } else {
+          let best = -1, bd = 0.8;
+          (sc.doors || []).forEach((d, i) => { const mx = (d[0] + d[2]) / 2, my = (d[1] + d[3]) / 2, dd = Math.hypot(mx - px, my - py); if (dd < bd) { bd = dd; best = i; } });
+          if (best < 0) return;
+          const d = sc.doors[best];
+          if (!canSeeAt(clamp(Math.floor((d[0] + d[2]) / 2), 0, sc.cols - 1), clamp(Math.floor((d[1] + d[3]) / 2), 0, sc.rows - 1))) return;
+          d[4] = d[4] ? 0 : 1;
+          toDMs({ type: 'doors', sceneId: sc.id, doors: sc.doors });
+          toPlayersOnScene(sc.id, { type: 'doorFlash', sceneId: sc.id, x: (d[0] + d[2]) / 2, y: (d[1] + d[3]) / 2, open: !!d[4] });
         }
-        if (!changed.length) return;
-        toDMs({ type: 'fog', sceneId: sc.id, reveal: !!v, cells: changed });
-        if (fogOn(sc)) {
-          const set = new Set(changed.map(([x, y]) => x + ',' + y));
-          const touches = (t) => { for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (set.has(x + ',' + y)) return true; return false; };
-          for (const c of playersOnScene(sc.id)) {
-            if (v) { // send what's now in view
-              const tiles = {}; for (const k of set) if (sc.tiles[k]) tiles[k] = sc.tiles[k];
-              const props = Object.values(sc.props).filter((p) => set.has(p.x + ',' + p.y) && !DM_ONLY.has(p.kind));
-              const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user)).map((t) => tokenFor(t, c.user));
-              const labels = Object.values(sc.labels || {}).filter((l) => set.has(Math.floor(l.x) + ',' + Math.floor(l.y)) && labelVisible(sc, l));
-              send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens, labels });
-            } else { // cover it again: tokens that dropped out of sight go too
-              const gone = Object.values(sc.tokens).filter((t) => touches(t) && !tokVisible(sc, t, c.user)).map((t) => t.id);
-              send(c, { type: 'fogHide', sceneId: sc.id, cells: changed, tokens: gone });
-            }
-          }
-          if (sc.combat && sc.combat.active) sendCombat(sc);
-        }
+        scheduleVision(sc); save();
+        break;
+      }
+
+      // ----- handouts (the DM shows them; players get the ones meant for them) -----
+      case 'handoutSave': {
+        if (!u.isDM) return;
+        state.handouts = state.handouts || [];
+        const old = state.handouts.find((h) => h.id === msg.handout?.id);
+        const h = handoutFields(msg.handout || {}, old);
+        if (!h) return;
+        if (!old) { if (state.handouts.length >= 300) state.handouts.shift(); state.handouts.push(h); } else Object.assign(old, h);
+        const hh = old || h;
+        toDMs({ type: 'handouts', handouts: state.handouts });
+        if (msg.show) showHandout(hh, true); else if (old) showHandout(hh, false);
+        save();
+        break;
+      }
+      case 'handoutShow': {
+        if (!u.isDM) return;
+        const h = (state.handouts || []).find((x) => x.id === msg.id); if (!h) return;
+        if (Array.isArray(msg.to) || msg.to === 'all') { h.to = msg.to === 'all' ? 'all' : msg.to.map((n) => str(n, 24).trim()).filter(Boolean).slice(0, 50); toDMs({ type: 'handouts', handouts: state.handouts }); }
+        showHandout(h, true); save();
+        break;
+      }
+      case 'handoutDelete': {
+        if (!u.isDM) return;
+        state.handouts = (state.handouts || []).filter((h) => h.id !== msg.id);
+        toDMs({ type: 'handouts', handouts: state.handouts });
+        clients().filter((c) => !c.user.isDM).forEach((c) => send(c, { type: 'handoutRemove', id: msg.id }));
         save();
         break;
       }
@@ -747,6 +885,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!u.isDM || !sc || !sc.props[msg.propId]) return;
         delete sc.props[msg.propId];
         toScene(sc.id, { type: 'propRemove', sceneId: sc.id, propId: msg.propId }); save();
+        if (visionOn(sc)) scheduleVision(sc);
         break;
 
       // ----- scenes (DM only) -----
@@ -785,6 +924,14 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (msg.rows != null) patch.rows = clamp(int(msg.rows, sc.rows), 5, MAX_SIDE);
         if (msg.showGrid != null) patch.showGrid = !!msg.showGrid;
         if (msg.diag != null && DIAGONALS.includes(msg.diag)) patch.diag = msg.diag;
+        if (msg.vision && typeof msg.vision === 'object') {
+          const v = { on: false, ambient: 'bright', shared: true, explore: true, ...(sc.vision || {}) };
+          if ('on' in msg.vision) v.on = !!msg.vision.on;
+          if (AMBIENT.includes(msg.vision.ambient)) v.ambient = msg.vision.ambient;
+          if ('shared' in msg.vision) v.shared = !!msg.vision.shared;
+          if ('explore' in msg.vision) v.explore = !!msg.vision.explore;
+          patch.vision = v;
+        }
         if (msg.bg !== undefined) {
           patch.bg = msg.bg && typeof msg.bg.url === 'string' && /^(\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)|https?:\/\/.{3,500})$/.test(msg.bg.url)
             ? { url: msg.bg.url } : null;
@@ -804,6 +951,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           for (const [k, t] of Object.entries(sc.templates || {})) if (t.x > sc.cols || t.y > sc.rows) delete sc.templates[k];
           sendSceneFull(sc);
         } else toScene(sc.id, { type: 'sceneMeta', sceneId: sc.id, patch });
+        if (patch.vision) scheduleVision(sc);
         save();
         break;
       }
@@ -854,7 +1002,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
 
   function activate(id) {
-    state.activeScene = id;
+    state.activeScene = id; sights.delete(id);
     clients().forEach((c) => send(c, c.user.isDM ? { type: 'active', sceneId: id } : { type: 'sceneFull', scene: playerScene(state.scenes[id], c.user), active: true }));
   }
 

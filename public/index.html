@@ -104,6 +104,28 @@
   #labelPop { width:280px; }
   #labelPop input#lblText { width:100%; }
   body.build #tplPop, body.build #labelPop { display:none !important; }
+  #visionPop { left:50%; top:56px; transform:translateX(-50%); width:380px; padding:12px; background:var(--panel); }
+  body.dm #visionPop[hidden] { display:none !important; }
+  #visionPop .tphead { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  #visionPop .tphead button { padding:2px 8px; }
+  #fogBar #visionBtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .hbody { padding:0 16px 16px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+  .hbody textarea { width:100%; resize:vertical; font:inherit; background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:8px; }
+  #hImgPrev { max-width:100%; max-height:200px; object-fit:contain; border-radius:6px; align-self:flex-start; }
+  #hImgPrev:not([src]), #hImgPrev[src=""] { display:none; }
+  #hWho { display:flex; flex-wrap:wrap; gap:4px 12px; padding-left:22px; }
+  #hWho label.check { margin-top:2px; }
+  #hvImg { max-width:100%; max-height:62vh; object-fit:contain; border-radius:6px; align-self:center; }
+  #hvImg:not([src]), #hvImg[src=""] { display:none; }
+  #hvTitle { text-transform:none; letter-spacing:0; font-size:18px; color:var(--text); }
+  #hvText { white-space:pre-wrap; line-height:1.55; font-size:15px; }
+  .hitem { display:flex; align-items:center; gap:6px; margin-top:5px; }
+  .hitem .ht { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
+  .hitem .ht:hover { color:var(--accent2); }
+  .hitem small { color:var(--dim); }
+  .hitem button { padding:3px 8px; font-size:12px; }
+  #handoutSec.none { display:none; }
+  body.dm #handoutSec.none { display:block; }
   #cellInfo:empty { display:none; }
   #cellInfo { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.65); padding:4px 9px; border-radius:6px; font-size:11px; color:var(--dim); pointer-events:none; font-variant-numeric:tabular-nums; }
 
@@ -341,11 +363,23 @@
       <span class="fogsep"></span>
       <button id="fogRevealAll" class="fogbtn" title="Reveal the whole map">Reveal all</button>
       <button id="fogCoverAll" class="fogbtn" title="Cover the whole map">Cover all</button>
+      <span class="fogsep"></span>
+      <button id="visionBtn" class="fogbtn" title="Lighting and vision: players see only what their characters can see">👁 Vision</button>
+    </div>
+    <div id="visionPop" class="pop dm-only" hidden>
+      <div class="tphead"><b>Lighting and vision</b><button id="vClose" title="Close">✕</button></div>
+      <label class="check"><input type="checkbox" id="vOn"> Players see only what their characters can see</label>
+      <div class="row"><span class="fixed hint" style="margin:0">Light on this map</span><select id="vAmbient"><option value="bright">Bright (daylight, lit hall)</option><option value="dim">Dim (twilight, dim cave)</option><option value="dark">Dark (only lights and darkvision)</option></select></div>
+      <label class="check"><input type="checkbox" id="vShared"> Party shares vision (each player sees what any of them sees)</label>
+      <label class="check"><input type="checkbox" id="vExplore"> With fog of war: what they see stays revealed</label>
+      <div class="row" style="margin-top:10px"><span class="fixed hint" style="margin:0">Show me what's seen by</span><select id="vPreview"><option value="">Nobody: I see everything</option></select></div>
+      <div class="hint">Walls and closed doors block sight. Torches, braziers, campfires, fireplaces, candles and lamp posts give light, as do lights on tokens (select a token: Light). Open and close doors with the 🚪 Door tool.</div>
     </div>
     <div id="tableBar" class="play-only">
       <button data-tt="move" class="on" title="Move tokens (V or Esc)"><span>✋</span>Move</button>
       <button data-tt="ruler" title="Ruler: drag to measure distance (R)"><span>📏</span>Ruler</button>
       <button data-tt="template" title="Spell templates: cone, sphere, cube, line, cylinder (T)"><span>🔥</span>Spell</button>
+      <button data-tt="door" title="Door: click a door to open or close it (D)"><span>🚪</span>Door</button>
       <button data-tt="ping" title="Ping: click to flash a spot for everyone (P, or Alt+click with any tool)"><span>📍</span>Ping</button>
       <button data-tt="label" class="dm-only" title="Labels and DM notes on the map (L)"><span>🏷️</span>Label</button>
     </div>
@@ -406,6 +440,14 @@
           <div class="hprow">
             <span class="hpl" title="Added to initiative rolls">Initiative bonus</span><input id="eInit" type="number" style="max-width:60px">
           </div>
+          <div class="hprow">
+            <span class="hpl" title="The light this character carries">Light</span>
+            <select id="eLight" style="flex:1;min-width:0"><option value="">None</option><option value="5,10">Candle (5 / 10 ft)</option><option value="20,40">Torch (20 / 40 ft)</option><option value="15,45">Lamp (15 / 45 ft)</option><option value="30,60">Lantern (30 / 60 ft)</option><option value="20,40,spell">Light spell (20 / 40 ft)</option><option value="60,120">Daylight (60 / 120 ft)</option></select>
+          </div>
+          <div class="hprow">
+            <span class="hpl" title="Sees in darkness as if dim light, and in dim light as if bright">Darkvision</span>
+            <select id="eDark" style="flex:1;min-width:0"><option value="0">None</option><option value="30">30 ft</option><option value="60">60 ft</option><option value="90">90 ft</option><option value="120">120 ft</option></select>
+          </div>
           <div class="hprow dm-only">
             <span class="hpl">Players see</span>
             <select id="eHpShow" style="flex:1;min-width:0" title="How much of this token's health players can see. Default: numbers for player characters, a bar for everyone else."><option value="">Default (PCs: numbers, others: bar)</option><option value="numbers">HP numbers</option><option value="bar">Health bar only</option><option value="none">Nothing</option></select>
@@ -416,6 +458,11 @@
         <div class="row dm-only"><button id="eToInit">⚔ Add to initiative</button><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
       </section>
 
+      <section id="handoutSec">
+        <h2>Handouts</h2>
+        <div id="handoutList"></div>
+        <div class="row dm-only"><button id="newHandout">+ New handout</button></div>
+      </section>
       <section>
         <h2>Dice</h2>
         <div class="dice">
@@ -448,6 +495,28 @@
   </aside>
 </main>
 
+<div class="modal" id="handoutModal" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0" id="hmTitle">New handout</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
+    <div class="hbody">
+      <input id="hTitle" maxlength="80" placeholder="Title, e.g. A letter sealed with black wax">
+      <textarea id="hText" rows="6" maxlength="8000" placeholder="Text the players read (optional if there's a picture)"></textarea>
+      <div class="row"><button id="hImgBtn">Add a picture…</button><button id="hImgDel" class="fixed danger" title="Remove the picture">✕</button><input type="file" id="hImgIn" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>
+      <img id="hImgPrev" alt="">
+      <div class="hpl" style="margin-top:10px">Who gets it</div>
+      <label class="check"><input type="radio" name="hTo" value="all" checked> Everyone</label>
+      <label class="check"><input type="radio" name="hTo" value="some"> Only:</label>
+      <div id="hWho"></div>
+      <div class="row" style="margin-top:12px"><button id="hDel" class="danger fixed">Delete</button><button id="hSave">Save</button><button id="hShow" class="primary">Save and show</button></div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="handoutView" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0" id="hvTitle"></h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
+    <div class="hbody"><img id="hvImg" alt=""><div id="hvText"></div></div>
+  </div>
+</div>
 <div id="gate" hidden><form id="gateForm">
   <h2>Tabletop</h2>
   <p id="gateMsg"></p>
@@ -496,6 +565,7 @@
   </div>
 </div>
 
+<script src="js/vision.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
