@@ -46,19 +46,26 @@ Generated maps can start fogged with only the way in revealed (the **Start with 
 
 ## Generate a map
 
-Click **Build map**, then **Generate a map…**. Pick a type and size, and click **Create new map**. The new map opens privately.
+Click **Build map**, then **Generate a map…**.
 
 ![Generate a map](images/generate-dialog.jpg)
 
-| Type | What you get |
+1. **Describe the map** in the box at the top, in plain words: *"a snowy fishing village on the coast with a lighthouse"*, *"flooded crypt full of zombies with secret doors"*, *"bandit ambush on a forest road"*, *"a busy tavern called The Rusty Anchor"*. Under the box, **Understood** shows what it picked up, and the matching settings below light up. Stuck for ideas? Click **Example**.
+2. **Adjust anything** below: the type (Village, Dungeon, Wilderness, Building) and every setting. Typing in the description again re-reads it from scratch.
+3. Click **Create new map**. It opens privately, and a message sums it up. Not right? **Reroll** makes a new one in place.
+
+The description box reads key words (snowy, coast, walled, ruined, crypt, kobolds, swamp, tavern…) rather than whole sentences, and works without internet. Add *"called …"* to name the map.
+
+| Type | Settings |
 | --- | --- |
-| Village | Winding roads, a market square with a well or fountain and stalls, a tavern, smithy, temple with graveyard, shop, stable and houses (all furnished, with doors and windows), fenced fields, often a river with a bridge |
-| Dungeon | Rooms joined by corridors, with doors, portcullises, secret doors and traps, and themed rooms: throne room, crypt, library, prison, shrine, treasure room, barracks, flooded or collapsed rooms |
-| Forest road | A road through groves of trees, with a bandit campsite, a pond and old ruins |
+| Village | Setting (green, snowy, desert, swamp) · water (river, lake, coast) · layout (crossroads, one street, hamlet, walled town) · buildings · condition (thriving, lived in, ruined, with raiders) · trees · market, temple and graveyard, farms, mill, watchtower or lighthouse, docks, villagers |
+| Dungeon | Style (stone halls, natural caves, crypt, mine, sewer, temple, lava forge, flooded) · rooms · corridor width · linear, branching or maze-like · traps · secret doors · boss room · monsters (goblins, kobolds, orcs, undead, beasts, cultists, bandits, or to suit the style) |
+| Wilderness | Forest road, clearing, swamp, river crossing, mountain pass, desert oasis, snowy woods or coastline · cover · road · campsite, ruins, pond, cave entrance, shrine, wagon wreck · creatures |
+| Building | Tavern or inn, temple, manor house, shop, guardhouse, wizard tower · size · lived in or abandoned · yard · people inside |
 
-Tick the creatures box to fill the map: villagers, shopkeepers and animals in a village; monsters in a dungeon (goblins, kobolds, undead or beasts); bandits and wolves on the forest road. Monsters stay out of players' sight: under the fog until you reveal their room, or marked hidden (reveal them yourself) if fog is off.
+**Seeds:** after generating, the dialog shows the map's seed. Type that seed (with the same settings) to make exactly the same map again, for example to rebuild a map you deleted.
 
-Not happy with it? **Reroll** regenerates the map you're on. Everything generated can then be edited with the normal tools: use Select to drag a box round a building and move it, or click any prop to move or delete it.
+Monsters stay out of players' sight: under the fog until you reveal their area, or marked hidden if fog is off. Dungeons start fogged by default (the **Start with fog of war** box). Everything generated can then be edited with the normal tools: use Select to drag a box round a building and move it, or click any prop to move or delete it.
 
 ## Build a map by hand
 

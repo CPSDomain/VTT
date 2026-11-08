@@ -10,7 +10,8 @@
   <b><a href="https://github.com/CPSDomain/VTT/releases/latest">⬇ Download the latest version</a></b> &nbsp;·&nbsp;
   <a href="docs/DM-GUIDE.md">DM guide</a> &nbsp;·&nbsp;
   <a href="docs/PLAYER-GUIDE.md">Player guide</a> &nbsp;·&nbsp;
-  <a href="CHANGELOG.md">What's new</a>
+  <a href="CHANGELOG.md">What's new</a> &nbsp;·&nbsp;
+  <a href="docs/ROADMAP.md">Roadmap</a>
 </p>
 
 ---
@@ -32,7 +33,7 @@ Get the latest Windows build from the **[Releases page](https://github.com/CPSDo
 
 Nothing to install. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed yet: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect.
 
-What changed in each version: **[CHANGELOG.md](CHANGELOG.md)**.
+What changed in each version: **[CHANGELOG.md](CHANGELOG.md)**. What's coming: **[Roadmap](docs/ROADMAP.md)**.
 
 ## Getting started
 
@@ -45,14 +46,16 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 ## Features
 
 **Map building**
-- **Generate a map in one click:** a village (roads, market square, furnished tavern, smithy, temple and graveyard, shop, stable, houses, fields, river and bridge), a dungeon (rooms, corridors, doors, secret doors, traps, themed rooms) or a forest road (groves, campsite, pond, ruins), with optional villagers or monsters. Reroll until you like it.
+- **Describe it, and it's generated:** type *"snowy fishing village on the coast with a lighthouse"* or *"kobold mine with a dragon's lair"* and the generator picks the settings, which you can adjust. Villages (green, snowy, desert or swamp; river, lake or coast; walled towns, hamlets, ruins), dungeons (stone halls, caves, crypts, mines, sewers, temples, lava forges, flooded halls), wilderness (forests, swamps, river crossings, mountain passes, oases, coastlines) and building interiors (taverns, temples, manors, shops, guardhouses, wizard towers). Seeds let you make the same map again.
 - Tools: paint, rectangle, room (floor plus walls in one drag), bucket fill, erase, props, tokens, with undo and redo
 - **Select tool:** move, rotate, nudge or delete any prop; box-select part of the map to move it, copy it (Alt-drag or Ctrl+C / Ctrl+V) or clear it
 - 14 terrains and 69 props: doors, double doors, secret doors, portcullises, windows, furniture, dungeon dressing, village pieces and nature
 - Upload your own battle maps (or drag them on) and line the grid up with them
 - Build maps privately, then **Show to players** when ready
 
-![Generate a map](docs/images/generate-dialog.jpg)
+| Describe it | Get it |
+| --- | --- |
+| ![The Generate dialog with a description and the settings it picked](docs/images/generate-dialog.jpg) | ![Six generated maps: snowy fishing port, walled desert town, kobold mine, sewer maze, desert oasis, tavern interior](docs/images/generator-variety.jpg) |
 
 **Fog of war, and what players see**
 - Turn on fog of war and players see only what you reveal. **Reveal room** opens a whole room with one click, stopping at doors; brushes reveal or cover by hand

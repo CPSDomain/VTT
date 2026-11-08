@@ -1,5 +1,6 @@
 import { CELL, TERRAINS, PROPS, PROP_CATS, DM_ONLY, texture, drawProp, swatch } from './art.js';
-import { GENERATORS } from './generate.js';
+import { generate, SCHEMA, defaults } from './generate.js';
+import { interpret, EXAMPLES } from './prompt.js';
 import { drawTokenArt, thumb, builtins, credit, whenArtLoads } from './tokens.js';
 
 const $ = (id) => document.getElementById(id);
@@ -90,7 +91,7 @@ function onMessage(msg) {
       break;
     case 'sceneAdded':
       scenes[msg.scene.id] = msg.scene; order = msg.order;
-      if (pendingNewScene) { pendingNewScene = false; editing = msg.scene.id; sceneChanged(true); toast('New map created'); }
+      if (pendingNewScene) { pendingNewScene = false; editing = msg.scene.id; sceneChanged(true); if (!$('toast').classList.contains('show')) toast('New map created'); }
       else renderSceneBar();
       break;
     case 'sceneRemoved':
@@ -982,18 +983,92 @@ board.addEventListener('drop', async (e) => {
 });
 
 // ---------- map generator ----------
-let genType = 'village', genSize = 'medium';
+// The dialog is built from the generator's SCHEMA. The description box fills settings in;
+// the DM can then change any of them. Typing in the description again re-reads it from scratch.
+let genType = 'village', genSettings = defaults('village'), genHits = new Set(), genName = null;
 const libByName = () => Object.fromEntries(builtins().map((b) => [b.name, b]));
-function syncGenDialog() {
-  document.querySelectorAll('#genTypes button').forEach((b) => b.classList.toggle('on', b.dataset.gen === genType));
-  document.querySelectorAll('#genSize button').forEach((b) => b.classList.toggle('on', b.dataset.size === genSize));
-  $('genCreaturesLabel').textContent = { village: 'Add villagers and animals', dungeon: 'Add monsters', forest: 'Add bandits and wolves' }[genType];
-  $('genMonsterRow').style.display = genType === 'dungeon' ? '' : 'none';
+function renderGenTypes() {
+  const box = $('genTypes'); box.innerHTML = '';
+  for (const [k, def] of Object.entries(SCHEMA)) {
+    const b = document.createElement('button'); b.className = k === genType ? 'on' : '';
+    b.innerHTML = '<b></b><span></span>'; b.querySelector('b').textContent = def.label; b.querySelector('span').textContent = def.blurb;
+    b.onclick = () => { setGenType(k, true); };
+    box.appendChild(b);
+  }
+}
+function setGenType(type, manual) {
+  genType = type;
+  const parsed = $('genPrompt').value.trim() ? interpret($('genPrompt').value, type, manual) : null;
+  genSettings = { ...defaults(type), ...(parsed ? parsed.settings : {}) };
+  genHits = new Set(parsed ? Object.keys(parsed.settings) : []);
+  $('genFog').checked = type === 'dungeon';
+  renderGenTypes(); renderGenFields(); renderUnderstood(parsed);
+}
+function renderGenFields() {
+  const box = $('genFields'); box.innerHTML = '';
+  const fields = Object.entries(SCHEMA[genType].fields);
+  for (const [key, f] of fields.filter(([, f]) => f.type === 'choice')) {
+    const lab = document.createElement('div'); lab.className = 'fl'; lab.textContent = f.label;
+    const opts = document.createElement('div'); opts.className = 'opts';
+    const entries = Object.entries(f.options);
+    if (entries.length > 5) {
+      const sel = document.createElement('select');
+      for (const [v, t] of entries) { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); }
+      sel.value = genSettings[key]; sel.onchange = () => { genSettings[key] = sel.value; };
+      if (genHits.has(key)) sel.style.boxShadow = '0 0 0 2px rgba(255,107,53,.5)';
+      opts.appendChild(sel);
+    } else for (const [v, t] of entries) {
+      const b = document.createElement('button'); b.textContent = t;
+      b.className = (genSettings[key] === v ? 'on' : '') + (genSettings[key] === v && genHits.has(key) ? ' hit' : '');
+      b.onclick = () => { genSettings[key] = v; renderGenFields(); };
+      opts.appendChild(b);
+    }
+    box.append(lab, opts);
+  }
+  const bools = fields.filter(([, f]) => f.type === 'bool');
+  if (bools.length) {
+    const lab = document.createElement('div'); lab.className = 'fl'; lab.textContent = 'Include';
+    const wrap = document.createElement('div'); wrap.className = 'bools';
+    for (const [key, f] of bools) {
+      const l = document.createElement('label'); const cb = document.createElement('input'); cb.type = 'checkbox';
+      cb.checked = !!genSettings[key]; cb.onchange = () => { genSettings[key] = cb.checked; };
+      l.append(cb, f.label); if (genHits.has(key)) l.style.color = '#ffd2bf';
+      wrap.appendChild(l);
+    }
+    box.append(lab, wrap);
+  }
   $('genReplace').textContent = `Reroll "${sc() ? sc().name : 'this map'}"`;
 }
+function renderUnderstood(parsed) {
+  const box = $('genUnderstood'); box.innerHTML = '';
+  if (!parsed || parsed.understood.length <= 1) {
+    if ($('genPrompt').value.trim()) box.innerHTML = '<span class="lead">Didn\'t spot any settings in that yet. Try words like snowy, coast, walled, ruined, crypt, kobolds, swamp, tavern.</span>';
+    return;
+  }
+  const lead = document.createElement('span'); lead.className = 'lead'; lead.textContent = 'Understood:'; box.appendChild(lead);
+  parsed.understood.forEach((u, i) => { const c = document.createElement('span'); c.className = 'chip' + (i === 0 ? ' type' : ''); c.textContent = u; box.appendChild(c); });
+}
+let promptTimer = null;
+$('genPrompt').oninput = () => {
+  clearTimeout(promptTimer);
+  promptTimer = setTimeout(() => {
+    const text = $('genPrompt').value;
+    const parsed = interpret(text, genType);
+    genName = parsed.name;
+    if (parsed.type !== genType) { setGenType(parsed.type, false); return; }
+    genSettings = { ...defaults(genType), ...parsed.settings }; genHits = new Set(Object.keys(parsed.settings));
+    renderGenFields(); renderUnderstood(parsed);
+  }, 220);
+};
+let exampleIx = Math.floor(Math.random() * EXAMPLES.length);
+$('genExample').onclick = () => { $('genPrompt').value = EXAMPLES[exampleIx++ % EXAMPLES.length]; $('genPrompt').oninput(); };
 function runGenerator(replace) {
-  const seed = (Math.random() * 2 ** 31) | 0;
-  const out = GENERATORS[genType](genSize, seed, { creatures: $('genCreatures').checked, monsters: $('genMonsters').value }, libByName());
+  const typed = parseInt($('genSeed').value, 10);
+  const seed = Number.isFinite(typed) ? typed >>> 0 : (Math.random() * 2 ** 31) >>> 0;
+  const out = generate(genType, genSettings, seed, libByName());
+  if (genName) out.name = genName;
+  $('genLast').textContent = `Last map's seed: ${seed}`;
+  toast(`${out.name}: ${out.summary}`, 6000);
   // With fog on, the fog keeps monsters out of sight until their area is revealed, so they needn't be hidden too.
   const fog = $('genFog').checked;
   const tokens = fog ? out.tokens.map((t) => ({ ...t, hidden: false })) : out.tokens;
@@ -1002,20 +1077,19 @@ function runGenerator(replace) {
     sendMsg({ type: 'sceneReplace', sceneId: editing, name: out.name, cols: out.cols, rows: out.rows, content });
     undoStack.length = redoStack.length = 0; updateUndo();
     setTimeout(fitView, 200);
-    toast(`Rerolled as "${out.name}"`);
   } else {
     pendingNewScene = true;
     sendMsg({ type: 'sceneCreate', name: out.name, cols: out.cols, rows: out.rows, content });
   }
   $('genModal').hidden = true;
 }
-$('genBtn').onclick = () => { $('genFog').checked = genType === 'dungeon'; syncGenDialog(); $('genModal').hidden = false; };
-document.querySelectorAll('#genTypes button').forEach((b) => b.onclick = () => { genType = b.dataset.gen; $('genFog').checked = genType === 'dungeon'; syncGenDialog(); });
-document.querySelectorAll('#genSize button').forEach((b) => b.onclick = () => { genSize = b.dataset.size; syncGenDialog(); });
+$('genPrompt').placeholder = 'e.g. ' + EXAMPLES[0];
+$('genBtn').onclick = () => { renderGenTypes(); renderGenFields(); $('genModal').hidden = false; setTimeout(() => $('genPrompt').focus(), 50); };
+setGenType('village', true);
 $('genNew').onclick = () => runGenerator(false);
 $('genReplace').onclick = (e) => {
   const b = e.currentTarget;
-  if (editing === active && !b.dataset.armed) { b.dataset.armed = 1; b.textContent = 'Players can see this map. Click again to reroll'; setTimeout(() => { delete b.dataset.armed; syncGenDialog(); }, 3000); return; }
+  if (editing === active && !b.dataset.armed) { b.dataset.armed = 1; b.textContent = 'Players can see this map. Click again to reroll'; setTimeout(() => { delete b.dataset.armed; renderGenFields(); }, 3000); return; }
   delete b.dataset.armed; runGenerator(true);
 };
 

@@ -2,6 +2,22 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [0.6.0] - 2026-11-08
+
+### Added
+- **Describe the map you want.** The Generate dialog has a description box: type something like *"a snowy fishing village on the coast with a lighthouse"* or *"flooded crypt full of zombies with secret doors"*. It picks the map type and settings from your words and shows what it understood; change anything before generating. Add *"called …"* to name the map. The **Example** button cycles through ideas. Works offline: it reads key words rather than understanding full sentences.
+- **Many more generator settings**, all adjustable by hand:
+  - **Village:** setting (green, snowy, desert, swamp), water (river, lake, coast), layout (crossroads, one street, hamlet, walled town with gates), number of buildings, condition (thriving, lived in, ruined, with raiders), trees, and extras: market square, temple and graveyard, farm fields, mill, watchtower or lighthouse, docks and boats, villagers.
+  - **Dungeon:** eight styles (stone halls, natural caves, crypt, mine, sewer, temple, lava forge, flooded), number of rooms, corridor width, linear / branching / maze-like layout, traps (none, some, many), secret doors, a boss room at the far end, and monsters (goblins, kobolds, orcs, undead, beasts, cultists, bandits, or ones that suit the style).
+  - **Wilderness** (replaces Forest road): forest road, forest clearing, swamp, river crossing, mountain pass, desert oasis, snowy woods or coastline, with campsite, ruins, pond, cave entrance, shrine, wagon wreck, and creatures.
+  - **Building interiors (new):** tavern or inn, temple, manor house, shop, guardhouse or wizard tower: rooms with doors, windows and furniture for their purpose (common room, kitchen, bedrooms, library, armoury, cells, laboratory…), people inside, a yard, or abandoned and ransacked.
+- **Seeds:** every map shows its seed; type a seed to make the same map again.
+- Maps are sometimes mirrored, so layouts don't always face the same way.
+- **Roadmap** in [docs/ROADMAP.md](docs/ROADMAP.md).
+
+### Changed
+- After generating, a message sums up the map (e.g. *"Frostharbour: Snowy town · on the coast · 11 buildings · docks"*).
+
 ## [0.5.0] - 2026-11-08
 
 ### Added

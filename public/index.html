@@ -139,7 +139,28 @@
   .tile small { color:var(--dim); font-size:10px; }
   .tile .rm { position:absolute; top:2px; right:2px; padding:0 5px; font-size:11px; border:0; background:transparent; color:var(--dim); }
   .tile .rm:hover { color:#f87171; }
-  .gentypes { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .dialog.gen { width:min(760px, 94vw); }
+  .genbody { padding:0 18px 18px; overflow-y:auto; }
+  .genlabel { display:block; font-weight:600; margin-bottom:6px; }
+  .promptrow { display:flex; gap:6px; align-items:stretch; }
+  .promptrow textarea { flex:1; font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:9px 11px; resize:vertical; min-height:58px; user-select:text; }
+  .promptrow textarea:focus { outline:none; border-color:var(--accent2); }
+  .understood { display:flex; flex-wrap:wrap; gap:5px; margin:8px 0 14px; min-height:22px; align-items:center; }
+  .understood .chip { font-size:11.5px; padding:2px 8px; border-radius:11px; background:rgba(255,107,53,.15); border:1px solid rgba(255,107,53,.45); color:#ffd2bf; }
+  .understood .chip.type { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .understood .lead { font-size:12px; color:var(--dim); margin-right:2px; }
+  .genfields { display:grid; grid-template-columns:120px 1fr; gap:8px 12px; align-items:center; margin:14px 0 6px; }
+  .genfields .fl { color:var(--dim); font-size:12.5px; }
+  .genfields .opts { display:flex; flex-wrap:wrap; gap:4px; }
+  .genfields .opts button { padding:4px 10px; font-size:12px; border-radius:6px; }
+  .genfields .opts button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .genfields .opts button.hit { box-shadow:0 0 0 2px rgba(255,107,53,.5); }
+  .genfields .bools { display:flex; flex-wrap:wrap; gap:6px 14px; }
+  .genfields .bools label { display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer; }
+  .genfields .bools input { width:auto; accent-color:var(--accent); }
+  .genfields select { max-width:220px; }
+  .genfoot { border-top:1px solid var(--line); padding-top:10px; margin-top:10px; }
+  .gentypes { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
   .gentypes button { display:flex; flex-direction:column; gap:4px; text-align:left; white-space:normal; padding:12px; }
   .gentypes button span { color:var(--dim); font-size:11.5px; }
   .gentypes button.on { border-color:var(--accent); background:rgba(232,57,14,.12); }
@@ -310,21 +331,25 @@
 </div>
 
 <div class="modal" id="genModal" hidden>
-  <div class="dialog">
+  <div class="dialog gen">
     <div class="dhead"><h2 style="margin:0">Generate a map</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
-    <div style="padding:4px 18px 18px">
-      <div class="gentypes" id="genTypes">
-        <button data-gen="village" class="on"><b>Village</b><span>Roads, a square, tavern, smithy, temple, shop, houses, fields, maybe a river</span></button>
-        <button data-gen="dungeon"><b>Dungeon</b><span>Rooms and corridors with doors, secret doors, traps and themed rooms</span></button>
-        <button data-gen="forest"><b>Forest road</b><span>A road through the woods with a campsite, pond and old ruins</span></button>
+    <div class="genbody">
+      <label class="genlabel" for="genPrompt">Describe the map you want <span class="hint">(optional: or just pick settings below)</span></label>
+      <div class="promptrow">
+        <textarea id="genPrompt" rows="2" spellcheck="true"></textarea>
+        <button id="genExample" title="Show me an example">Example</button>
       </div>
-      <div class="hint" style="margin-top:14px">Size</div>
-      <div class="seg" id="genSize" style="display:inline-flex;margin-top:6px"><button data-size="small">Small</button><button data-size="medium" class="on">Medium</button><button data-size="large">Large</button></div>
-      <label class="check"><input type="checkbox" id="genCreatures" checked> <span id="genCreaturesLabel">Add villagers and animals</span></label>
-      <label class="check"><input type="checkbox" id="genFog"> <span>Start with fog of war (only the way in is revealed)</span></label>
-      <div class="row" id="genMonsterRow" style="display:none"><span class="fixed hint" style="margin:0">Monsters</span><select id="genMonsters"><option value="goblinoid">Goblins &amp; hobgoblins</option><option value="kobold">Kobolds</option><option value="undead">Undead</option><option value="beasts">Beasts &amp; vermin</option></select></div>
-      <div class="hint">Monsters stay out of players' sight: under the fog until you reveal their area, or hidden (reveal them yourself) if fog is off. New maps are private until you press Show to players.</div>
-      <div class="row" style="margin-top:16px"><button id="genNew" class="primary">Create new map</button><button id="genReplace" title="Regenerate the map you're on (replaces everything on it)">Reroll this map</button></div>
+      <div id="genUnderstood" class="understood"></div>
+
+      <div class="gentypes" id="genTypes"></div>
+      <div id="genFields" class="genfields"></div>
+
+      <div class="genfoot">
+        <label class="check"><input type="checkbox" id="genFog"> <span>Start with fog of war (only the way in is revealed)</span></label>
+        <div class="row"><span class="fixed hint" style="margin:0">Seed</span><input id="genSeed" placeholder="random" inputmode="numeric" style="max-width:130px" title="The same seed and settings make the same map again"><span id="genLast" class="hint" style="margin:0"></span></div>
+        <div class="hint">Monsters stay out of players' sight: under the fog until you reveal their area, or hidden if fog is off. New maps are private until you press Show to players.</div>
+        <div class="row" style="margin-top:12px"><button id="genNew" class="primary">Create new map</button><button id="genReplace" title="Regenerate the map you're on (replaces everything on it)">Reroll this map</button></div>
+      </div>
     </div>
   </div>
 </div>

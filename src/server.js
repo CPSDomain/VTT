@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
