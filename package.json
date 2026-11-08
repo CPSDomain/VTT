@@ -1,0 +1,31 @@
+{
+  "name": "tabletop",
+  "version": "0.4.1",
+  "description": "Self-hosted virtual tabletop for D&D",
+  "main": "apps/dm/main.js",
+  "scripts": {
+    "server": "node server.js",
+    "dm": "electron apps/dm/main.js",
+    "player": "electron apps/player/main.js",
+    "build:win": "electron-builder --win --config build/dm.json && electron-builder --win --config build/player.json",
+    "build:linux": "electron-builder --linux --config build/dm.json && electron-builder --linux --config build/player.json",
+    "release": "node scripts/release.js"
+  },
+  "author": "Tabletop",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@iconify-json/game-icons": "^1.2.4",
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8",
+    "resedit": "^2.0.3"
+  },
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CPSDomain/VTT.git"
+  },
+  "homepage": "https://github.com/CPSDomain/VTT"
+}

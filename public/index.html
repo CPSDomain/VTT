@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tabletop</title>
+<style>
+  :root { --bg:#121212; --panel:#1c1c1c; --panel2:#242424; --line:#2f2f2f; --text:#e8e8e8; --dim:#9a9a9a; --accent:#e8390e; --accent2:#ff6b35; --ok:#22c55e; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; display:flex; flex-direction:column; background:var(--bg); color:var(--text); font:13px/1.35 system-ui, "Segoe UI", sans-serif; overflow:hidden; user-select:none; }
+  input, button, select { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  input { width:100%; user-select:text; }
+  input[type=checkbox] { width:auto; accent-color:var(--accent); }
+  input[type=number] { -moz-appearance:textfield; }
+  button { cursor:pointer; white-space:nowrap; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { background:var(--accent2); }
+  button.danger:hover { border-color:#ef4444; color:#fca5a5; }
+  button:disabled { opacity:.4; cursor:default; border-color:var(--line); }
+  h2 { margin:0 0 8px; font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:var(--accent2); }
+  .row { display:flex; gap:6px; margin-top:6px; align-items:center; }
+  .row > * { flex:1; min-width:0; }
+  .row > .fixed { flex:0 0 auto; }
+  .hint { color:var(--dim); font-size:12px; margin-top:6px; }
+  .dm-only, .build-only { display:none !important; }
+  body.dm .dm-only { display:revert !important; }
+  body.dm.build .build-only { display:revert !important; }
+  body.dm.build .play-only { display:none !important; }
+
+  /* top bar */
+  header { height:48px; flex:0 0 48px; display:flex; align-items:center; gap:10px; padding:0 12px; background:#171717; border-bottom:1px solid var(--line); }
+  .brand { font-weight:800; letter-spacing:.14em; font-size:13px; }
+  .brand span { color:var(--accent); }
+  .sep { width:1px; height:24px; background:var(--line); }
+  #sceneSel { max-width:220px; }
+  .badge { font-size:10px; font-weight:700; letter-spacing:.06em; padding:3px 7px; border-radius:4px; }
+  .badge.live { background:var(--accent); color:#fff; }
+  .badge.prep { background:#3a3a3a; color:#ccc; }
+  .seg { display:flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+  .seg button { border:0; border-radius:0; background:transparent; padding:6px 14px; }
+  .seg button.on { background:var(--accent); color:#fff; }
+  .spacer { flex:1; }
+  #conn { color:var(--dim); font-size:12px; display:flex; align-items:center; gap:8px; }
+  #conn b { color:var(--text); font-weight:600; user-select:text; }
+  #players { color:var(--dim); font-size:12px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#555; margin-right:5px; }
+  .dot.on { background:var(--ok); }
+
+  main { flex:1; display:flex; min-height:0; }
+
+  /* build tools */
+  nav#tools { width:236px; flex:0 0 236px; background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; }
+  nav section, aside section { padding:12px; border-bottom:1px solid var(--line); }
+  .toolgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+  .tool { display:flex; flex-direction:column; align-items:center; gap:3px; padding:7px 2px 5px; font-size:10.5px; color:var(--dim); }
+  .tool svg { width:20px; height:20px; stroke:var(--text); fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .tool.on { border-color:var(--accent); background:rgba(232,57,14,.15); color:var(--text); }
+  .palette { display:grid; grid-template-columns:repeat(5,1fr); gap:5px; }
+  .sw { padding:0; border:2px solid transparent; border-radius:6px; overflow:hidden; aspect-ratio:1; background:#222; }
+  .sw canvas { display:block; width:100%; height:100%; }
+  .sw.on { border-color:var(--accent2); box-shadow:0 0 0 1px var(--accent2); }
+  .palname { font-size:12px; color:var(--dim); margin-top:6px; min-height:16px; }
+  .sizes { display:flex; gap:5px; }
+  .sizes button { flex:1; padding:4px; }
+  .sizes button.on { border-color:var(--accent); background:rgba(232,57,14,.15); }
+  #bgPreview { height:90px; margin-top:8px; border-radius:6px; background:#151515 center/contain no-repeat; border:1px dashed var(--line); display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:12px; text-align:center; padding:6px; }
+  label.check { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--dim); margin-top:8px; cursor:pointer; }
+
+  /* board */
+  #board { flex:1; position:relative; min-width:0; }
+  canvas#c { display:block; width:100%; height:100%; cursor:default; touch-action:none; }
+  body.build #board.drop::after { content:'Drop image to set as map background (pick the Token tool to make tokens instead)'; }
+  #board.drop::after { content:'Drop images to add them as tokens'; position:absolute; inset:12px; border:3px dashed var(--accent2); border-radius:12px; background:rgba(232,57,14,.08); display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:600; pointer-events:none; }
+  #status { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.65); padding:5px 11px; border-radius:20px; font-size:12px; pointer-events:none; }
+  #zoomCtl { position:absolute; right:10px; bottom:10px; display:flex; gap:4px; }
+  #zoomCtl button { background:rgba(20,20,20,.85); width:32px; padding:5px 0; }
+  #cellInfo:empty { display:none; }
+  #cellInfo { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.65); padding:4px 9px; border-radius:6px; font-size:11px; color:var(--dim); pointer-events:none; font-variant-numeric:tabular-nums; }
+
+  /* right sidebar */
+  aside { width:300px; flex:0 0 300px; background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  aside .scroll { overflow-y:auto; flex:0 1 auto; }
+  .dice { display:grid; grid-template-columns:repeat(4,1fr); gap:5px; }
+  #macros { display:flex; flex-wrap:wrap; gap:5px; }
+  .macro { display:flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .macro button { border:0; border-radius:0; }
+  .macro button.go:hover { background:var(--accent); }
+  .macro button.x { color:var(--dim); padding:6px 7px; border-left:1px solid var(--line); }
+  .macro button.x:hover { color:#f87171; }
+  .macro small { color:var(--dim); margin-left:4px; }
+  #log { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:7px; min-height:120px; }
+  .entry { background:var(--panel2); border-radius:7px; padding:8px 10px; user-select:text; }
+  .entry b { color:var(--accent2); }
+  .entry .total { float:right; font-size:20px; font-weight:800; margin-left:8px; }
+  .entry .detail { color:var(--dim); font-size:12px; margin-top:3px; word-break:break-all; }
+  .entry.private { outline:1px dashed #555; }
+  .entry.nat20 { box-shadow:0 0 0 1px var(--ok) inset; } .entry.nat20 .total { color:#4ade80; }
+  .entry.nat1 { box-shadow:0 0 0 1px #ef4444 inset; } .entry.nat1 .total { color:#f87171; }
+  .tag { font-size:10px; font-weight:700; letter-spacing:.05em; padding:2px 5px; border-radius:3px; margin-left:5px; vertical-align:1px; }
+  .tag.n20 { background:#16a34a; color:#fff; } .tag.n1 { background:#dc2626; color:#fff; } .tag.priv { background:#444; color:#ddd; }
+  @keyframes pop { from { transform:scale(.6); opacity:.2; } to { transform:scale(1); opacity:1; } }
+  .entry.fresh .total { animation:pop .35s ease-out; }
+
+  #join { position:fixed; inset:0; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; z-index:20; }
+  #join form { background:var(--panel); padding:24px; border-radius:10px; width:320px; border-top:3px solid var(--accent); }
+  #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#2a2a2a; border-left:4px solid var(--accent); padding:10px 16px; border-radius:6px; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; transition:opacity .2s; pointer-events:none; z-index:30; max-width:60vw; }
+  #toast.show { opacity:1; }
+  body.dm #editSec.off { display:none !important; }
+  #selInfo { margin-top:10px; min-height:32px; line-height:1.45; }
+  #selInfo b { color:var(--accent2); font-weight:600; }
+  kbd { font:600 10.5px system-ui, sans-serif; background:#2c2c2c; border:1px solid #3a3a3a; border-bottom-width:2px; border-radius:4px; padding:0 4px; color:var(--text); }
+  .cats { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px; }
+  .cats button { padding:3px 8px; font-size:11.5px; border-radius:12px; }
+  .cats button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .artrow { display:flex; gap:10px; align-items:center; }
+  .artrow canvas { width:44px; height:44px; flex:0 0 44px; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; align-items:center; justify-content:center; z-index:25; }
+  .modal[hidden] { display:none; }
+  .dialog { background:var(--panel); border-radius:12px; border-top:3px solid var(--accent); width:min(560px, 92vw); max-height:88vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.6); }
+  .dialog.wide { width:min(980px, 94vw); height:min(760px, 88vh); }
+  .dhead { display:flex; align-items:center; gap:12px; padding:14px 16px; }
+  .dialog .cats { padding:0 16px; }
+  .close { background:transparent; border:0; font-size:16px; color:var(--dim); }
+  #libGrid { flex:1; overflow-y:auto; padding:6px 16px; display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:8px; align-content:start; }
+  .tile { display:flex; flex-direction:column; align-items:center; gap:5px; padding:8px 4px 6px; background:var(--panel2); border-radius:8px; position:relative; }
+  .tile:hover { border-color:var(--accent2); }
+  .tile canvas { width:56px; height:56px; }
+  .tile span { font-size:11.5px; text-align:center; line-height:1.2; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tile small { color:var(--dim); font-size:10px; }
+  .tile .rm { position:absolute; top:2px; right:2px; padding:0 5px; font-size:11px; border:0; background:transparent; color:var(--dim); }
+  .tile .rm:hover { color:#f87171; }
+  .gentypes { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .gentypes button { display:flex; flex-direction:column; gap:4px; text-align:left; white-space:normal; padding:12px; }
+  .gentypes button span { color:var(--dim); font-size:11.5px; }
+  .gentypes button.on { border-color:var(--accent); background:rgba(232,57,14,.12); }
+  ::-webkit-scrollbar { width:10px; } ::-webkit-scrollbar-thumb { background:#333; border-radius:5px; border:2px solid var(--panel); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TABLE<span>TOP</span></div>
+  <div class="sep"></div>
+
+  <!-- player view -->
+  <div id="playerScene" style="font-weight:600"></div>
+
+  <!-- DM view -->
+  <select id="sceneSel" class="dm-only" title="Map you are looking at"></select>
+  <span id="liveBadge" class="badge dm-only"></span>
+  <button id="showPlayers" class="dm-only primary" title="Put this map on the players' screens">Show to players</button>
+  <div class="sep dm-only"></div>
+  <div class="seg dm-only"><button id="modePlay" class="on">Play</button><button id="modeBuild">Build map</button></div>
+
+  <div class="spacer"></div>
+  <div id="conn" class="dm-only"></div>
+  <div id="players" class="dm-only"></div>
+  <div id="me" style="color:var(--dim);font-size:12px"></div>
+</header>
+
+<main>
+  <nav id="tools" class="build-only">
+    <section>
+      <h2>Tools</h2>
+      <div class="toolgrid">
+        <button class="tool" data-tool="select" title="Select / move tokens (V)"><svg viewBox="0 0 24 24"><path d="M5 3l14 8-6 2-3 6z"/></svg>Select</button>
+        <button class="tool" data-tool="brush" title="Paint terrain (B)"><svg viewBox="0 0 24 24"><path d="M18 3l3 3-9 9-3-3z"/><path d="M9 12c-3 0-5 2-5 5 0 2-1 3-2 4 4 0 9-1 9-6"/></svg>Paint</button>
+        <button class="tool" data-tool="rect" title="Fill a rectangle (R)"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>Rectangle</button>
+        <button class="tool" data-tool="room" title="Room: floor with walls round the edge (M)"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16"/><rect x="7" y="8" width="10" height="8" stroke-dasharray="2 2"/></svg>Room</button>
+        <button class="tool" data-tool="fill" title="Bucket fill an area (G)"><svg viewBox="0 0 24 24"><path d="M5 11l7-7 7 7-7 7z"/><path d="M20 15c0 2-1 4-2 4s-2-2-2-4l2-3z"/></svg>Fill</button>
+        <button class="tool" data-tool="erase" title="Erase (E): removes a prop if there is one, otherwise the terrain"><svg viewBox="0 0 24 24"><path d="M16 4l5 5-10 10H6l-3-3z"/><path d="M11 19h10"/></svg>Erase</button>
+        <button class="tool" data-tool="prop" title="Place props (P). Q rotates"><svg viewBox="0 0 24 24"><rect x="5" y="9" width="14" height="11" rx="1"/><path d="M5 13h14M12 9v11M8 9l4-5 4 5"/></svg>Props</button>
+        <button class="tool" data-tool="token" title="Place a token by clicking (K)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>Token</button>
+      </div>
+      <div class="row">
+        <button id="undo" title="Undo (Ctrl+Z)">↶ Undo</button>
+        <button id="redo" title="Redo (Ctrl+Y)">↷ Redo</button>
+      </div>
+      <div id="selInfo" class="hint"></div>
+    </section>
+
+    <section id="terrainSec">
+      <h2>Terrain</h2>
+      <div class="palette" id="terrainPal"></div>
+      <div class="palname" id="terrainName"></div>
+      <div id="brushRow">
+        <div class="hint" style="margin-top:8px">Brush size</div>
+        <div class="sizes row" id="sizes"><button data-size="1" class="on">1</button><button data-size="2">2</button><button data-size="3">3</button><button data-size="5">5</button></div>
+      </div>
+    </section>
+
+    <section id="propSec">
+      <h2>Props</h2>
+      <div class="cats" id="propCats"></div>
+      <div class="palette" id="propPal"></div>
+      <div class="palname" id="propName"></div>
+      <div class="hint">Click to place · Q to rotate · click a placed prop of the same kind to turn it</div>
+    </section>
+
+    <section>
+      <h2>Map settings</h2>
+      <input id="mapName" placeholder="Map name">
+      <div class="row"><span class="fixed hint" style="margin:0">Size</span><input id="mapCols" type="number" min="5" max="120" title="Columns"><span class="fixed hint" style="margin:0">×</span><input id="mapRows" type="number" min="5" max="120" title="Rows"><button id="applySize" class="fixed">Set</button></div>
+      <label class="check"><input type="checkbox" id="showGrid"> Show grid</label>
+    </section>
+
+    <section>
+      <h2>Background image</h2>
+      <div id="bgPreview">No image. Upload a battle map, or drag one onto the map.</div>
+      <div class="row"><button id="uploadBtn" class="primary">Upload image…</button><button id="clearBg" class="fixed danger" title="Remove the image">✕</button></div>
+      <input type="file" id="fileIn" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+      <div class="row"><span class="fixed hint" style="margin:0">Square =</span><input id="pxPerSq" type="number" min="10" max="500" value="70" title="How many pixels one grid square is in the image"><span class="fixed hint" style="margin:0">px</span><button id="fitBg" class="fixed" title="Resize the grid to match the image">Fit grid</button></div>
+      <div class="hint">Set how big one square is in the image, then Fit grid lines the grid up with it.</div>
+    </section>
+
+    <section>
+      <h2>Maps</h2>
+      <div class="row"><button id="genBtn" class="primary">Generate a map…</button></div>
+      <div class="row"><button id="newMap">+ Blank map</button><button id="dupMap">Duplicate</button></div>
+      <div class="row"><button id="delMap" class="danger">Delete this map</button></div>
+    </section>
+  </nav>
+
+  <div id="board">
+    <canvas id="c"></canvas>
+    <div id="status">Connecting…</div>
+    <div id="cellInfo"></div>
+    <div id="zoomCtl"><button id="zoomOut" title="Zoom out">−</button><button id="zoomFit" title="Fit map to screen (Home)">⤢</button><button id="zoomIn" title="Zoom in">+</button></div>
+  </div>
+
+  <aside>
+    <div class="scroll">
+      <section>
+        <h2>Dice</h2>
+        <div class="dice">
+          <button data-roll="1d4">d4</button><button data-roll="1d6">d6</button><button data-roll="1d8">d8</button><button data-roll="1d10">d10</button>
+          <button data-roll="1d12">d12</button><button data-roll="1d20">d20</button><button data-roll="1d20adv">Adv</button><button data-roll="1d20dis">Dis</button>
+        </div>
+        <form id="rollForm" class="row"><input id="expr" placeholder="2d6+3, 4d6kh3, d100"><button class="primary fixed">Roll</button></form>
+        <label class="check"><input type="checkbox" id="private"> <span id="privLabel">Roll privately (only the DM sees it)</span></label>
+      </section>
+
+      <section>
+        <h2>My quick rolls</h2>
+        <div id="macros"></div>
+        <form id="macroForm" class="row"><input id="mLabel" placeholder="Longsword hit"><input id="mExpr" placeholder="1d20+5" style="flex:0 0 78px"><button class="fixed" title="Save quick roll">+</button></form>
+        <div class="hint">Copy bonuses from D&amp;D Beyond once. Shift-click: advantage · Alt-click: disadvantage.</div>
+      </section>
+
+      <section class="dm-only off" id="editSec">
+        <h2>Selected token</h2>
+        <div class="artrow"><canvas id="editArt" width="88" height="88"></canvas>
+          <div style="flex:1;min-width:0"><input id="eLabel" placeholder="Name"><div class="row"><button id="eArt">Change art…</button><input id="eColor" type="color" class="fixed" style="width:40px;padding:2px;height:31px"></div></div></div>
+        <div class="row"><input id="eOwner" placeholder="Owner (player name, * = anyone)"><select id="eSize" class="fixed"><option value="1">Medium</option><option value="2">Large</option><option value="3">Huge</option><option value="4">Garg.</option></select></div>
+        <label class="check"><input type="checkbox" id="eHidden"> Hidden from players</label>
+        <div class="row"><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
+      </section>
+
+      <section class="dm-only">
+        <h2>Add tokens</h2>
+        <div class="artrow"><canvas id="artPreview" width="88" height="88"></canvas>
+          <div style="flex:1;min-width:0"><div id="artName" style="font-weight:600;margin-bottom:6px">Plain token</div><button id="openLib" class="primary" style="width:100%">Token library…</button></div></div>
+        <div class="row"><input id="tLabel" placeholder="Name (e.g. Goblin 1)"><input id="tColor" type="color" value="#dc2626" class="fixed" style="width:40px;padding:2px;height:31px"></div>
+        <div class="row"><input id="tOwner" placeholder="Owner: player name, * = anyone" title="Who can move it. Leave empty for DM only."><select id="tSize" class="fixed"><option value="1">Medium</option><option value="2">Large</option><option value="3">Huge</option><option value="4">Garg.</option></select></div>
+        <label class="check"><input type="checkbox" id="tHidden"> Add hidden (reveal later)</label>
+        <div class="row"><button id="addToken" class="primary">Add to map</button></div>
+        <div class="hint">Or pick the Token tool in Build mode and click to place. Drop image files on the map to make tokens from them.</div>
+      </section>
+    </div>
+    <div id="log"></div>
+  </aside>
+</main>
+
+<div id="join"><form id="joinForm">
+  <h2>Join the table</h2>
+  <input id="name" placeholder="Your name (same as your character)" required autofocus maxlength="24">
+  <div class="row"><button class="primary">Join</button></div>
+</form></div>
+<div id="toast"></div>
+
+<div class="modal" id="libModal" hidden>
+  <div class="dialog wide">
+    <div class="dhead"><h2 style="margin:0">Token library</h2><input id="libSearch" placeholder="Search: dragon, kobold, guard…" style="max-width:280px"><div class="spacer"></div>
+      <button id="libUpload" class="primary">Upload images…</button><input type="file" id="libFiles" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+      <button class="close" data-close>✕</button></div>
+    <div class="cats" id="libCats"></div>
+    <div id="libGrid"></div>
+    <div class="hint" id="libCredit" style="padding:8px 16px 14px"></div>
+  </div>
+</div>
+
+<div class="modal" id="genModal" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0">Generate a map</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
+    <div style="padding:4px 18px 18px">
+      <div class="gentypes" id="genTypes">
+        <button data-gen="village" class="on"><b>Village</b><span>Roads, a square, tavern, smithy, temple, shop, houses, fields, maybe a river</span></button>
+        <button data-gen="dungeon"><b>Dungeon</b><span>Rooms and corridors with doors, secret doors, traps and themed rooms</span></button>
+        <button data-gen="forest"><b>Forest road</b><span>A road through the woods with a campsite, pond and old ruins</span></button>
+      </div>
+      <div class="hint" style="margin-top:14px">Size</div>
+      <div class="seg" id="genSize" style="display:inline-flex;margin-top:6px"><button data-size="small">Small</button><button data-size="medium" class="on">Medium</button><button data-size="large">Large</button></div>
+      <label class="check"><input type="checkbox" id="genCreatures" checked> <span id="genCreaturesLabel">Add villagers and animals</span></label>
+      <div class="row" id="genMonsterRow" style="display:none"><span class="fixed hint" style="margin:0">Monsters</span><select id="genMonsters"><option value="goblinoid">Goblins &amp; hobgoblins</option><option value="kobold">Kobolds</option><option value="undead">Undead</option><option value="beasts">Beasts &amp; vermin</option></select></div>
+      <div class="hint">Creatures in dungeons and on the forest road start hidden from players. New maps are private until you press Show to players.</div>
+      <div class="row" style="margin-top:16px"><button id="genNew" class="primary">Create new map</button><button id="genReplace" title="Regenerate the map you're on (replaces everything on it)">Reroll this map</button></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

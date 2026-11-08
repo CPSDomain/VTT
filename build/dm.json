@@ -1,0 +1,47 @@
+{
+  "appId": "app.tabletop.dm",
+  "productName": "Tabletop DM",
+  "extraMetadata": {
+    "main": "apps/dm/main.js"
+  },
+  "directories": {
+    "output": "dist/dm",
+    "buildResources": "build"
+  },
+  "files": [
+    "apps/dm/**",
+    "src/**",
+    "public/**",
+    "build/icon.png",
+    "package.json",
+    "!**/*.map"
+  ],
+  "asar": true,
+  "afterPack": "build/afterPack.js",
+  "compression": "normal",
+  "win": {
+    "target": [
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "signAndEditExecutable": false
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "Game"
+  },
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+}

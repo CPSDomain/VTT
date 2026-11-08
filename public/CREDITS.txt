@@ -1,0 +1,7 @@
+Tabletop credits
+
+Built-in token artwork: game-icons.net (https://game-icons.net) by Lorc, Delapouite and contributors,
+licensed under Creative Commons Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/).
+Icons are shown recoloured on coloured discs; the names given to them in the token library are Tabletop's.
+
+Map art (terrain textures and props) is drawn in code by Tabletop.

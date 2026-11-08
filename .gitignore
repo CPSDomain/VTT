@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output and release zips (attach zips to GitHub Releases instead)
+dist/
+*.zip
+
+# save data from the headless server
+data/
+state.json
+state.json.tmp
+
+# OS / editor clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.log

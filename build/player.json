@@ -1,0 +1,45 @@
+{
+  "appId": "app.tabletop.player",
+  "productName": "Tabletop Player",
+  "extraMetadata": {
+    "main": "apps/player/main.js"
+  },
+  "directories": {
+    "output": "dist/player",
+    "buildResources": "build"
+  },
+  "files": [
+    "apps/player/**",
+    "build/icon.png",
+    "package.json",
+    "!**/*.map"
+  ],
+  "asar": true,
+  "afterPack": "build/afterPack.js",
+  "compression": "normal",
+  "win": {
+    "target": [
+      {
+        "target": "zip",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.ico",
+    "signAndEditExecutable": false
+  },
+  "linux": {
+    "target": [
+      {
+        "target": "AppImage",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "Game"
+  },
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+}

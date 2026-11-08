@@ -1,0 +1,96 @@
+# DM guide
+
+Everything you need to run a session in Tabletop: starting the server, getting players in, building or generating maps, and running play.
+
+## Start Tabletop DM
+
+1. Unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep, e.g. `Documents\Tabletop DM`. Keep all the files together; the .exe needs the rest of the folder.
+2. Double-click **Tabletop DM.exe**.
+3. Windows shows "Windows protected your PC" because the app isn't code-signed yet. Click **More info**, then **Run anyway**. This happens once.
+4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.
+5. The DM window opens. Top right shows **Players connect to 192.168.x.x:3000**: give that address to your players. The Copy button copies it.
+
+Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabletop DM\data`. **File → Back up table** saves a copy; **File → Open data folder** shows it. Updating to a new version keeps all of it.
+
+## Get players connected
+
+Each player unzips `Tabletop-Player-<version>-Windows.zip`, runs **Tabletop Player.exe**, types your address and their name, and clicks Connect. Players can also skip the app and open `http://your-address` in Chrome or Edge. See the [Player guide](PLAYER-GUIDE.md).
+
+| Players are | Address to give them | Setup |
+| --- | --- | --- |
+| On your Wi-Fi or network | The one shown top right, e.g. `192.168.1.20:3000` | Allow the firewall prompt |
+| Elsewhere (online game) | Your Tailscale address, e.g. `100.x.x.x:3000` | Everyone installs [Tailscale](https://tailscale.com) (free) and joins your network once |
+
+To test alone, run Tabletop Player on the same PC and connect to `localhost:3000`.
+
+## Private prep vs what players see
+
+The dropdown at the top picks which map **you** are looking at.
+
+- A red **PLAYERS SEE THIS** badge means every change shows on players' screens live.
+- A grey **PRIVATE PREP** badge means only you see this map. Build in peace.
+- When a map is ready, click **Show to players**.
+
+## Generate a map
+
+Click **Build map**, then **Generate a map…**. Pick a type and size, and click **Create new map**. The new map opens privately.
+
+![Generate a map](images/generate-dialog.jpg)
+
+| Type | What you get |
+| --- | --- |
+| Village | Winding roads, a market square with a well or fountain and stalls, a tavern, smithy, temple with graveyard, shop, stable and houses (all furnished, with doors and windows), fenced fields, often a river with a bridge |
+| Dungeon | Rooms joined by corridors, with doors, portcullises, secret doors and traps, and themed rooms: throne room, crypt, library, prison, shrine, treasure room, barracks, flooded or collapsed rooms |
+| Forest road | A road through groves of trees, with a bandit campsite, a pond and old ruins |
+
+Tick the creatures box to fill the map: villagers, shopkeepers and animals in a village; monsters in a dungeon (goblins, kobolds, undead or beasts); bandits and wolves on the forest road. **Dungeon and forest creatures start hidden**, so you reveal them when the party finds them.
+
+Not happy with it? **Reroll** regenerates the map you're on. Everything generated can then be edited with the normal tools: use Select to drag a box round a building and move it, or click any prop to move or delete it.
+
+## Build a map by hand
+
+In **Build map** mode the tools are on the left; one square is 5 ft. The line under Undo/Redo says what the current tool does.
+
+| Tool | Key | What it does |
+| --- | --- | --- |
+| Select | V | Drag tokens. Click a prop to move it, rotate it (Q), nudge it (arrows) or delete it (Delete). Drag a box over part of the map to select it: drag to move (hold Alt to copy), Delete to clear, Ctrl+C / Ctrl+V to copy and paste |
+| Paint | B | Paint terrain; brush size 1, 2, 3 or 5 |
+| Rectangle | R | Drag to fill a rectangle with the chosen terrain |
+| Room | M | Drag a rectangle: floor inside, walls round the edge |
+| Fill | G | Bucket-fill a connected area |
+| Erase | E | Removes a prop if there is one, otherwise the terrain |
+| Props | P | Click to place; Q rotates; clicking a placed prop of the same kind turns it |
+| Token | K | Click to place a token set up in the Add tokens panel |
+
+**Terrains** (keys 1–0 for the first ten): stone, cobblestone, wood, dirt, grass, sand, water, lava, pit, wall, marble, gravel path, farmland, snow.
+
+**Props** come in five tabs (69 in all): Doors & windows, Furniture, Dungeon, Village, Nature.
+
+**Secret doors and traps are visible to you only.** Put a secret door on a wall square. When the party finds it, erase the prop and paint floor plus a normal door.
+
+A quick dungeon by hand: the Room tool for each chamber, Rectangle with cobblestone for the corridor, Paint with stone over the walls where the corridor meets them, then a Door prop in each gap.
+
+**Using an existing battle map:** under Background image, click **Upload image** or drag a PNG or JPG onto the map. The grid sizes itself if the image uses a common square size (70, 100, 140 px…). If the lines don't match, type the image's pixels per square and click **Fit grid**. You can paint and place props on top.
+
+Ctrl+Z undoes, Ctrl+Y redoes. Pan with right-drag or Space+drag, zoom with the mouse wheel, press Home to fit the map.
+
+## Tokens
+
+Click **Token library…** in the right-hand panel: 215 ready-made tokens in categories, searchable by name. Click one, then **Add to map** (it lands in the middle of your view) or use the Token tool to click it into place. Each comes at a sensible size (dragons are Huge). Names count up by themselves: Goblin 1, Goblin 2…
+
+![Token library](images/token-library.jpg)
+
+- **Your own token art:** in the library, click **Upload images…** (pick many at once), or drag image files onto the map in Play mode. They're kept under **My uploads**. Token packs you've bought work this way.
+- **Owner** decides who can move a token: a player's name (only them, and you), `*` (anyone), or empty (only you: monsters and NPCs).
+- **Click any token** to edit it in the Selected token panel: name, art, colour, owner and size. **Duplicate** copies it with the next number. Delete removes it.
+- **Hidden from players:** a hidden token shows faded with a dashed ring on your screen only. Untick to reveal it. Tick **Add hidden** before adding to place an ambush.
+
+## Dice
+
+Everyone rolls in the right-hand panel: the die buttons, or type any roll such as `2d6+3`, `4d6kh3` or `d100`. Rolls happen on your PC, so nobody can fudge them, and everyone sees the log. Tick **Roll privately** for rolls players shouldn't see; a player's private roll is seen only by them and you.
+
+Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bonuses from D&D Beyond once. Shift-click rolls with advantage, Alt-click with disadvantage. Natural 20s show green, natural 1s red.
+
+## Not in this version yet
+
+Fog of war, initiative tracker, importing MapTool campaigns, map labels and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
