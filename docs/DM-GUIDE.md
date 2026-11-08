@@ -4,7 +4,7 @@ Everything you need to run a session in Tabletop: starting the server, getting p
 
 ## Start Tabletop DM
 
-1. Run `Tabletop-DM-Setup-<version>.exe` (no admin rights needed). It installs in a few seconds, adds Tabletop DM to the Start menu and desktop, and opens it. Or, without installing: unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep and run **Tabletop DM.exe** from there (keep all the files together).
+1. Run `Tabletop-DM-Setup-<version>.exe` (no admin rights needed). Choose where to install it (or keep the suggested folder) and click **Install**. It adds Tabletop DM to the Start menu and desktop. Or, without installing: unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep and run **Tabletop DM.exe** from there (keep all the files together).
 2. Start **Tabletop DM**.
 3. Windows shows "Windows protected your PC" because the app isn't code-signed yet. Click **More info**, then **Run anyway**. This happens once.
 4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.
@@ -32,8 +32,7 @@ Click the players count at the top right (e.g. **2 players**) for **Who can join
 - **Table passcode:** type one and click Save. Players then need it to join; the Player app and the browser ask for it. Clear it and Save to remove it. A 🔒 by the players count shows one is set. Players already at the table stay connected.
 - **Remove** disconnects a player. They can join again (with the passcode, if there is one).
 - **Block** disconnects them and stops anyone joining under that name until you **Unblock** it in the same panel.
-
-Players are still known only by their name: anyone with the passcode can pick any name. For a group of friends, that's usually all you need.
+- **Names protected by a PIN:** players can protect their name with a PIN (they click **Playing as …** on their screen). Nobody else can then join as them. If someone forgets their PIN, click **Reset PIN** here; they can set a new one.
 
 ## Private prep vs what players see
 
@@ -71,6 +70,16 @@ Click **👁 Vision** in the bar at the top of the map:
 **Doors:** the 🚪 **Door** tool (`D`) opens and closes a door: click it. Closed doors block sight, open ones don't. Players can use it on doors they can see. On an imported Universal VTT map you see its doors while the tool is on: orange closed, green open.
 
 Players need a token of their own to see anything with vision on: give each player's token their name as owner.
+
+## Chat, whispers and NPCs
+
+The chat box is at the bottom of the right-hand panel. Type and press Enter: it goes in the log with the rolls, and a speech bubble shows over the speaker's token.
+
+- **Speak as an NPC:** pick **As the Innkeeper** (any token on the map with no owner) or **As the Narrator** in the second box. Players see the NPC's name, and the bubble appears over that token. **As the DM** speaks as yourself.
+- **Whisper:** pick a player under **To**, or type `/w Bob the ring is cursed`. Only they see it (with a pop-up). You see every whisper, including players whispering to each other.
+- `/r 2d6+3` rolls from the chat box.
+
+**Character sheets:** select a player's token and paste their D&D Beyond character link (e.g. `https://www.dndbeyond.com/characters/12345678`) in the token panel. Then 📜 Sheet, the 📜 in the initiative list, or double-clicking the token opens it in the browser. Players can set their own.
 
 ## Handouts
 
@@ -210,4 +219,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Chat and whispers. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).
+See the [roadmap](ROADMAP.md) for what's next. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).

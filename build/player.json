@@ -39,7 +39,7 @@
   },
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "nsis": {
-    "oneClick": true,
+    "oneClick": false,
     "perMachine": false,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
@@ -48,6 +48,9 @@
     "uninstallerIcon": "build/icon.ico",
     "deleteAppDataOnUninstall": false,
     "artifactName": "${productName}-Setup-${version}.${ext}",
+    "allowToChangeInstallationDirectory": true,
+    "allowElevation": false,
+    "include": "build/installer.nsh",
     "runAfterFinish": true
   }
 }

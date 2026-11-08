@@ -19,15 +19,11 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 0.10 | MapTool import (campaigns, maps, tokens), export and import single maps, restore from backup |
 | 1.0 | Table passcode, remove and block players, update check, Windows installers, automatic builds on GitHub, macOS and Linux apps |
 | 1.1 | Lighting and vision (line of sight, lights, darkvision, doors, explore-to-reveal, DM preview), handouts; Windows only |
+| 1.2 | Chat and whispers with speech bubbles, the DM speaking as NPCs, D&D Beyond links on characters, player PINs |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
-
-### 1.2 — Talking at the table 📋
-- **Chat and whispers** next to the roll log: table chat, whispers to one player or the DM, the DM speaking as an NPC
-- **D&D Beyond link** on each player's token, to open their character sheet
-- **Player PINs:** each player protects their name with their own PIN, on top of the table passcode
 
 ### 1.3 — MapTool, part 2 📋
 - Bring the rest of a MapTool map across: revealed fog, vision blocking as walls (for 1.1's line of sight), lights, and drawings

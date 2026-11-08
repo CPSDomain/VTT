@@ -2,6 +2,18 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.2.0] - 2026-11-08
+
+### Added
+- **Chat** at the bottom of the right-hand panel: type and press Enter. Messages go in the log with the rolls, and a speech bubble appears over the speaker's token for a few seconds.
+  - **Whispers:** pick a player (or the DM) under **To**, or type `/w Bob meet me by the door`. Only they and the DM see it, and they get a pop-up.
+  - **The DM speaks as NPCs:** choose **As the Innkeeper** (any token on the map without an owner) or **As the Narrator**. Players see the NPC's name and a bubble over that token.
+  - `/r 1d20+5` rolls from the chat box.
+  - Chat is kept with the rolls (the last 200 entries); players who join later see the table talk, but not whispers between others.
+- **D&D Beyond link** on each character: select the token and paste the character's D&D Beyond address. Then **📜 Sheet** in the token panel, the 📜 in the initiative list, or double-clicking the token opens the sheet (in the normal browser). Players can set it on their own characters.
+- **Choose where to install:** the installers ask for the install folder again (they still install just for you, with no admin rights). If you have 1.1.1 installed, the new version replaces it; if you end up with two in Settings → Apps, uninstall the older one.
+- **Player PINs:** a player clicks **Playing as …** at the top right to protect their name with a 4 to 8 digit PIN. Nobody else can then join under that name; their own app remembers it. The DM sees protected names under **Who can join** and can **Reset PIN** for a player who forgot it. PINs are stored only as salted hashes.
+
 ## [1.1.1] - 2026-11-08
 
 ### Fixed

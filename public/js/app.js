@@ -32,7 +32,7 @@ function toast(text, ms = 3000) {
 // ---------- connection ----------
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-  ws.onopen = () => sendMsg({ type: 'join', name: me.name, key: dmKey, passcode });
+  ws.onopen = () => sendMsg({ type: 'join', name: me.name, key: dmKey, passcode, pin: pin || tryGet('tt-pin:' + me.name.toLowerCase()) || '' });
   ws.onclose = () => { if (denied) return; $('status').textContent = 'Disconnected, reconnecting…'; $('status').style.display = ''; setTimeout(connect, 2000); };
   ws.onmessage = (e) => onMessage(JSON.parse(e.data));
 }
@@ -43,9 +43,11 @@ function onMessage(msg) {
     case 'welcome': {
       me.isDM = msg.isDM; me.name = msg.name;
       document.body.classList.toggle('dm', me.isDM);
+      pinSet = !!msg.pinSet;
       const st = msg.state;
       if (st.table) table = st.table;
       handouts = st.handouts || []; renderHandouts();
+      setTimeout(renderChatTargets, 0);
       if (!me.isDM && passcode) trySet('tt-code', passcode);
       $('gate').hidden = true;
       active = st.activeScene;
@@ -57,7 +59,7 @@ function onMessage(msg) {
       } else {
         scenes = st.scene ? { [st.scene.id]: st.scene } : {}; order = Object.keys(scenes); editing = active;
       }
-      $('me').textContent = me.isDM ? '' : `Playing as ${me.name}`;
+      $('me').textContent = me.isDM ? '' : `Playing as ${me.name}` + (msg.pinSet ? ' 🔑' : '');
       $('privLabel').textContent = me.isDM ? 'Roll privately (players won\'t see it)' : 'Roll privately (only the DM sees it)';
       $('status').style.display = 'none';
       $('log').innerHTML = ''; st.log.forEach((e) => addLog(e, false));
@@ -77,7 +79,7 @@ function onMessage(msg) {
       break;
     }
     case 'handoutRemove': handouts = handouts.filter((h) => h.id !== msg.id); renderHandouts(); if (viewing === msg.id) $('handoutView').hidden = true; break;
-    case 'presence': players = msg.players; renderPlayers(); renderTablePanel(); break;
+    case 'presence': players = msg.players; renderPlayers(); renderTablePanel(); renderChatTargets(); break;
     case 'table': table = msg.table; renderTablePanel(); renderPlayers(); break;
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
@@ -136,6 +138,13 @@ function onMessage(msg) {
     case 'order': order = msg.order; renderSceneBar(); break;
     case 'active': active = msg.sceneId; renderSceneBar(); break;
     case 'roll': addLog(msg.entry, true); break;
+    case 'chat': {
+      addLog(msg.entry, true); speechBubble(msg.entry);
+      const e = msg.entry;
+      if (e.to && !sameName(e.who, me.name) && e.to.some((n) => sameName(n, me.name) || (me.isDM && sameName(n, 'DM')))) toast(`Whisper from ${e.as || e.who}: ${e.text.slice(0, 80)}`, 5000);
+      break;
+    }
+    case 'pinSet': pinSet = msg.on; renderMePop(); $('me').textContent = `Playing as ${me.name}` + (msg.on ? ' 🔑' : ''); toast(msg.on ? 'Your name is now protected by your PIN' : 'PIN removed'); break;
     case 'macros': macros = msg.macros; renderMacros(); break;
     case 'error': toast(msg.message); break;
   }
@@ -169,6 +178,15 @@ function renderTablePanel() {
     bl.onclick = () => sendMsg({ type: 'removePlayer', name, block: true });
     row.append(n, rm, bl); list.appendChild(row);
   }
+  const pl = $('tpPins'); pl.innerHTML = '';
+  $('tpPinSec').style.display = (table.pins || []).length ? '' : 'none';
+  for (const name of table.pins || []) {
+    const row = document.createElement('div'); row.className = 'tprow';
+    const n = document.createElement('span'); n.textContent = '🔑 ' + name;
+    const rs = document.createElement('button'); rs.textContent = 'Reset PIN'; rs.title = 'Clear their PIN (if they forgot it). They can set a new one.';
+    rs.onclick = () => { sendMsg({ type: 'resetPin', name }); toast(`${name}'s PIN is cleared`); };
+    row.append(n, rs); pl.appendChild(row);
+  }
   const bl = $('tpBlocked'); bl.innerHTML = '';
   $('tpBlockedSec').style.display = table.blocked.length ? '' : 'none';
   for (const name of table.blocked) {
@@ -183,14 +201,19 @@ $('tpClose').onclick = () => { $('tablePop').hidden = true; };
 $('tpSave').onclick = () => { sendMsg({ type: 'setPasscode', passcode: $('tpCode').value }); toast($('tpCode').value.trim() ? 'Passcode set. Players already at the table stay connected.' : 'Passcode removed'); };
 $('tpCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('tpSave').click(); });
 // ----- players: when the table won't let us in -----
-let passcode = '', denied = false;
+let passcode = '', pin = '', denied = false, pinSet = false;
 function showDenied(reason) {
   denied = true;
   const gate = $('gate'); gate.hidden = false;
-  const ask = reason === 'passcode' || reason === 'passcode-wrong' || reason === 'wait';
+  const ask = reason === 'passcode' || reason === 'passcode-wrong' || reason === 'wait' || reason === 'pin' || reason === 'pin-wrong';
+  const forPin = reason === 'pin' || reason === 'pin-wrong';
+  $('gateCode').placeholder = forPin ? 'Your PIN' : 'Passcode'; $('gateCode').type = forPin ? 'password' : 'text';
+  $('gateCode').dataset.pin = forPin ? '1' : '';
   $('gateMsg').textContent = {
     passcode: 'This table has a passcode. Ask your DM for it.',
     'passcode-wrong': 'That passcode isn\'t right. Check with your DM.',
+    pin: `"${me.name}" is protected by a PIN. Type yours to join. (Forgotten it? The DM can reset it.)`,
+    'pin-wrong': 'That PIN isn\'t right. Forgotten it? Ask the DM to reset it.',
     wait: 'Too many wrong passcodes. Wait half a minute and try again.',
     removed: 'The DM removed you from the table.',
     blocked: `The DM has blocked the name "${me.name}" at this table.`
@@ -203,7 +226,9 @@ function showDenied(reason) {
 }
 $('gateForm').onsubmit = (e) => {
   e.preventDefault();
-  if ($('gateCode').style.display !== 'none') passcode = $('gateCode').value.trim();
+  if ($('gateCode').style.display !== 'none') {
+    if ($('gateCode').dataset.pin) { pin = $('gateCode').value.trim(); trySet('tt-pin:' + me.name.toLowerCase(), pin); } else passcode = $('gateCode').value.trim();
+  }
   denied = false; $('gate').hidden = true; connect();
 };
 function renderPlayers() {
@@ -219,6 +244,7 @@ function sceneChanged(refit) {
   if (!s) return;
   fogDirty = true;
   if (refit) { selTpl = null; tplDraft = null; ruler = null; if (labelEdit) closeLabelEditor(); }
+  renderChatTargets();
   renderInit(); renderEditor();
   if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); renderVisionPop(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
@@ -698,6 +724,93 @@ $('vShared').onchange = () => setVision({ shared: $('vShared').checked });
 $('vExplore').onchange = () => setVision({ explore: $('vExplore').checked });
 $('vPreview').onchange = () => { previewKey = ''; draw(); };
 
+// ---------- chat ----------
+// Table talk in the log. Whispers go to one person (and the DM sees them); the DM can speak as an NPC.
+const speakers = new Set(); // names seen talking or rolling, to whisper to
+function noteSpeaker(e) { if (e.who && !e.dm && !sameName(e.who, me.name)) speakers.add(e.who); }
+function renderChatTargets() {
+  const s = sc(), sel = $('chatTo'), cur = sel.value;
+  const names = new Set([...players, ...speakers]);
+  if (s) Object.values(s.tokens).forEach((t) => { if (t.owner && t.owner !== '*') names.add(t.owner); });
+  [...names].forEach((n) => { if (sameName(n, me.name)) names.delete(n); });
+  sel.innerHTML = '';
+  const add = (v, txt) => { const o = document.createElement('option'); o.value = v; o.textContent = txt; sel.appendChild(o); };
+  add('', 'To everyone');
+  if (!me.isDM) add('DM', 'Whisper to the DM');
+  [...names].sort().forEach((n) => add(n, 'Whisper to ' + n));
+  sel.value = [...sel.options].some((o) => o.value === cur) ? cur : '';
+  if (!me.isDM) return;
+  const as = $('chatAs'), curAs = as.value;
+  as.innerHTML = '';
+  const addAs = (v, txt) => { const o = document.createElement('option'); o.value = v; o.textContent = txt; as.appendChild(o); };
+  addAs('', 'As the DM'); addAs('Narrator', 'As the Narrator');
+  if (s) [...new Set(Object.values(s.tokens).filter((t) => !t.owner).map((t) => t.label))].sort().forEach((n) => addAs(n, 'As ' + n));
+  as.value = [...as.options].some((o) => o.value === curAs) ? curAs : '';
+}
+$('chatTo').onfocus = renderChatTargets; $('chatAs').onfocus = renderChatTargets;
+$('chatTo').onmousedown = renderChatTargets; $('chatAs').onmousedown = renderChatTargets;
+$('chatForm').onsubmit = (e) => {
+  e.preventDefault();
+  let text = $('chatText').value.trim(); if (!text) return;
+  let to = $('chatTo').value ? [$('chatTo').value] : [];
+  const m = text.match(/^\/(r|roll)\s+(.+)$/i);
+  if (m) { rollWith(m[2], '', {}); $('chatText').value = ''; return; }
+  const w = text.match(/^\/(w|whisper)\s+("([^"]+)"|(\S+))\s+([\s\S]+)$/i);
+  if (w) { to = [w[3] || w[4]]; text = w[5]; }
+  else if (/^\/(w|whisper)\b/i.test(text)) return toast('Whisper like this: /w Bob meet me by the door');
+  sendMsg({ type: 'chat', text, to, as: me.isDM ? $('chatAs').value : undefined });
+  $('chatText').value = '';
+};
+// a speech bubble over the speaker's token for a few seconds (not for whispers)
+const bubbles = [];
+function speechBubble(e) {
+  if (e.to) return;
+  const s = scenes[editing]; if (!s) return;
+  const t = e.as ? Object.values(s.tokens).find((x) => sameName(x.label, e.as)) : Object.values(s.tokens).find((x) => x.owner && sameName(x.owner, e.who));
+  if (!t) return;
+  for (let i = bubbles.length - 1; i >= 0; i--) if (bubbles[i].id === t.id) bubbles.splice(i, 1);
+  bubbles.push({ id: t.id, text: e.text.length > 140 ? e.text.slice(0, 137) + '…' : e.text, t0: performance.now(), npc: !!e.as });
+  draw();
+}
+function drawBubbles(s) {
+  const now = performance.now(), z = view.zoom;
+  for (let i = bubbles.length - 1; i >= 0; i--) if (now - bubbles[i].t0 > 7000) bubbles.splice(i, 1);
+  for (const b of bubbles) {
+    const t = s.tokens[b.id]; if (!t) continue;
+    const age = now - b.t0, alpha = age > 6200 ? Math.max(0, 1 - (age - 6200) / 800) : 1;
+    const fs = 14 / z, pad = 8 / z, maxW = 240 / z;
+    ctx.save(); ctx.globalAlpha = alpha; ctx.font = `500 ${fs}px system-ui, sans-serif`;
+    const words = b.text.split(/\s+/), lines = []; let line = '';
+    for (const w of words) { const test = line ? line + ' ' + w : w; if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test; }
+    if (line) lines.push(line);
+    const shown = lines.slice(0, 4); if (lines.length > 4) shown[3] += '…';
+    const w = Math.max(...shown.map((l) => ctx.measureText(l).width)) + pad * 2, h = shown.length * fs * 1.3 + pad * 1.6;
+    const cx = (t.x + t.size / 2) * CELL, top = t.y * CELL - 10 / z - h;
+    ctx.fillStyle = b.npc ? 'rgba(255,248,230,.97)' : 'rgba(255,255,255,.97)'; ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = 1.2 / z;
+    ctx.beginPath(); ctx.roundRect(cx - w / 2, top, w, h, 8 / z); ctx.moveTo(cx - 7 / z, top + h); ctx.lineTo(cx, top + h + 9 / z); ctx.lineTo(cx + 7 / z, top + h); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    shown.forEach((l, i) => ctx.fillText(l, cx, top + pad * 0.8 + i * fs * 1.3));
+    ctx.restore();
+  }
+  if (bubbles.length) draw();
+}
+// ---------- the player's own name: protect it with a PIN ----------
+function renderMePop() {
+  if (me.isDM) return;
+  $('mpState').textContent = pinSet ? 'Your name is protected by a PIN: nobody else can join as you. Type a new one to change it.' : 'Anyone who knows the table\'s address can join as you. Set a PIN so only you can.';
+  $('mpRemove').style.display = pinSet ? '' : 'none';
+}
+$('me').onclick = () => { if (me.isDM) return; $('mePop').hidden = !$('mePop').hidden; renderMePop(); if (!$('mePop').hidden) setTimeout(() => $('mpPin').focus(), 0); };
+$('mpClose').onclick = () => { $('mePop').hidden = true; };
+$('mpSave').onclick = () => {
+  const v = $('mpPin').value.trim();
+  if (!/^\d{4,8}$/.test(v)) return toast('A PIN is 4 to 8 digits');
+  trySet('tt-pin:' + me.name.toLowerCase(), v); pin = v;
+  sendMsg({ type: 'setPin', pin: v }); $('mpPin').value = ''; $('mePop').hidden = true;
+};
+$('mpPin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('mpSave').click(); });
+$('mpRemove').onclick = () => { sendMsg({ type: 'setPin', pin: null }); trySet('tt-pin:' + me.name.toLowerCase(), ''); pin = ''; $('mePop').hidden = true; };
+
 // ---------- handouts ----------
 let handouts = [], viewing = null, hEdit = null;
 function renderHandouts() {
@@ -1044,6 +1157,7 @@ function drawTemplates(s) {
   if (tplDraft) drawTemplate(s, tplDraft, true);
 }
 function drawOverlays(s) {
+  drawBubbles(s);
   const st = selTpl && (s.templates || {})[selTpl];
   if (st) drawTemplateInfo(st, false);
   if (tplDraft) drawTemplateInfo(tplDraft, true);
@@ -1212,7 +1326,8 @@ function renderEditor() {
   setv('eHp', t.hp); setv('eMaxHp', t.maxHp); setv('eTemp', t.tempHp || ''); setv('eInit', t.initBonus ?? '');
   const lv = t.light && t.light[1] > 0 ? t.light.join(',') : '';
   if (keep !== $('eLight')) { $('eLight').value = lv; if ($('eLight').value !== lv) { const o = document.createElement('option'); o.value = lv; o.textContent = `${t.light[0]} / ${t.light[1]} ft`; $('eLight').appendChild(o); $('eLight').value = lv; } }
-  setv('eDark', String(t.darkvision || 0));
+  setv('eDark', String(t.darkvision || 0)); setv('eDdb', t.ddb || '');
+  $('eDdbOpen').disabled = !t.ddb;
   const on = new Set(t.conditions || []);
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
 }
@@ -1236,6 +1351,15 @@ $('eTemp').onchange = () => updateSelected({ tempHp: Number($('eTemp').value) ||
 $('eInit').onchange = () => updateSelected({ initBonus: Number($('eInit').value) || 0 });
 $('eLight').onchange = () => { const v = $('eLight').value.split(',').map(Number); updateSelected({ light: v[1] > 0 ? [v[0], v[1]] : null }); };
 $('eDark').onchange = () => updateSelected({ darkvision: Number($('eDark').value) || 0 });
+const DDB_LINK = /^https:\/\/(www\.)?(dndbeyond\.com\/(profile\/[^/]+\/)?characters\/\d+[\w\-/]*|ddb\.ac\/characters\/\d+[\w\-/]*)$/i;
+$('eDdb').onchange = () => {
+  const v = $('eDdb').value.trim();
+  if (v && !DDB_LINK.test(v)) { toast('That isn\'t a D&D Beyond character link. Open the character on D&D Beyond and copy the address, e.g. https://www.dndbeyond.com/characters/12345678', 7000); return; }
+  updateSelected({ ddb: v || null });
+};
+const openSheet = (t) => { if (t && t.ddb) window.open(t.ddb, '_blank', 'noopener'); };
+$('eDdbOpen').onclick = () => openSheet(selected && sc().tokens[selected]);
+canvas.addEventListener('dblclick', (e) => { const s = sc(); if (!s) return; const t = tokenAt(s, toWorld(e)); if (t && t.ddb) openSheet(t); });
 $('eHpShow').onchange = () => updateSelected({ hpShow: $('eHpShow').value || null });
 const applyHp = (sign) => {
   const n = Math.abs(parseInt($('eAmt').value, 10)); if (!n || !selected) return;
@@ -1272,6 +1396,7 @@ function renderInit() {
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = (t.hidden ? '◌ ' : '') + t.label;
     for (const id of (t.conditions || []).slice(0, 4)) { const cc = conditions().find((x) => x.id === id); if (cc) { const dot = document.createElement('span'); dot.className = 'ci'; dot.style.background = cc.color; dot.title = cc.name; nm.appendChild(dot); } }
     row.appendChild(nm);
+    if (t.ddb) { const sh = document.createElement('button'); sh.className = 'sheet'; sh.textContent = '📜'; sh.title = `Open ${t.label}'s character sheet`; sh.onclick = (ev) => { ev.stopPropagation(); openSheet(t); }; row.appendChild(sh); }
     // health
     const hp = document.createElement('span'); hp.className = 'hp';
     if (t.hp != null && t.maxHp != null) { hp.innerHTML = `<b>${t.hp}</b>/${t.maxHp}`; if (t.tempHp > 0) { const tm = document.createElement('span'); tm.className = 'tmp'; tm.textContent = ` +${t.tempHp}`; hp.appendChild(tm); } }
@@ -2120,7 +2245,24 @@ $('tColor').oninput = refreshArtPreview;
 
 // ---------- dice ----------
 let macros = [];
+const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+function addChat(e, fresh) {
+  const div = document.createElement('div');
+  div.className = 'entry chat' + (e.to ? ' whisper' : '') + (e.as ? ' npc' : '') + (fresh ? ' fresh' : '');
+  const head = document.createElement('div'), b = document.createElement('b');
+  b.textContent = e.as || e.who; head.appendChild(b);
+  const to = document.createElement('span'); to.className = 'to';
+  if (e.to) to.textContent = ' → ' + e.to.join(', ') + ' (whisper)';
+  else if (e.as && me.isDM) to.textContent = ' (you, as an NPC)';
+  head.appendChild(to);
+  const say = document.createElement('div'); say.className = 'say'; say.textContent = e.text;
+  div.append(head, say);
+  $('log').prepend(div);
+  while ($('log').children.length > 200) $('log').lastChild.remove();
+  noteSpeaker(e);
+}
 function addLog(e, fresh) {
+  if (e.kind === 'chat') return addChat(e, fresh);
   const div = document.createElement('div');
   div.className = 'entry' + (e.private ? ' private' : '') + (e.crit ? ' ' + e.crit : '') + (fresh ? ' fresh' : '');
   div.innerHTML = '<span class="total"></span><b></b> <span class="what"></span><span class="tags"></span><div class="detail"></div>';

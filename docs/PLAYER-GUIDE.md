@@ -2,7 +2,7 @@
 
 ## Connect
 
-1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed; it installs in a few seconds and opens the app), or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
+1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed), choose where to install it and click **Install**, or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
    The first time, Windows says "Windows protected your PC": click **More info → Run anyway**.
 2. Type the **server address** your DM gives you (e.g. `192.168.1.20:3000`) and **your name**, then click **Connect**.
 3. If the table has a passcode, the app asks for it: your DM can tell you it. The app remembers it for next time.
@@ -34,6 +34,17 @@ The bar on the left of the map:
 - **Ping** (`P`): click to flash a spot for everyone ("over here!"). `Alt`+click pings with any tool.
 
 `Esc` goes back to Move.
+
+## Talking
+
+- **Chat:** type in the box at the bottom right and press Enter. A speech bubble shows over your token.
+- **Whisper:** pick someone under **To** (or the DM), or type `/w Bob let's sneak round the back`. Only they and the DM see it.
+- `/r 1d20+5` rolls from the chat box.
+- **Your character sheet:** click your token and paste your D&D Beyond character link. Then double-click your token (or 📜 Sheet) to open it.
+
+## Protect your name
+
+Click **Playing as …** at the top right and set a PIN (4 to 8 digits). Then nobody else can join as you. The app remembers your PIN; if you forget it, ask the DM to reset it.
 
 ## Seeing in the dark
 

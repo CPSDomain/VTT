@@ -87,6 +87,13 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![Lighting and vision: a torch-lit crypt seen by the party, an open door, the rest in shadow](docs/images/vision.jpg)
 
+**Talking at the table**
+- Chat in the log, with speech bubbles over tokens; whispers to one player or the DM
+- The DM speaks as any NPC on the map
+- A D&D Beyond link on each character: double-click the token to open the sheet
+
+![Chat: speech bubbles over the tokens, an NPC talking, a whisper](docs/images/chat.jpg)
+
 **Handouts**
 - Letters, pictures and clues popped up on everyone's screen or just one player's, kept to read again
 
@@ -108,7 +115,7 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 ![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
 
 **Running the table**
-- Optional table passcode; remove or block a player
+- Optional table passcode; players can protect their name with a PIN; remove or block a player
 - The apps tell you when a new version is out
 
 **Dice**

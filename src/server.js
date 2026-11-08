@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.1.1';
+const VERSION = '1.2.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -34,6 +34,10 @@ const uid = () => crypto.randomBytes(5).toString('hex');
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const int = (v, d) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : d);
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+// player PINs are kept as salted hashes, never as the PIN itself
+const pinHash = (pin, salt) => crypto.scryptSync(String(pin), salt, 32).toString('hex');
+const DDB = /^https:\/\/(www\.)?(dndbeyond\.com\/(profile\/[^/]+\/)?characters\/\d+[\w\-/]*|ddb\.ac\/characters\/\d+[\w\-/]*)$/i;
 const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
 const SHAPES = ['cone', 'sphere', 'cube', 'line', 'cylinder'];
 const DIAGONALS = ['5', '5105'];
@@ -58,10 +62,11 @@ function loadState(file) {
   if (s && s.version === 2) {
     s.library = s.library || [];
     s.passcode = typeof s.passcode === 'string' ? s.passcode : ''; s.blocked = Array.isArray(s.blocked) ? s.blocked : [];
+    s.pins = s.pins && typeof s.pins === 'object' ? s.pins : {};
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [] };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {} };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -294,7 +299,13 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   // Send a scene change to every DM, and to players only if that scene is the one on the table.
   const toScene = (sceneId, msg) => clients().forEach((c) => (c.user.isDM || sceneId === state.activeScene) && send(c, msg));
   const toPlayersOnScene = (sceneId, msg) => clients().forEach((c) => !c.user.isDM && sceneId === state.activeScene && send(c, msg));
-  const canSee = (u, e) => !e.private || u.isDM || u.name === e.who;
+  // who may see a log entry: private rolls go to the roller and the DM; whispers to the sender, whoever
+  // they're for and the DM ("DM" as a recipient means just the DM)
+  const canSee = (u, e) => {
+    if (u.isDM) return true;
+    if (e.to) return sameName(e.who, u.name) || e.to.some((n) => sameName(n, u.name));
+    return !e.private || u.name === e.who;
+  };
 
   const playersOnScene = (sceneId) => clients().filter((c) => !c.user.isDM && sceneId === state.activeScene);
 
@@ -391,6 +402,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (m.initBonus !== undefined) t.initBonus = clamp(int(m.initBonus, 0), -10, 30);
     if (m.light !== undefined) t.light = Array.isArray(m.light) && int(m.light[1], 0) > 0 ? [clamp(int(m.light[0], 0), 0, 300), clamp(int(m.light[1], 0), 0, 600)] : null;
     if (m.darkvision !== undefined) t.darkvision = clamp(int(m.darkvision, 0), 0, 300);
+    if (m.ddb !== undefined) t.ddb = typeof m.ddb === 'string' && DDB.test(m.ddb.trim()) ? m.ddb.trim() : null;
     if (m.conditions !== undefined) t.conditions = Array.isArray(m.conditions) ? [...new Set(m.conditions.filter((c) => CONDITIONS.has(c)))].slice(0, 24) : [];
     if (m.x != null) t.x = clamp(int(m.x, 0), 0, sc.cols - (t.size || 1));
     if (m.y != null) t.y = clamp(int(m.y, 0), 0, sc.rows - (t.size || 1));
@@ -460,8 +472,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
 
   // ---------- who may join ----------
-  const tableSettings = () => ({ passcode: state.passcode, blocked: state.blocked });
-  const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  const tableSettings = () => ({ passcode: state.passcode, blocked: state.blocked, pins: Object.values(state.pins).map((p) => p.name) });
+
   const wrongTries = new Map(); // address → { n, until }: slows down passcode guessing
   // Reveal (or cover) squares of fog, and send players what's now in view or gone from it.
   function revealFog(sc, cells, reveal) {
@@ -543,9 +555,19 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           }
           wrongTries.delete(ws.addr);
         }
+        const pin = state.pins[u.name.toLowerCase()];
+        if (pin) { // this name is protected by its player's PIN
+          const t = wrongTries.get(ws.addr + '|pin') || { n: 0, until: 0 };
+          if (Date.now() < t.until) return deny('wait');
+          if (!msg.pin || pinHash(msg.pin, pin.salt) !== pin.hash) {
+            if (msg.pin) { t.n++; if (t.n >= 5) { t.until = Date.now() + 30000; t.n = 0; } wrongTries.set(ws.addr + '|pin', t); }
+            return deny(msg.pin ? 'pin-wrong' : 'pin');
+          }
+          wrongTries.delete(ws.addr + '|pin');
+        }
       }
       u.joined = true;
-      send(ws, { type: 'welcome', isDM: u.isDM, name: u.name, version: VERSION, state: viewFor(u) });
+      send(ws, { type: 'welcome', isDM: u.isDM, name: u.name, version: VERSION, pinSet: !!state.pins[u.name.toLowerCase()], state: viewFor(u) });
       return presence();
     }
     if (!u.joined) return;
@@ -580,7 +602,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!u.isDM && !mine) return;
         const before = { ...tok };
         // players can only change their own character's health, conditions and initiative bonus
-        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision'].filter((k) => k in msg).map((k) => [k, msg[k]]));
+        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision', 'ddb'].filter((k) => k in msg).map((k) => [k, msg[k]]));
         Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
         tokenChanged(sc, tok, before);
         if (visionOn(sc)) scheduleVision(sc);
@@ -984,6 +1006,38 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'roll', entry }));
           save();
         } catch (e) { send(ws, { type: 'error', message: e.message }); }
+        break;
+      case 'chat': { // table talk; whispers go only to who they're for (and the DM); the DM can speak as anyone
+        const text = str(msg.text, 1000).trim();
+        if (!text) return;
+        const now = Date.now();
+        if (!u.isDM) { if (now - (u.lastChat || 0) < 100) return; u.lastChat = now; }
+        const entry = { kind: 'chat', who: u.name, dm: u.isDM, text, time: now };
+        if (Array.isArray(msg.to) && msg.to.length) entry.to = [...new Set(msg.to.map((n) => str(n, 24).trim()).filter(Boolean))].slice(0, 20);
+        if (u.isDM && msg.as) entry.as = str(msg.as, 24).trim() || undefined;
+        state.log.push(entry); state.log = state.log.slice(-200);
+        clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'chat', entry }));
+        save();
+        break;
+      }
+      case 'setPin': { // a player protects their name with a PIN (or removes it)
+        if (u.isDM) return;
+        const key = u.name.toLowerCase();
+        if (msg.pin == null || msg.pin === '') delete state.pins[key];
+        else {
+          const pin = String(msg.pin);
+          if (!/^\d{4,8}$/.test(pin)) return send(ws, { type: 'error', message: 'A PIN is 4 to 8 digits' });
+          const salt = crypto.randomBytes(8).toString('hex');
+          state.pins[key] = { name: u.name, salt, hash: pinHash(pin, salt) };
+        }
+        send(ws, { type: 'pinSet', on: !!state.pins[key] });
+        toDMs({ type: 'table', table: tableSettings() }); save();
+        break;
+      }
+      case 'resetPin': // the DM clears a player's PIN (they forgot it)
+        if (!u.isDM) return;
+        delete state.pins[String(msg.name || '').toLowerCase()];
+        toDMs({ type: 'table', table: tableSettings() }); save();
         break;
       case 'setMacros': {
         if (!Array.isArray(msg.macros) || msg.macros.length > 30) return;
