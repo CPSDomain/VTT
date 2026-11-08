@@ -2,6 +2,30 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [0.9.0] - 2026-11-08
+
+### Added
+- **Import maps** from other map makers: **Build map → 📥 Import map…**, or drop the file on the map.
+  - **Universal VTT files** (`.uvtt`, `.dd2vtt`, `.df2vtt`), from Dungeon Scrawl, Dungeondraft, Dungeon Alchemist and others. The map comes in at the right size with its walls and doors.
+  - **Reveal room follows imported walls:** with fog of war on, clicking in a room reveals that room and stops at walls and doors, as it does on built maps. You see the imported walls (blue) and doors (orange) in Build mode and while using Reveal room; players never receive them.
+  - **Map images** (PNG, JPG, WebP), e.g. from Canvas of Kings or Inkarnate, become a new map. If the image has grid lines, Tabletop finds the grid and sizes the map to match.
+- Uploading a background image also finds the grid in it.
+
+### Changed
+- Maps can be up to 200 × 200 squares (was 120), and images up to 100 MB (was 40 MB).
+
+## [0.8.0] - 2026-11-08
+
+### Added
+- **Table tools** on the left of the map in Play mode, for the DM and players: Move, Ruler, Spell, Ping and (DM only) Label. Keys: `V`, `R`, `T`, `P`, `L`; `Esc` goes back to Move.
+- **Ruler:** drag to measure in feet. Press `Space` while dragging to add a corner and measure round walls. Everyone sees your ruler with your name on it while you measure.
+  - Diagonals count 5 ft each (the 5e rule), or 5 / 10 / 5 ft per map: **Ruler diagonals** in the Build panel.
+- **Movement distance:** dragging a token shows how far it has moved, and players' moves show on everyone's screen. `Space` adds a corner here too. The DM's moves stay private.
+- **Spell templates:** cone, sphere, cube, line and cylinder, in everyone's own colour. Drag from where the spell starts to aim it and set its size, or click to place one at the size in the box. The squares it covers are shaded.
+  - Click one of your templates to select it: drag to move it, drag its dot to re-aim or resize it, `Del` removes it. **Clear mine** removes all of yours; the DM can move or remove anyone's and **Clear all**.
+- **Ping:** click with the Ping tool, or `Alt`+click with any tool, to flash a spot for everyone with your name. The DM can `Shift`+ping to bring everyone's view to that spot.
+- **Map labels and DM notes:** with the Label tool, click the map to add text in three sizes, e.g. room names. Tick **DM note** for reminders only you can see (traps, DCs, what's behind the door). Drag a label to move it, click it to edit or delete. Under fog of war, players see a label once its square is revealed.
+
 ## [0.7.0] - 2026-11-08
 
 ### Added

@@ -84,6 +84,26 @@
   .fogswitch { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:0 6px; cursor:pointer; white-space:nowrap; }
   .fogswitch input { width:auto; accent-color:var(--accent); }
   .fogsep { width:1px; height:20px; background:var(--line); margin:0 2px; }
+  #tableBar { position:absolute; left:10px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:4px; background:rgba(22,22,22,.92); border:1px solid var(--line); border-radius:10px; padding:5px; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  #tableBar button { display:flex; flex-direction:column; align-items:center; gap:1px; width:54px; padding:5px 0 4px; font-size:10.5px; background:transparent; border-color:transparent; }
+  #tableBar button span { font-size:17px; line-height:1.1; }
+  #tableBar button:hover { border-color:var(--line); }
+  body.dm #tableBar button.dm-only { display:flex !important; }
+  #tableBar button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .pop { position:absolute; background:rgba(26,26,26,.97); border:1px solid var(--line); border-radius:10px; padding:8px; box-shadow:0 8px 24px rgba(0,0,0,.5); z-index:5; }
+  .pop[hidden] { display:none !important; }
+  #tplPop { left:80px; bottom:12px; width:max-content; max-width:calc(100% - 210px); padding:6px 8px; }
+  #tplPop .tplrow { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  #tplPop .tplrow .hint { margin:0; }
+  #tplPop .shapes { display:flex; gap:3px; }
+  #tplPop .shapes button { padding:4px 9px; font-size:12px; }
+  #tplPop .shapes button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #tplPop input { width:58px; padding:4px 6px; }
+  #tplPop button { padding:4px 9px; font-size:12px; }
+  #tplHelp { margin-top:5px; font-size:11.5px; }
+  #labelPop { width:280px; }
+  #labelPop input#lblText { width:100%; }
+  body.build #tplPop, body.build #labelPop { display:none !important; }
   #cellInfo:empty { display:none; }
   #cellInfo { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.65); padding:4px 9px; border-radius:6px; font-size:11px; color:var(--dim); pointer-events:none; font-variant-numeric:tabular-nums; }
 
@@ -261,8 +281,9 @@
     <section>
       <h2>Map settings</h2>
       <input id="mapName" placeholder="Map name">
-      <div class="row"><span class="fixed hint" style="margin:0">Size</span><input id="mapCols" type="number" min="5" max="120" title="Columns"><span class="fixed hint" style="margin:0">×</span><input id="mapRows" type="number" min="5" max="120" title="Rows"><button id="applySize" class="fixed">Set</button></div>
+      <div class="row"><span class="fixed hint" style="margin:0">Size</span><input id="mapCols" type="number" min="5" max="200" title="Columns"><span class="fixed hint" style="margin:0">×</span><input id="mapRows" type="number" min="5" max="200" title="Rows"><button id="applySize" class="fixed">Set</button></div>
       <label class="check"><input type="checkbox" id="showGrid"> Show grid</label>
+      <div class="row"><span class="fixed hint" style="margin:0">Ruler diagonals</span><select id="mapDiag" title="How the ruler counts diagonal squares on this map"><option value="5">5 ft each (5e rule)</option><option value="5105">5 / 10 / 5 ft (variant)</option></select></div>
     </section>
 
     <section>
@@ -278,6 +299,8 @@
       <h2>Maps</h2>
       <div class="row"><button id="genBtn" class="primary">Generate a map…</button></div>
       <div class="row"><button id="newMap">+ Blank map</button><button id="dupMap">Duplicate</button></div>
+      <div class="row"><button id="importMap" title="Universal VTT files (.uvtt, .dd2vtt, .df2vtt) from Dungeon Scrawl, Dungeondraft, Dungeon Alchemist and others, or a map image (Canvas of Kings, Inkarnate…)">📥 Import map…</button></div>
+      <input type="file" id="importIn" accept=".uvtt,.dd2vtt,.df2vtt,.json,image/png,image/jpeg,image/webp" hidden>
       <div class="row"><button id="delMap" class="danger">Delete this map</button></div>
     </section>
   </nav>
@@ -295,6 +318,28 @@
       <span class="fogsep"></span>
       <button id="fogRevealAll" class="fogbtn" title="Reveal the whole map">Reveal all</button>
       <button id="fogCoverAll" class="fogbtn" title="Cover the whole map">Cover all</button>
+    </div>
+    <div id="tableBar" class="play-only">
+      <button data-tt="move" class="on" title="Move tokens (V or Esc)"><span>✋</span>Move</button>
+      <button data-tt="ruler" title="Ruler: drag to measure distance (R)"><span>📏</span>Ruler</button>
+      <button data-tt="template" title="Spell templates: cone, sphere, cube, line, cylinder (T)"><span>🔥</span>Spell</button>
+      <button data-tt="ping" title="Ping: click to flash a spot for everyone (P, or Alt+click with any tool)"><span>📍</span>Ping</button>
+      <button data-tt="label" class="dm-only" title="Labels and DM notes on the map (L)"><span>🏷️</span>Label</button>
+    </div>
+    <div id="tplPop" class="pop" hidden>
+      <div class="tplrow">
+        <div class="shapes"><button data-shape="cone" class="on">Cone</button><button data-shape="sphere">Sphere</button><button data-shape="cube">Cube</button><button data-shape="line">Line</button><button data-shape="cylinder">Cylinder</button></div>
+        <span class="hint" id="tplSizeLbl">Length</span><input id="tplSize" type="number" min="5" max="500" step="5" value="15"><span class="hint">ft</span>
+        <span class="hint tplw">Width</span><input id="tplWidth" class="tplw" type="number" min="5" max="60" step="5" value="5"><span class="hint tplw">ft</span>
+        <button id="tplClearMine">Clear mine</button><button id="tplClearAll" class="dm-only danger">Clear all</button>
+      </div>
+      <div class="hint" id="tplHelp"></div>
+    </div>
+    <div id="labelPop" class="pop" hidden>
+      <input id="lblText" maxlength="120" placeholder="Label text, e.g. Throne room">
+      <div class="row"><select id="lblSize"><option value="s">Small</option><option value="m" selected>Medium</option><option value="l">Large</option></select>
+        <label class="check" style="margin:0" title="DM notes show only on your screen"><input type="checkbox" id="lblNote"> DM note (only I see it)</label></div>
+      <div class="row"><button id="lblSave" class="primary">Save</button><button id="lblDel" class="danger">Delete</button><button id="lblCancel">Cancel</button></div>
     </div>
     <div id="cellInfo"></div>
     <div id="zoomCtl"><button id="zoomOut" title="Zoom out">−</button><button id="zoomFit" title="Fit map to screen (Home)">⤢</button><button id="zoomIn" title="Zoom in">+</button></div>

@@ -14,16 +14,12 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 | 0.5 | Fog of war with Reveal room, brushes, and nothing hidden sent to players |
 | 0.6 | Map generator v2: describe the map in words, many more settings, dungeon styles, wilderness kinds, building interiors, seeds |
 | 0.7 | Combat: initiative tracker, HP with damage/heal and per-token visibility, 24 conditions, monster stats |
+| 0.8 | Table tools: ruler with corners and movement distance, spell templates, ping, map labels and DM notes |
+| 0.9 | Map import: Universal VTT (Dungeon Scrawl, Dungeondraft, Dungeon Alchemist) with walls for Reveal room; map images (Canvas of Kings) with automatic grid finding |
 
 ## Next
 
-### 0.8 — Table tools 📋
-- Ruler: measure distance in feet, with 5e diagonal rules
-- Spell templates: cone, sphere, cube, line, cylinder, shown to everyone
-- Ping: click to flash a spot for everyone ("over here!")
-- Map labels and notes: DM-only notes, or labels everyone sees (room names, "Here be dragons")
-
-### 0.9 — Bring your stuff 📋
+### 0.10 — MapTool and sharing maps 📋
 - MapTool import: campaigns (`.cmpgn`) and maps (`.rpmap`), with maps, tokens and revealed fog. *Needs a sample file from the group.*
 - Export and import single maps, to share between DMs or keep a library
 - Restore from a backup inside the app
@@ -37,7 +33,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 
 ## Later 💡
 
-- **Lighting and vision:** light sources, darkvision, line of sight through walls and doors
+- **Lighting and vision:** light sources, darkvision, line of sight through walls and doors (imported Universal VTT maps already bring their walls, doors and lights)
 - **Handouts:** show an image or text to all players or one player
 - **Chat and whispers** next to the roll log
 - **Encounter builder:** SRD monsters with stat blocks, difficulty by party level, drop the encounter on the map

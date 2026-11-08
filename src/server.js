@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.7.0';
+const VERSION = '0.9.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
@@ -20,7 +20,7 @@ const ICONS = new Set(Object.keys(TOKENS_JSON.icons));
 const CONDITIONS = new Set((TOKENS_JSON.conditions || []).map((c) => c.id));
 const HP_SHOW = ['numbers', 'bar', 'none'];
 const UPLOAD_URL = /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/;
-const MAX_SIDE = 120;
+const MAX_SIDE = 200;
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
@@ -33,13 +33,17 @@ const uid = () => crypto.randomBytes(5).toString('hex');
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const int = (v, d) => (Number.isFinite(Number(v)) ? Math.round(Number(v)) : d);
 const str = (v, n) => String(v == null ? '' : v).slice(0, n);
+const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+const SHAPES = ['cone', 'sphere', 'cube', 'line', 'cylinder'];
+const DIAGONALS = ['5', '5105'];
+const LABEL_SIZES = ['s', 'm', 'l'];
 const color = (c, d) => (/^#[0-9a-f]{6}$/i.test(c) ? c : d);
 
 function newScene(name, cols = 30, rows = 20) {
   return {
     id: uid(), name: str(name || 'New map', 40),
     cols: clamp(int(cols, 30), 5, MAX_SIDE), rows: clamp(int(rows, 20), 5, MAX_SIDE),
-    cell: 50, showGrid: true, bg: null, tiles: {}, props: {}, tokens: {},
+    cell: 50, showGrid: true, bg: null, tiles: {}, props: {}, tokens: {}, templates: {}, labels: {},
     fog: { on: false, data: '' } // data: base64, one byte per cell (1 = revealed), row by row
   };
 }
@@ -98,6 +102,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (revealed(sc, x, y)) return true;
     return false;
   }
+  // Map labels: DM notes never reach players; under fog, a label shows once its square is revealed.
+  const labelVisible = (sc, l) => !l.dmOnly && revealed(sc, clamp(Math.floor(l.x), 0, sc.cols - 1), clamp(Math.floor(l.y), 0, sc.rows - 1));
   // Can this player see this token? Never if hidden; under fog only in revealed cells, or if it's theirs.
   function tokVisible(sc, t, u) {
     if (t.hidden) return false;
@@ -137,7 +143,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       const ext = IMAGE_EXT[(req.headers['content-type'] || '').split(';')[0]];
       if (!ext) { res.writeHead(415); return res.end('PNG, JPG, WebP or GIF only'); }
       const chunks = []; let size = 0, tooBig = false;
-      req.on('data', (c) => { size += c.length; if (size > 40 * 1024 * 1024) { tooBig = true; req.destroy(); } else chunks.push(c); });
+      req.on('data', (c) => { size += c.length; if (size > 100 * 1024 * 1024) { tooBig = true; req.destroy(); } else chunks.push(c); });
       req.on('end', () => {
         if (tooBig) return;
         const buf = Buffer.concat(chunks);
@@ -148,7 +154,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           res.end(JSON.stringify({ url: '/uploads/' + name }));
         });
       });
-      req.on('close', () => { if (tooBig && !res.headersSent) { res.writeHead(413); res.end('Image too large (40 MB max)'); } });
+      req.on('close', () => { if (tooBig && !res.headersSent) { res.writeHead(413); res.end('Image too large (100 MB max)'); } });
       return;
     }
 
@@ -223,7 +229,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     for (const [k, t] of Object.entries(sc.tiles)) { if (!fog) { tiles[k] = t; continue; } const [x, y] = k.split(',').map(Number); if (revealed(sc, x, y)) tiles[k] = t; }
     for (const [k, p] of Object.entries(sc.props)) if (!DM_ONLY.has(p.kind) && revealed(sc, p.x, p.y)) props[k] = p;
     for (const [k, t] of Object.entries(sc.tokens)) if (tokVisible(sc, t, u)) tokens[k] = tokenFor(t, u);
-    return { ...sc, tiles, props, tokens, combat: combatFor(sc, u) };
+    const labels = {};
+    for (const [k, l] of Object.entries(sc.labels || {})) if (labelVisible(sc, l)) labels[k] = l;
+    // walls, doors and lights from imported maps are only for the DM's tools (they'd give away the layout)
+    const { walls, doors, lights, ...rest } = sc;
+    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u) };
   }
   function sendSceneFull(sc) {
     syncFog(sc);
@@ -270,9 +280,31 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (m.y != null) t.y = clamp(int(m.y, 0), 0, sc.rows - (t.size || 1));
     return t;
   }
+  // Spell templates: anyone can place them; only whoever placed one (or the DM) can change it.
+  function templateFields(m, sc, base = {}) {
+    const t = { ...base };
+    if (m.shape !== undefined) { if (!SHAPES.includes(m.shape)) return null; t.shape = m.shape; }
+    if (!t.shape) return null;
+    t.x = clamp(num(m.x, t.x ?? 0), 0, sc.cols); t.y = clamp(num(m.y, t.y ?? 0), 0, sc.rows);
+    t.angle = ((num(m.angle, t.angle ?? 0) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    t.size = clamp(Math.round(num(m.size, t.size ?? 20) / 5) * 5, 5, 500);
+    if (t.shape === 'line') t.width = clamp(Math.round(num(m.width, t.width ?? 5) / 5) * 5, 5, 60);
+    t.color = color(m.color, t.color || '#e8390e');
+    return t;
+  }
+  // Map labels (everyone sees them) and notes (only the DM sees them).
+  function labelFields(m, sc, base = {}) {
+    const l = { ...base };
+    if (m.text !== undefined) l.text = str(m.text, 120).replace(/\s+/g, ' ').trim();
+    if (!l.text) return null;
+    l.x = clamp(num(m.x, l.x ?? 0), 0, sc.cols); l.y = clamp(num(m.y, l.y ?? 0), 0, sc.rows);
+    if (m.dmOnly !== undefined) l.dmOnly = !!m.dmOnly;
+    l.size = LABEL_SIZES.includes(m.size) ? m.size : l.size || 'm';
+    return l;
+  }
   // Load a whole map's contents at once (used by the map generators).
   function fillScene(sc, m) {
-    sc.tiles = {}; sc.props = {}; sc.tokens = {};
+    sc.tiles = {}; sc.props = {}; sc.tokens = {}; sc.templates = {}; sc.labels = {};
     if (m.tiles && typeof m.tiles === 'object') {
       let n = 0;
       for (const [k, t] of Object.entries(m.tiles)) {
@@ -290,6 +322,14 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       const id = uid();
       sc.tokens[id] = { id, ...tokenFields({ label: '?', color: '#e8390e', owner: '', size: 1, ...t }, sc) };
     }
+    // imported maps (Universal VTT): background image, and walls and doors used by Reveal room
+    if (m.bg && typeof m.bg.url === 'string' && /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/.test(m.bg.url)) sc.bg = { url: m.bg.url };
+    const seg = (w) => Array.isArray(w) && w.length >= 4 && w.slice(0, 4).every((v) => Number.isFinite(Number(v)))
+      ? w.slice(0, 4).map((v, i) => Math.round(clamp(Number(v), -1, (i % 2 ? sc.rows : sc.cols) + 1) * 1000) / 1000) : null;
+    sc.walls = Array.isArray(m.walls) ? m.walls.slice(0, 20000).map(seg).filter(Boolean) : [];
+    sc.doors = Array.isArray(m.doors) ? m.doors.slice(0, 1000).map(seg).filter(Boolean) : [];
+    sc.lights = Array.isArray(m.lights) ? m.lights.slice(0, 500).filter((l) => Array.isArray(l) && l.length >= 3).map((l) => [clamp(num(l[0], 0), 0, sc.cols), clamp(num(l[1], 0), 0, sc.rows), clamp(num(l[2], 0), 0, 100), color(l[3], '#ffd27f')]) : [];
+    if (Array.isArray(m.labels)) for (const l of m.labels.slice(0, 300)) { const lb = labelFields(l, sc); if (lb) { lb.id = uid(); sc.labels[lb.id] = lb; } }
     // fog: { on, reveal: [[x0, y0, x1, y1], ...] } — e.g. a generated dungeon with only the entrance showing
     sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
     fogArrays.delete(sc.id);
@@ -308,7 +348,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       let msg; try { msg = JSON.parse(raw); } catch { return; }
       try { handle(ws, msg); } catch (e) { console.error('Message error:', e); }
     });
-    ws.on('close', () => { if (ws.user.joined) presence(); });
+    ws.on('close', () => {
+      if (!ws.user.joined) return;
+      if (ws.user.measuring) clients().forEach((c) => send(c, { type: 'measure', sceneId: ws.user.measuring, who: ws.user.name, dm: ws.user.isDM, points: null }));
+      presence();
+    });
   });
   const presence = () => toDMs({ type: 'presence', players: [...new Set(clients().filter((c) => !c.user.isDM).map((c) => c.user.name))] });
 
@@ -491,6 +535,71 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         break;
       }
 
+      // ----- spell templates (anyone) -----
+      case 'templateSet': {
+        if (!sc || !msg.tpl) return;
+        sc.templates = sc.templates || {};
+        const id = typeof msg.tpl.id === 'string' && /^[a-z0-9]{4,16}$/.test(msg.tpl.id) ? msg.tpl.id : uid();
+        const old = sc.templates[id];
+        if (old && !u.isDM && old.owner !== u.name) return;
+        if (!old && Object.keys(sc.templates).length >= 100) return send(ws, { type: 'error', message: 'This map has 100 templates already. Clear some first.' });
+        const t = templateFields(msg.tpl, sc, old || {});
+        if (!t) return;
+        t.id = id; t.owner = old ? old.owner : (u.isDM ? '' : u.name); t.by = old ? old.by : u.name;
+        sc.templates[id] = t;
+        toScene(sc.id, { type: 'template', sceneId: sc.id, tpl: t }); save();
+        break;
+      }
+      case 'templateRemove': { // one by id; or all of the sender's ("mine"); or the DM clears the lot ("all")
+        if (!sc || !sc.templates) return;
+        const ids = Object.values(sc.templates).filter((t) =>
+          (msg.id ? t.id === msg.id : msg.all ? u.isDM : msg.mine ? (u.isDM ? !t.owner : t.owner === u.name) : false)
+          && (u.isDM || t.owner === u.name)).map((t) => t.id);
+        if (!ids.length) return;
+        ids.forEach((id) => delete sc.templates[id]);
+        toScene(sc.id, { type: 'templateRemove', sceneId: sc.id, ids }); save();
+        break;
+      }
+
+      // ----- map labels and DM notes (DM only) -----
+      case 'labelSet': {
+        if (!u.isDM || !sc || !msg.label) return;
+        sc.labels = sc.labels || {};
+        const id = typeof msg.label.id === 'string' && /^[a-z0-9]{4,16}$/.test(msg.label.id) ? msg.label.id : uid();
+        const old = sc.labels[id];
+        if (!old && Object.keys(sc.labels).length >= 300) return;
+        const l = labelFields(msg.label, sc, old || {});
+        if (!l) return;
+        l.id = id; sc.labels[id] = l;
+        toDMs({ type: 'label', sceneId: sc.id, label: l });
+        toPlayersOnScene(sc.id, labelVisible(sc, l) ? { type: 'label', sceneId: sc.id, label: l } : { type: 'labelRemove', sceneId: sc.id, id });
+        save();
+        break;
+      }
+      case 'labelRemove':
+        if (!u.isDM || !sc || !sc.labels || !sc.labels[msg.id]) return;
+        delete sc.labels[msg.id];
+        toScene(sc.id, { type: 'labelRemove', sceneId: sc.id, id: msg.id }); save();
+        break;
+
+      // ----- ping and live ruler: passed straight on, never saved -----
+      case 'ping': {
+        if (!sc) return;
+        const now = Date.now(); if (now - (u.lastPing || 0) < 300) return; u.lastPing = now;
+        const x = clamp(num(msg.x, 0), 0, sc.cols), y = clamp(num(msg.y, 0), 0, sc.rows);
+        toScene(sc.id, { type: 'ping', sceneId: sc.id, x, y, who: u.name, dm: u.isDM, focus: u.isDM && !!msg.focus });
+        break;
+      }
+      case 'measure': {
+        if (!sc) return;
+        let pts = null;
+        if (Array.isArray(msg.points)) pts = msg.points.slice(0, 20).map((p) => [clamp(num(p && p[0], 0), 0, sc.cols), clamp(num(p && p[1], 0), 0, sc.rows)]);
+        u.measuring = pts ? sc.id : null;
+        const out = { type: 'measure', sceneId: sc.id, who: u.name, dm: u.isDM, points: pts, ft: pts ? clamp(int(msg.ft, 0), 0, 99999) : 0 };
+        clients().forEach((c) => c !== ws && (c.user.isDM || sc.id === state.activeScene) && send(c, out));
+        break;
+      }
+
       // ----- fog of war (DM only) -----
       case 'fogSet': // turn fog on or off for a map
         if (!u.isDM || !sc) return;
@@ -520,7 +629,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
               const tiles = {}; for (const k of set) if (sc.tiles[k]) tiles[k] = sc.tiles[k];
               const props = Object.values(sc.props).filter((p) => set.has(p.x + ',' + p.y) && !DM_ONLY.has(p.kind));
               const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user)).map((t) => tokenFor(t, c.user));
-              send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens });
+              const labels = Object.values(sc.labels || {}).filter((l) => set.has(Math.floor(l.x) + ',' + Math.floor(l.y)) && labelVisible(sc, l));
+              send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens, labels });
             } else { // cover it again: tokens that dropped out of sight go too
               const gone = Object.values(sc.tokens).filter((t) => touches(t) && !tokVisible(sc, t, c.user)).map((t) => t.id);
               send(c, { type: 'fogHide', sceneId: sc.id, cells: changed, tokens: gone });
@@ -572,6 +682,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (msg.cols != null) patch.cols = clamp(int(msg.cols, sc.cols), 5, MAX_SIDE);
         if (msg.rows != null) patch.rows = clamp(int(msg.rows, sc.rows), 5, MAX_SIDE);
         if (msg.showGrid != null) patch.showGrid = !!msg.showGrid;
+        if (msg.diag != null && DIAGONALS.includes(msg.diag)) patch.diag = msg.diag;
         if (msg.bg !== undefined) {
           patch.bg = msg.bg && typeof msg.bg.url === 'string' && /^(\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)|https?:\/\/.{3,500})$/.test(msg.bg.url)
             ? { url: msg.bg.url } : null;
@@ -587,6 +698,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           for (const k of Object.keys(sc.tiles)) { const [x, y] = k.split(',').map(Number); if (x >= sc.cols || y >= sc.rows) delete sc.tiles[k]; }
           for (const [k, p] of Object.entries(sc.props)) if (p.x >= sc.cols || p.y >= sc.rows) delete sc.props[k];
           for (const t of Object.values(sc.tokens)) { t.x = clamp(t.x, 0, sc.cols - t.size); t.y = clamp(t.y, 0, sc.rows - t.size); }
+          for (const l of Object.values(sc.labels || {})) { l.x = clamp(l.x, 0, sc.cols); l.y = clamp(l.y, 0, sc.rows); }
+          for (const [k, t] of Object.entries(sc.templates || {})) if (t.x > sc.cols || t.y > sc.rows) delete sc.templates[k];
           sendSceneFull(sc);
         } else toScene(sc.id, { type: 'sceneMeta', sceneId: sc.id, patch });
         save();

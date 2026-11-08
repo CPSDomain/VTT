@@ -50,6 +50,7 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Tools: paint, rectangle, room (floor plus walls in one drag), bucket fill, erase, props, tokens, with undo and redo
 - **Select tool:** move, rotate, nudge or delete any prop; box-select part of the map to move it, copy it (Alt-drag or Ctrl+C / Ctrl+V) or clear it
 - 14 terrains and 69 props: doors, double doors, secret doors, portcullises, windows, furniture, dungeon dressing, village pieces and nature
+- **Import maps** from Dungeon Scrawl, Dungeondraft, Dungeon Alchemist and others (Universal VTT: map, grid, walls and doors), or any map image, e.g. from Canvas of Kings; the grid is found automatically
 - Upload your own battle maps (or drag them on) and line the grid up with them
 - Build maps privately, then **Show to players** when ready
 
@@ -82,6 +83,15 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - 88 library monsters come with their standard HP and initiative bonus
 
 ![Combat: initiative order on the right, whose turn glows gold, health bars and condition icons on tokens](docs/images/combat.jpg)
+
+**Table tools**
+- Ruler in feet (5e diagonals, or the 5/10/5 variant), with corners; everyone sees who's measuring what
+- Dragging a token shows how far it moved
+- Spell templates (cone, sphere, cube, line, cylinder) that shade the squares they hit
+- Ping a spot for everyone; the DM can pull everyone's view to it
+- Map labels for room names, and DM-only notes
+
+![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
 
 **Dice**
 - Rolled on the DM's PC so nobody can fudge them: `1d20+5`, `2d6+1d4-1`, `4d6kh3`, `1d20adv`, `d100`

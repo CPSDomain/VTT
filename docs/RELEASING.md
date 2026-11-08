@@ -48,6 +48,8 @@ Each version goes to GitHub as a commit, a tag and a Release with the two Window
 
 6. **Create the GitHub Release:** on GitHub go to **Releases → Draft a new release**, choose the tag `v0.5.0`, title it `Tabletop 0.5.0`, paste `RELEASE_NOTES-0.5.0.md` into the description, attach both zips, and publish.
 
+   Under **Release label**, choose **None**, not **Pre-release**. GitHub skips pre-releases when it works out the latest version, so the README's "latest release" badge and the **Download the latest version** link only see releases that aren't pre-releases.
+
    With the GitHub CLI installed, step 6 is one command:
 
    ```bash

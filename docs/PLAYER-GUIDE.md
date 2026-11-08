@@ -22,6 +22,17 @@ No app? Open `http://<the address>` in Chrome or Edge instead.
 - **Quick rolls:** add your attacks, saves and skills once under "My quick rolls" (e.g. name `Longsword hit`, roll `1d20+5`), copying the bonuses from your D&D Beyond sheet. Then click to roll. **Shift-click** for advantage, **Alt-click** for disadvantage.
 - **Roll privately** sends the result only to the DM.
 
+## Table tools
+
+The bar on the left of the map:
+
+- **Move** (`V`): drag your token. While dragging, it shows how far you've moved, and everyone sees it. Press `Space` mid-drag to go round a corner.
+- **Ruler** (`R`): drag to measure in feet; `Space` adds a corner. Everyone sees your ruler.
+- **Spell** (`T`): spell templates. Pick cone, sphere, cube, line or cylinder in the bar at the bottom, then drag from where the spell starts (or type the size and click). The squares it hits are shaded. Click one of yours to move it, drag its dot to aim or resize it, `Del` removes it. **Clear mine** removes all yours.
+- **Ping** (`P`): click to flash a spot for everyone ("over here!"). `Alt`+click pings with any tool.
+
+`Esc` goes back to Move.
+
 ## In combat
 
 - The **Initiative** list appears at the top right when the DM starts a fight. Click **🎲** next to your name to roll initiative, or type your score.

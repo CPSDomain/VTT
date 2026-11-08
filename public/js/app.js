@@ -72,6 +72,7 @@ function onMessage(msg) {
       if (s) {
         const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = 1;
         Object.assign(s.tiles, msg.tiles); msg.props.forEach((p) => { s.props[p.id] = p; }); msg.tokens.forEach((t) => { s.tokens[t.id] = t; });
+        (msg.labels || []).forEach((l) => { (s.labels = s.labels || {})[l.id] = l; });
         fogDirty = true;
       }
       break;
@@ -80,11 +81,25 @@ function onMessage(msg) {
         const a = fogArr(s), set = new Set(msg.cells.map(([x, y]) => x + ',' + y));
         for (const [x, y] of msg.cells) { a[y * s.cols + x] = 0; delete s.tiles[x + ',' + y]; }
         for (const p of Object.values(s.props)) if (set.has(p.x + ',' + p.y)) delete s.props[p.id];
+        for (const l of Object.values(s.labels || {})) if (set.has(Math.floor(l.x) + ',' + Math.floor(l.y))) delete s.labels[l.id];
         msg.tokens.forEach((id) => { delete s.tokens[id]; if (selected === id) select(null); });
         fogDirty = true;
       }
       break;
     case 'propRemove': if (s) delete s.props[msg.propId]; break;
+    case 'template': if (s) { (s.templates = s.templates || {})[msg.tpl.id] = msg.tpl; } break;
+    case 'templateRemove': if (s && s.templates) { msg.ids.forEach((id) => delete s.templates[id]); if (msg.ids.includes(selTpl)) selTpl = null; } break;
+    case 'label': if (s) { (s.labels = s.labels || {})[msg.label.id] = msg.label; } break;
+    case 'labelRemove': if (s && s.labels) { delete s.labels[msg.id]; if (labelEdit && labelEdit.id === msg.id) closeLabelEditor(); } break;
+    case 'ping':
+      pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.who, dm: msg.dm, t0: performance.now() });
+      if (msg.focus && msg.sceneId === editing) centreOnSquare(msg.x, msg.y);
+      break;
+    case 'measure': {
+      const key = (msg.dm ? 'dm:' : 'p:') + msg.who;
+      if (msg.points) remoteRulers.set(key, { sceneId: msg.sceneId, points: msg.points, name: msg.who, dm: msg.dm, t: Date.now() }); else remoteRulers.delete(key);
+      break;
+    }
     case 'sceneMeta': if (s) { Object.assign(s, msg.patch); if (msg.sceneId === editing) sceneChanged(false); } break;
     case 'sceneFull':
       if (msg.active) { const switched = active !== msg.scene.id; scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(switched); }
@@ -129,6 +144,7 @@ function sceneChanged(refit) {
   const s = sc();
   if (!s) return;
   fogDirty = true;
+  if (refit) { selTpl = null; tplDraft = null; ruler = null; if (labelEdit) closeLabelEditor(); }
   renderInit(); renderEditor();
   if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
@@ -153,7 +169,7 @@ function renderSceneBar() {
 function fillMapSettings() {
   const s = sc();
   if (document.activeElement !== $('mapName')) $('mapName').value = s.name;
-  $('mapCols').value = s.cols; $('mapRows').value = s.rows; $('showGrid').checked = s.showGrid !== false;
+  $('mapCols').value = s.cols; $('mapRows').value = s.rows; $('showGrid').checked = s.showGrid !== false; $('mapDiag').value = s.diag || '5';
   const pv = $('bgPreview');
   if (s.bg) { pv.style.backgroundImage = `url("${s.bg.url}")`; pv.textContent = ''; }
   else { pv.style.backgroundImage = ''; pv.textContent = 'No image. Upload a battle map, or drag one onto the map.'; }
@@ -261,6 +277,8 @@ function render() {
   ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(0, 0, W, Hh);
 
   drawFog(s);
+  drawTemplates(s);
+  drawLabels(s);
 
   // tokens (hidden ones only ever reach the DM, drawn faded)
   const turnId = s.combat && s.combat.active ? s.combat.turnId : null;
@@ -307,6 +325,7 @@ function render() {
     }
   }
 
+  drawOverlays(s);
   drawToolPreview(s);
 }
 
@@ -375,7 +394,8 @@ const DOORISH = new Set(['door', 'doubledoor', 'dooropen', 'secretdoor', 'portcu
 // The room under a cell: floor connected without passing walls or doors, plus the walls and doors round it.
 function roomCells(s, c) {
   const tileAt = (x, y) => s.tiles[x + ',' + y];
-  if (!inside(s, c.x, c.y) || !tileAt(c.x, c.y)) return null;
+  if (!inside(s, c.x, c.y)) return null;
+  if (!tileAt(c.x, c.y)) return s.walls && s.walls.length ? wallRoom(s, c) : null;
   const doors = new Set(Object.values(s.props).filter((p) => DOORISH.has(p.kind)).map((p) => p.x + ',' + p.y));
   const seen = new Set(), out = new Set(), q = [[c.x, c.y]], startWall = tileAt(c.x, c.y) === 'wall';
   while (q.length) {
@@ -396,6 +416,47 @@ function roomCells(s, c) {
     }
   }
   return [...out].map((k) => k.split(',').map(Number)).filter(([x, y]) => inside(s, x, y));
+}
+// On an imported map (no painted floor), a room is every square you can reach without crossing a wall or door.
+const wallIndexes = new WeakMap();
+function wallIndex(s) {
+  let ix = wallIndexes.get(s.walls);
+  if (ix && ix.doors === s.doors) return ix;
+  ix = new Map(); ix.doors = s.doors;
+  const segs = [...s.walls, ...(s.doors || [])];
+  segs.forEach((g, i) => {
+    const len = Math.hypot(g[2] - g[0], g[3] - g[1]), steps = Math.max(1, Math.ceil(len * 4));
+    for (let k = 0; k <= steps; k++) {
+      const x = g[0] + (g[2] - g[0]) * k / steps, y = g[1] + (g[3] - g[1]) * k / steps;
+      for (const [cx, cy] of [[Math.floor(x), Math.floor(y)], [Math.floor(x - 1e-6), Math.floor(y - 1e-6)]]) {
+        const key = cx + ',' + cy; let list = ix.get(key); if (!list) ix.set(key, list = new Set()); list.add(g);
+      }
+    }
+  });
+  wallIndexes.set(s.walls, ix);
+  return ix;
+}
+function crosses(ax, ay, bx, by, g) {
+  const d = (px, py, qx, qy, rx, ry) => (qx - px) * (ry - py) - (qy - py) * (rx - px);
+  const d1 = d(g[0], g[1], g[2], g[3], ax, ay), d2 = d(g[0], g[1], g[2], g[3], bx, by), d3 = d(ax, ay, bx, by, g[0], g[1]), d4 = d(ax, ay, bx, by, g[2], g[3]);
+  return ((d1 > 0) !== (d2 > 0) || d1 === 0 || d2 === 0) && ((d3 > 0) !== (d4 > 0) || d3 === 0 || d4 === 0) && !(d1 === 0 && d2 === 0);
+}
+function wallRoom(s, c) {
+  const ix = wallIndex(s), seen = new Set([c.x + ',' + c.y]), q = [[c.x, c.y]], out = [];
+  const blocked = (x, y, nx, ny) => {
+    const ax = x + 0.5, ay = y + 0.5, bx = nx + 0.5, by = ny + 0.5;
+    for (const key of [x + ',' + y, nx + ',' + ny]) { const list = ix.get(key); if (list) for (const g of list) if (crosses(ax, ay, bx, by, g)) return true; }
+    return false;
+  };
+  while (q.length) {
+    const [x, y] = q.pop(); out.push([x, y]);
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      const k = nx + ',' + ny;
+      if (seen.has(k) || !inside(s, nx, ny) || blocked(x, y, nx, ny)) continue;
+      seen.add(k); q.push([nx, ny]);
+    }
+  }
+  return out;
 }
 let fogPending = [], fogPendingReveal = true, fogTimer = null;
 function fogCells(s, cells, reveal) {
@@ -418,6 +479,7 @@ function fogBrushAt(s, cx, cy, reveal) {
 function setFogTool(t) {
   if (t && !fogOn(sc())) { toast('Tick "Fog of war" on the left of this bar first'); t = null; }
   fogTool = fogTool === t ? null : t;
+  if (fogTool && typeof tt !== 'undefined' && tt !== 'move') { tt = 'move'; ruler = null; $('tplPop').hidden = true; if (labelEdit) closeLabelEditor(); document.querySelectorAll('#tableBar [data-tt]').forEach((b) => b.classList.toggle('on', b.dataset.tt === 'move')); }
   document.querySelectorAll('#fogBar [data-fog]').forEach((b) => b.classList.toggle('on', b.dataset.fog === fogTool));
   fogPreview = null;
   canvas.style.cursor = fogTool ? 'crosshair' : '';
@@ -434,7 +496,18 @@ $('fogOn').onchange = () => {
 $('fogRevealAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of war" first'); sendMsg({ type: 'fogAll', sceneId: editing, reveal: true }); };
 $('fogCoverAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of war" first'); sendMsg({ type: 'fogAll', sceneId: editing, reveal: false }); };
 
+function drawWalls(s) {
+  if (!me.isDM || !s.walls || !s.walls.length || !(mode === 'build' || fogTool === 'room')) return;
+  const z = view.zoom;
+  ctx.save(); ctx.lineCap = 'round';
+  ctx.lineWidth = 2.5 / z; ctx.strokeStyle = 'rgba(56,189,248,.85)'; ctx.beginPath();
+  for (const g of s.walls) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); } ctx.stroke();
+  ctx.lineWidth = 4 / z; ctx.strokeStyle = 'rgba(251,146,60,.95)'; ctx.beginPath();
+  for (const g of s.doors || []) { ctx.moveTo(g[0] * CELL, g[1] * CELL); ctx.lineTo(g[2] * CELL, g[3] * CELL); } ctx.stroke();
+  ctx.restore();
+}
 function drawToolPreview(s) {
+  drawWalls(s);
   drawSelection(s);
   if (me.isDM && fogTool && hover) {
     const z = view.zoom;
@@ -469,6 +542,297 @@ function drawToolPreview(s) {
   } else if (tool === 'rect' || tool === 'room' || tool === 'fill' || tool === 'token') {
     ctx.strokeStyle = '#ff6b35'; ctx.strokeRect(hover.x * CELL, hover.y * CELL, CELL, CELL);
   }
+}
+
+// ---------- table tools (Play mode): ruler, spell templates, ping, labels ----------
+// Positions here are in squares (1 = one 5-ft square), so they don't depend on zoom.
+let tt = 'move';
+let ruler = null;                    // my ruler: { points: [[x, y], ...], cur: [x, y] }
+const remoteRulers = new Map();      // who → { sceneId, points, t }
+const pings = [];                    // { sceneId, x, y, who, t0 }
+let tplShape = 'cone', tplDraft = null, selTpl = null, tplDrag = null, tplAim = null;
+const tplSizes = { cone: 15, sphere: 20, cube: 15, line: 60, cylinder: 10 };
+let labelEdit = null, labelDrag = null;
+const labelBoxes = new Map();        // id → box in world pixels, from the last frame
+
+const PALETTE = ['#3b82f6', '#22c55e', '#a855f7', '#eab308', '#06b6d4', '#ec4899', '#f97316', '#14b8a6'];
+const personColour = (name, dm) => dm ? '#e8390e' : PALETTE[[...String(name)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
+const toSq = (p) => ({ x: p.x / CELL, y: p.y / CELL });
+const centreOf = (c) => [c.x + 0.5, c.y + 0.5];
+
+// Distance along a path of square centres. 5e: every diagonal square is 5 ft;
+// the variant rule makes every second diagonal 10 ft (counted along the whole path).
+function pathFeet(points, diag) {
+  let squares = 0, diagonals = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dx = Math.round(Math.abs(points[i][0] - points[i - 1][0])), dy = Math.round(Math.abs(points[i][1] - points[i - 1][1]));
+    const d = Math.min(dx, dy);
+    squares += Math.max(dx, dy) - d;
+    if (diag === '5105') { for (let k = 0; k < d; k++) squares += (++diagonals % 2 === 0) ? 2 : 1; }
+    else squares += d;
+  }
+  return squares * 5;
+}
+
+// share what I'm measuring (a ruler, or a token I'm dragging) with the table, a few times a second
+let measureTimer = null, measureLast = '';
+function shareMeasure(points) {
+  const key = points ? JSON.stringify(points) : '';
+  if (key === measureLast) return;
+  measureLast = key;
+  clearTimeout(measureTimer);
+  const go = () => { measureTimer = null; sendMsg({ type: 'measure', sceneId: editing, points: points || null }); };
+  if (!points) go(); else measureTimer = setTimeout(go, 40);
+}
+
+function drawRuler(points, colour, who) {
+  if (!points || points.length < 2) return;
+  const s = sc(), ft = pathFeet(points, s.diag), z = view.zoom, end = points[points.length - 1];
+  if (ft === 0 && points.length === 2) return;
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); points.forEach(([x, y], i) => (i ? ctx.lineTo(x * CELL, y * CELL) : ctx.moveTo(x * CELL, y * CELL)));
+  ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = 7 / z; ctx.stroke();
+  ctx.strokeStyle = colour; ctx.lineWidth = 3.5 / z; ctx.setLineDash([10 / z, 6 / z]); ctx.stroke(); ctx.setLineDash([]);
+  for (const [x, y] of points) { ctx.beginPath(); ctx.arc(x * CELL, y * CELL, 5 / z, 0, Math.PI * 2); ctx.fillStyle = colour; ctx.fill(); ctx.lineWidth = 1.5 / z; ctx.strokeStyle = '#000'; ctx.stroke(); }
+  const text = `${ft} ft` + (who ? ` · ${who}` : ''), fs = 15 / z;
+  ctx.font = `700 ${fs}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(text).width + 14 / z, bx = end[0] * CELL, by = end[1] * CELL - 24 / z;
+  ctx.fillStyle = 'rgba(10,10,10,.88)'; ctx.beginPath(); ctx.roundRect(bx - w / 2, by - 12 / z, w, 24 / z, 6 / z); ctx.fill();
+  ctx.strokeStyle = colour; ctx.lineWidth = 1.5 / z; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.fillText(text, bx, by + 1 / z);
+  ctx.restore();
+}
+// the path of the token being dragged: from where it started, through any waypoints, to the square under it
+function dragPath(s) {
+  if (!drag || !drag.start) return null;
+  const t = s.tokens[drag.id]; if (!t) return null;
+  const h = t.size / 2, x = Math.max(0, Math.min(s.cols - t.size, Math.round(drag.pos.x / CELL))), y = Math.max(0, Math.min(s.rows - t.size, Math.round(drag.pos.y / CELL)));
+  return [[drag.start.x + h, drag.start.y + h], ...drag.waypoints, [x + h, y + h]];
+}
+
+// ----- spell templates -----
+const L = (t) => t.size / 5;
+// a cube sits square on the grid: from its corner, towards whichever diagonal it was dragged
+const cubeDir = (t) => [Math.cos(t.angle) >= -1e-9 ? 1 : -1, Math.sin(t.angle) >= -1e-9 ? 1 : -1];
+function tplContains(t, px, py) {
+  const dx = px - t.x, dy = py - t.y, e = 1e-6;
+  if (t.shape === 'sphere' || t.shape === 'cylinder') return dx * dx + dy * dy <= L(t) * L(t) + e;
+  if (t.shape === 'cube') { const [sx, sy] = cubeDir(t); return dx * sx >= -e && dx * sx <= L(t) + e && dy * sy >= -e && dy * sy <= L(t) + e; }
+  const c = Math.cos(t.angle), sn = Math.sin(t.angle), along = dx * c + dy * sn, perp = Math.abs(-dx * sn + dy * c);
+  if (along < -e || along > L(t) + e) return false;
+  if (t.shape === 'cone') return perp <= along / 2 + e;
+  if (t.shape === 'line') return perp <= (t.width || 5) / 10 + e;
+  return perp <= L(t) / 2 + e; // cube
+}
+// squares whose centre is inside the template: the ones the spell hits
+function tplCells(s, t) {
+  const r = L(t) + 1, out = [];
+  for (let y = Math.max(0, Math.floor(t.y - r)); y <= Math.min(s.rows - 1, Math.ceil(t.y + r)); y++)
+    for (let x = Math.max(0, Math.floor(t.x - r)); x <= Math.min(s.cols - 1, Math.ceil(t.x + r)); x++)
+      if (tplContains(t, x + 0.5, y + 0.5)) out.push([x, y]);
+  return out;
+}
+function tplOutline(t) {
+  const c = Math.cos(t.angle), sn = Math.sin(t.angle), P = (a, b) => [(t.x + a * c - b * sn) * CELL, (t.y + a * sn + b * c) * CELL];
+  ctx.beginPath();
+  if (t.shape === 'sphere' || t.shape === 'cylinder') { ctx.arc(t.x * CELL, t.y * CELL, L(t) * CELL, 0, Math.PI * 2); return; }
+  if (t.shape === 'cube') { const [sx, sy] = cubeDir(t); ctx.rect(t.x * CELL, t.y * CELL, sx * L(t) * CELL, sy * L(t) * CELL); return; }
+  const half = t.shape === 'cone' ? L(t) / 2 : t.shape === 'line' ? (t.width || 5) / 10 : L(t) / 2;
+  const pts = t.shape === 'cone' ? [P(0, 0), P(L(t), -half), P(L(t), half)] : [P(0, -half), P(L(t), -half), P(L(t), half), P(0, half)];
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
+}
+const tplHandle = (t) => { if (t.shape === 'cube') { const [sx, sy] = cubeDir(t); return [t.x + sx * L(t), t.y + sy * L(t)]; } return [t.x + Math.cos(t.angle) * L(t), t.y + Math.sin(t.angle) * L(t)]; };
+const tplName = (t) => `${t.size}-ft ${t.shape === 'sphere' || t.shape === 'cylinder' ? 'radius ' : ''}${t.shape}${t.shape === 'line' && t.width > 5 ? ` (${t.width} ft wide)` : ''}`;
+const canEditTpl = (t) => me.isDM || (t.owner && t.owner === me.name);
+function drawTemplate(s, t, draft) {
+  const z = view.zoom, col = t.color || '#e8390e', shown = tplShown(t);
+  ctx.save();
+  ctx.fillStyle = col; ctx.globalAlpha = 0.28;
+  for (const [x, y] of tplCells(s, shown)) ctx.fillRect(x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2);
+  ctx.globalAlpha = 0.14; tplOutline(shown); ctx.fill();
+  ctx.globalAlpha = 1; ctx.lineWidth = (selTpl === t.id || draft ? 3 : 2) / z; ctx.strokeStyle = col;
+  if (t.shape === 'cylinder') ctx.setLineDash([9 / z, 5 / z]);
+  tplOutline(shown); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(shown.x * CELL, shown.y * CELL, 4 / z, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#000'; ctx.lineWidth = 1.5 / z; ctx.stroke();
+  ctx.restore();
+}
+const tplShown = (t) => tplDrag && tplDrag.id === t.id && tplDrag.moved ? { ...t, x: tplDrag.x, y: tplDrag.y } : tplAim && tplAim.id === t.id ? { ...t, angle: tplAim.angle, size: tplAim.size } : t;
+// drawn above the tokens: the selected template's size and its aiming handle
+function drawTemplateInfo(t, draft) {
+  const z = view.zoom, col = t.color || '#e8390e', shown = tplShown(t);
+  ctx.save();
+  { // size readout, and a handle to re-aim or resize it
+    const [hx, hy] = tplHandle(shown);
+    if (!draft) { ctx.beginPath(); ctx.arc(hx * CELL, hy * CELL, 7 / z, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 / z; ctx.stroke(); }
+    const text = tplName(shown) + (t.by && t.by !== me.name ? ` · ${t.by}` : ''), fs = 13 / z;
+    ctx.font = `700 ${fs}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + 12 / z, bx = shown.x * CELL, by = shown.y * CELL - 18 / z;
+    ctx.fillStyle = 'rgba(10,10,10,.88)'; ctx.fillRect(bx - w / 2, by - 10 / z, w, 20 / z);
+    ctx.fillStyle = '#fff'; ctx.fillText(text, bx, by + 1 / z);
+  }
+  ctx.restore();
+}
+function templateAt(s, p) {
+  const q = toSq(p), list = Object.values(s.templates || {}).filter(canEditTpl);
+  for (let i = list.length - 1; i >= 0; i--) if (tplContains(list[i], q.x, q.y)) return list[i];
+  return null;
+}
+function onTplHandle(s, p) {
+  const t = selTpl && (s.templates || {})[selTpl]; if (!t || !canEditTpl(t)) return null;
+  const [hx, hy] = tplHandle(t), q = toSq(p);
+  return Math.hypot(q.x - hx, q.y - hy) * CELL * view.zoom < 12 ? t : null;
+}
+// aim from the origin towards the mouse; the distance sets the size (whole squares)
+function aimAt(origin, q, minSize, shape) {
+  if (shape === 'cube') { const dx = q.x - origin.x, dy = q.y - origin.y; return { angle: Math.atan2(dy >= 0 ? 1 : -1, dx >= 0 ? 1 : -1), size: Math.max(minSize, Math.round(Math.max(Math.abs(dx), Math.abs(dy))) * 5) }; }
+  let angle = Math.atan2(q.y - origin.y, q.x - origin.x);
+  const step = Math.PI / 4, near = Math.round(angle / step) * step;
+  if (Math.abs(angle - near) < 0.07) angle = near; // snap to straight and diagonal
+  const dist = Math.hypot(q.x - origin.x, q.y - origin.y);
+  return { angle, size: Math.max(minSize, Math.round(dist) * 5) };
+}
+function newTemplate(p) {
+  const q = toSq(p), o = { x: Math.round(q.x), y: Math.round(q.y) }; // spells start on a grid corner
+  tplDraft = { shape: tplShape, x: o.x, y: o.y, angle: tplShape === 'cube' ? Math.PI / 4 : 0, size: Number($('tplSize').value) || tplSizes[tplShape], width: Number($('tplWidth').value) || 5,
+    color: personColour(me.name, me.isDM), dragged: false };
+}
+function finishTemplate() {
+  const d = tplDraft; tplDraft = null;
+  const id = uid();
+  sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id, shape: d.shape, x: d.x, y: d.y, angle: d.angle, size: d.size, width: d.width, color: d.color } });
+  tplSizes[d.shape] = d.size; $('tplSize').value = d.size;
+  selTpl = id;
+}
+
+const TPL_HELP = {
+  cone: 'Drag from where the cone starts, in the direction it points. Or click to place one pointing right.',
+  sphere: 'Click a grid corner for the centre, or drag out to the radius you want.',
+  cube: 'Drag from one corner of the cube to the opposite corner.',
+  line: 'Drag from the caster in the direction of the line.',
+  cylinder: 'Click a grid corner for the centre, or drag out to the radius you want.'
+};
+function setTplShape(shape) {
+  tplShape = shape;
+  document.querySelectorAll('#tplPop [data-shape]').forEach((b) => b.classList.toggle('on', b.dataset.shape === shape));
+  $('tplSize').value = tplSizes[shape];
+  $('tplSizeLbl').textContent = shape === 'sphere' || shape === 'cylinder' ? 'Radius' : shape === 'cube' ? 'Side' : 'Length';
+  document.querySelectorAll('#tplPop .tplw').forEach((el) => { el.style.display = shape === 'line' ? '' : 'none'; });
+  $('tplHelp').innerHTML = TPL_HELP[shape] + ' Click one of yours to move it; drag its dot to aim or resize; <kbd>Del</kbd> removes it.';
+}
+document.querySelectorAll('#tplPop [data-shape]').forEach((b) => b.onclick = () => setTplShape(b.dataset.shape));
+$('tplSize').onchange = () => { const v = Math.max(5, Math.round(Number($('tplSize').value) / 5) * 5 || 5); $('tplSize').value = v; tplSizes[tplShape] = v;
+  const t = selTpl && (sc().templates || {})[selTpl]; if (t && t.shape === tplShape && canEditTpl(t)) sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, size: v } }); };
+$('tplWidth').onchange = () => { const t = selTpl && (sc().templates || {})[selTpl]; if (t && t.shape === 'line' && canEditTpl(t)) sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, width: $('tplWidth').value } }); };
+$('tplClearMine').onclick = () => { sendMsg({ type: 'templateRemove', sceneId: editing, mine: true }); selTpl = null; };
+$('tplClearAll').onclick = () => { sendMsg({ type: 'templateRemove', sceneId: editing, all: true }); selTpl = null; };
+
+// ----- pings -----
+function sendPing(p, focus) { const q = toSq(p); sendMsg({ type: 'ping', sceneId: editing, x: q.x, y: q.y, focus: !!focus }); }
+function drawPings() {
+  const now = performance.now(), z = view.zoom;
+  for (let i = pings.length - 1; i >= 0; i--) if (now - pings[i].t0 > 2400) pings.splice(i, 1);
+  for (const pg of pings) {
+    if (pg.sceneId !== editing) continue;
+    const age = (now - pg.t0) / 2400, X = pg.x * CELL, Y = pg.y * CELL, col = personColour(pg.who, pg.dm);
+    ctx.save();
+    for (let k = 0; k < 3; k++) {
+      const a = (age * 1.6 - k * 0.22); if (a < 0 || a > 1) continue;
+      ctx.globalAlpha = (1 - a) * 0.9; ctx.strokeStyle = col; ctx.lineWidth = 4 / z;
+      ctx.beginPath(); ctx.arc(X, Y, (8 + a * 70) / z, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.globalAlpha = Math.min(1, (1 - age) * 2);
+    ctx.beginPath(); ctx.arc(X, Y, 7 / z, 0, Math.PI * 2); ctx.fillStyle = col; ctx.fill(); ctx.lineWidth = 2 / z; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.font = `700 ${13 / z}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(pg.who).width + 12 / z;
+    ctx.fillStyle = 'rgba(10,10,10,.85)'; ctx.fillRect(X - w / 2, Y + 14 / z, w, 19 / z); ctx.fillStyle = '#fff'; ctx.fillText(pg.who, X, Y + 24 / z);
+    ctx.restore();
+  }
+  if (pings.length) draw();
+}
+
+// ----- labels and DM notes -----
+const LABEL_PX = { s: 11, m: 16, l: 26 };
+function drawLabels(s) {
+  labelBoxes.clear();
+  for (const l of Object.values(s.labels || {})) {
+    const pos = labelDrag && labelDrag.id === l.id ? labelDrag.pos : l;
+    const fs = LABEL_PX[l.size] || 16, text = (l.dmOnly ? '📝 ' : '') + l.text, X = pos.x * CELL, Y = pos.y * CELL;
+    ctx.font = `${l.dmOnly ? 600 : 700} ${fs}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + fs * 0.9, h = fs * 1.6, box = { x: X - w / 2, y: Y - h / 2, w, h };
+    labelBoxes.set(l.id, box);
+    if (l.dmOnly) {
+      ctx.fillStyle = 'rgba(253,230,138,.93)'; ctx.fillRect(box.x, box.y, w, h);
+      ctx.setLineDash([4, 3]); ctx.strokeStyle = '#a16207'; ctx.lineWidth = 1.5; ctx.strokeRect(box.x, box.y, w, h); ctx.setLineDash([]);
+      ctx.fillStyle = '#422006'; ctx.fillText(text, X, Y + 1);
+    } else {
+      ctx.fillStyle = 'rgba(12,12,12,.72)'; ctx.beginPath(); ctx.roundRect(box.x, box.y, w, h, h / 2); ctx.fill();
+      ctx.fillStyle = '#f5f0e6'; ctx.fillText(text, X, Y + 1);
+    }
+    if (labelEdit && labelEdit.id === l.id) { ctx.strokeStyle = '#ff6b35'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(box.x - 3, box.y - 3, w + 6, h + 6); }
+  }
+}
+function labelAt(p) {
+  const ids = [...labelBoxes.keys()].reverse();
+  for (const id of ids) { const b = labelBoxes.get(id); if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return id; }
+  return null;
+}
+function openLabelEditor(l) {
+  labelEdit = l;
+  const pop = $('labelPop'), X = view.x + l.x * CELL * view.zoom, Y = view.y + l.y * CELL * view.zoom, r = canvas.getBoundingClientRect();
+  pop.hidden = false;
+  pop.style.left = Math.max(70, Math.min(r.width - 290, X - 140)) + 'px';
+  pop.style.top = Math.max(10, Math.min(r.height - 120, Y + 24)) + 'px';
+  $('lblText').value = l.text || ''; $('lblSize').value = l.size || 'm'; $('lblNote').checked = !!l.dmOnly;
+  $('lblDel').style.display = l.id ? '' : 'none';
+  setTimeout(() => $('lblText').focus(), 0);
+  draw();
+}
+function closeLabelEditor() { labelEdit = null; $('labelPop').hidden = true; draw(); }
+function saveLabel() {
+  if (!labelEdit) return;
+  const text = $('lblText').value.trim();
+  if (!text) { if (labelEdit.id) sendMsg({ type: 'labelRemove', sceneId: editing, id: labelEdit.id }); return closeLabelEditor(); }
+  sendMsg({ type: 'labelSet', sceneId: editing, label: { id: labelEdit.id || uid(), x: labelEdit.x, y: labelEdit.y, text, size: $('lblSize').value, dmOnly: $('lblNote').checked } });
+  trySet('tt-labelNote', $('lblNote').checked ? '1' : '');
+  closeLabelEditor();
+}
+$('lblSave').onclick = saveLabel;
+$('lblCancel').onclick = closeLabelEditor;
+$('lblDel').onclick = () => { if (labelEdit && labelEdit.id) sendMsg({ type: 'labelRemove', sceneId: editing, id: labelEdit.id }); closeLabelEditor(); };
+$('lblText').addEventListener('keydown', (e) => { if (e.key === 'Enter') saveLabel(); if (e.key === 'Escape') closeLabelEditor(); });
+
+// ----- the tool bar -----
+function setTableTool(t) {
+  if (t === 'label' && !me.isDM) t = 'move';
+  tt = t;
+  if (fogTool) setFogTool(null);
+  document.querySelectorAll('#tableBar [data-tt]').forEach((b) => b.classList.toggle('on', b.dataset.tt === t));
+  $('tplPop').hidden = t !== 'template';
+  if (t === 'template') setTplShape(tplShape);
+  if (t !== 'label') closeLabelEditor();
+  if (t !== 'template' && t !== 'move') selTpl = null;
+  ruler = null; shareMeasure(null);
+  updateCursor(); draw();
+}
+document.querySelectorAll('#tableBar [data-tt]').forEach((b) => b.onclick = () => setTableTool(b.dataset.tt));
+
+function drawTemplates(s) {
+  for (const t of Object.values(s.templates || {})) drawTemplate(s, t, false);
+  if (tplDraft) drawTemplate(s, tplDraft, true);
+}
+function drawOverlays(s) {
+  const st = selTpl && (s.templates || {})[selTpl];
+  if (st) drawTemplateInfo(st, false);
+  if (tplDraft) drawTemplateInfo(tplDraft, true);
+  const now = Date.now();
+  for (const [who, r] of remoteRulers) {
+    if (now - r.t > 15000) { remoteRulers.delete(who); continue; }
+    if (r.sceneId === editing) drawRuler(r.points, personColour(r.name, r.dm), r.name);
+  }
+  if (ruler) drawRuler([...ruler.points, ruler.cur], personColour(me.name, me.isDM));
+  const dp = dragPath(s); if (dp) drawRuler(dp, personColour(me.name, me.isDM));
+  drawPings();
 }
 
 // ---------- map editing ----------
@@ -704,6 +1068,10 @@ function centreOn(t) {
   const sx = view.x + cx * view.zoom, sy = view.y + cy * view.zoom;
   if (sx < 60 || sy < 60 || sx > r.width - 60 || sy > r.height - 60) { view.x = r.width / 2 - cx * view.zoom; view.y = r.height / 2 - cy * view.zoom; draw(); }
 }
+function centreOnSquare(x, y) {
+  const r = canvas.getBoundingClientRect();
+  view.x = r.width / 2 - x * CELL * view.zoom; view.y = r.height / 2 - y * CELL * view.zoom; draw();
+}
 // Everyone players can see, plus every monster (the DM decides who's actually in the fight)
 const allTokenIds = () => Object.values(sc().tokens).map((t) => t.id);
 $('combatStart').onclick = () => sendMsg({ type: 'combatStart', sceneId: editing, ids: allTokenIds() });
@@ -801,11 +1169,37 @@ canvas.addEventListener('pointerdown', (e) => {
   if (me.isDM && fogTool) { // fog tools take the click, in Play or Build mode
     if (fogTool === 'room') {
       const cells = roomCells(s, c);
-      if (!cells) toast('Reveal room works on built or generated maps. On an uploaded image map, use the Reveal brush.');
+      if (!cells) toast('Reveal room works on built, generated and imported Universal VTT maps (it follows their walls). On a plain image map, use the Reveal brush.');
       else fogCells(s, cells, true);
       flushFog();
     } else { fogStroke = { reveal: fogTool === 'reveal', last: c }; fogBrushAt(s, c.x, c.y, fogStroke.reveal); }
     draw(); return;
+  }
+
+  if (!building) { // Play mode: the table tools
+    if (e.altKey || tt === 'ping') { sendPing(p, e.shiftKey && me.isDM); return; }
+    if (tt === 'ruler') { const c0 = centreOf(c); ruler = { points: [c0], cur: c0 }; draw(); return; }
+    if (tt === 'template') {
+      const h = onTplHandle(s, p);
+      if (h) { tplAim = { id: h.id, angle: h.angle, size: h.size }; return; }
+      const tp = templateAt(s, p);
+      if (tp) { selTpl = tp.id; tplDrag = { id: tp.id, from: toSq(p), x: tp.x, y: tp.y, moved: false }; draw(); return; }
+      selTpl = null; newTemplate(p); draw(); return;
+    }
+    if (tt === 'label' && me.isDM) {
+      const id = labelAt(p), l = id && s.labels[id];
+      if (l) labelDrag = { id, from: p, pos: { x: l.x, y: l.y }, moved: false };
+      else { const c0 = centreOf(c); openLabelEditor({ x: c0[0], y: c0[1], text: '', size: 'm', dmOnly: tryGet('tt-labelNote') === '1' }); }
+      return;
+    }
+    // Move tool: tokens first; otherwise a template of yours can be picked up
+    if (!tokenAt(s, p)) {
+      const h = onTplHandle(s, p);
+      if (h) { tplAim = { id: h.id, angle: h.angle, size: h.size }; return; }
+      const tp = templateAt(s, p);
+      if (tp) { select(null); selTpl = tp.id; tplDrag = { id: tp.id, from: toSq(p), x: tp.x, y: tp.y, moved: false }; draw(); return; }
+    }
+    if (selTpl) { selTpl = null; draw(); }
   }
 
   if (!building || tool === 'select') {
@@ -813,7 +1207,7 @@ canvas.addEventListener('pointerdown', (e) => {
     select(t ? t.id : null);
     if (t) {
       clearMapSelection();
-      if (canMove(t)) drag = { id: t.id, off: { x: p.x - t.x * CELL, y: p.y - t.y * CELL }, pos: { x: t.x * CELL, y: t.y * CELL } };
+      if (canMove(t)) drag = { id: t.id, off: { x: p.x - t.x * CELL, y: p.y - t.y * CELL }, pos: { x: t.x * CELL, y: t.y * CELL }, start: { x: t.x, y: t.y }, waypoints: [] };
     } else if (building) {
       // map pieces: drag a selected area, pick up a prop, or start drawing a selection box
       const pr = propAt(s, c);
@@ -841,8 +1235,30 @@ canvas.addEventListener('pointermove', (e) => {
     if (me.isDM && (mode === 'build' || fogTool)) draw();
   }
   if (fogStroke) { line(fogStroke.last, c, (x, y) => fogBrushAt(s, x, y, fogStroke.reveal)); fogStroke.last = c; draw(); return; }
+  if (ruler) { const cur = centreOf(c); if (cur[0] !== ruler.cur[0] || cur[1] !== ruler.cur[1]) { ruler.cur = cur; shareMeasure([...ruler.points, cur]); draw(); } return; }
+  if (tplDraft) {
+    const q = toSq(p), d = Math.hypot(q.x - tplDraft.x, q.y - tplDraft.y);
+    if (d > 0.45 || tplDraft.dragged) { Object.assign(tplDraft, aimAt(tplDraft, q, 5, tplDraft.shape)); tplDraft.dragged = true; }
+    draw(); return;
+  }
+  if (tplAim) { const t = (s.templates || {})[tplAim.id]; if (t) Object.assign(tplAim, aimAt(t, toSq(p), 5, t.shape)); draw(); return; }
+  if (tplDrag) {
+    const t = (s.templates || {})[tplDrag.id], q = toSq(p);
+    if (t) { const nx = t.x + Math.round(q.x - tplDrag.from.x), ny = t.y + Math.round(q.y - tplDrag.from.y); tplDrag.moved = tplDrag.moved || nx !== t.x || ny !== t.y; tplDrag.x = nx; tplDrag.y = ny; }
+    draw(); return;
+  }
+  if (labelDrag) {
+    const l = s.labels[labelDrag.id];
+    if (l && Math.hypot(p.x - labelDrag.from.x, p.y - labelDrag.from.y) > 4) { labelDrag.moved = true; const c0 = centreOf(c); labelDrag.pos = { x: c0[0], y: c0[1] }; }
+    draw(); return;
+  }
   if (pan) { view.x = pan.vx + e.clientX - pan.sx; view.y = pan.vy + e.clientY - pan.sy; draw(); }
-  else if (drag) { drag.pos = { x: p.x - drag.off.x, y: p.y - drag.off.y }; draw(); }
+  else if (drag) {
+    drag.pos = { x: p.x - drag.off.x, y: p.y - drag.off.y };
+    // players share the path of their token as they drag it; the DM's moves stay private (monsters in the dark)
+    if (!me.isDM) { const dp = dragPath(s); if (dp) shareMeasure(pathFeet(dp, s.diag) ? dp : null); }
+    draw();
+  }
   else if (stroke) { line(lastCell, c, (x, y) => paintAt(s, x, y)); lastCell = c; draw(); }
   else if (rectDrag) { rectDrag.b = c; draw(); }
   else if (marquee) { marquee.b = c; draw(); }
@@ -855,6 +1271,21 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerup', () => {
   const s = sc();
   if (fogStroke) { fogStroke = null; flushFog(); }
+  if (ruler) { ruler = null; shareMeasure(null); draw(); }
+  if (tplDraft) finishTemplate();
+  if (tplAim) { sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: tplAim.id, angle: tplAim.angle, size: tplAim.size } }); const t = s && (s.templates || {})[tplAim.id]; if (t) Object.assign(t, { angle: tplAim.angle, size: tplAim.size }); tplAim = null; }
+  if (tplDrag) {
+    const t = s && (s.templates || {})[tplDrag.id];
+    if (t && tplDrag.moved) { t.x = tplDrag.x; t.y = tplDrag.y; sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, x: t.x, y: t.y } }); }
+    tplDrag = null;
+  }
+  if (labelDrag) {
+    const l = s && s.labels[labelDrag.id];
+    if (l && labelDrag.moved) { Object.assign(l, labelDrag.pos); sendMsg({ type: 'labelSet', sceneId: editing, label: { id: l.id, x: l.x, y: l.y } }); }
+    else if (l) openLabelEditor(l);
+    labelDrag = null;
+  }
+  if (drag && !me.isDM) shareMeasure(null);
   if (drag && s) {
     const t = s.tokens[drag.id];
     const x = Math.round(drag.pos.x / CELL), y = Math.round(drag.pos.y / CELL);
@@ -964,9 +1395,24 @@ new ResizeObserver(resize).observe($('board'));
 const TOOL_KEYS = { v: 'select', b: 'brush', r: 'rect', m: 'room', g: 'fill', e: 'erase', p: 'prop', k: 'token' };
 window.addEventListener('keydown', (e) => {
   const typing = /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+  if (e.key === ' ' && !typing && (ruler || (drag && drag.start))) { // a corner in the path
+    e.preventDefault(); if (e.repeat) return;
+    const s = sc();
+    if (ruler) { const last = ruler.points[ruler.points.length - 1]; if (last[0] !== ruler.cur[0] || last[1] !== ruler.cur[1]) ruler.points.push(ruler.cur); }
+    else { const dp = dragPath(s); if (dp) drag.waypoints.push(dp[dp.length - 1]); }
+    return draw();
+  }
   if (e.key === ' ' && !typing) { spaceDown = true; updateCursor(); e.preventDefault(); return; }
   if (typing) return;
   if (e.key === 'Home') return fitView();
+  if (mode !== 'build' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toLowerCase(), s = sc();
+    if (e.key === 'Escape' && (selTpl || labelEdit)) { selTpl = null; closeLabelEditor(); return draw(); }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selTpl && s && (s.templates || {})[selTpl]) { e.preventDefault(); sendMsg({ type: 'templateRemove', sceneId: editing, id: selTpl }); selTpl = null; return; }
+    const pick = { v: 'move', r: 'ruler', t: 'template', p: 'ping', l: 'label' }[k];
+    if (pick && !(pick === 'label' && !me.isDM)) return setTableTool(pick);
+    if (e.key === 'Escape' && tt !== 'move' && !fogTool) return setTableTool('move');
+  }
   if (!me.isDM) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo(); }
@@ -995,13 +1441,14 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { if (e.key === ' ') { spaceDown = false; updateCursor(); } });
 function updateCursor() {
-  canvas.style.cursor = spaceDown ? 'grab' : (me.isDM && mode === 'build' && tool !== 'select') ? 'crosshair' : 'default';
+  canvas.style.cursor = spaceDown ? 'grab' : (me.isDM && mode === 'build' && tool !== 'select') || (mode !== 'build' && tt !== 'move') ? 'crosshair' : 'default';
 }
 
 // ---------- build UI ----------
 function setMode(m) {
   mode = m;
   document.body.classList.toggle('build', m === 'build');
+  if (m === 'build' && tt !== 'move') setTableTool('move');
   $('modePlay').classList.toggle('on', m === 'play'); $('modeBuild').classList.toggle('on', m === 'build');
   if (m === 'build' && tool === 'select') setTool('brush');
   updateCursor(); draw();
@@ -1060,6 +1507,7 @@ $('mapName').onchange = () => updateScene({ name: $('mapName').value });
 $('mapName').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
 $('applySize').onclick = () => updateScene({ cols: $('mapCols').value, rows: $('mapRows').value });
 $('showGrid').onchange = () => updateScene({ showGrid: $('showGrid').checked });
+$('mapDiag').onchange = () => updateScene({ diag: $('mapDiag').value });
 $('newMap').onclick = () => { pendingNewScene = true; sendMsg({ type: 'sceneCreate', name: `Map ${order.length + 1}`, cols: 30, rows: 20 }); };
 $('dupMap').onclick = () => { pendingNewScene = true; sendMsg({ type: 'sceneDuplicate', sceneId: editing }); };
 $('delMap').onclick = (e) => {
@@ -1079,7 +1527,7 @@ async function uploadBg(file) {
     const { url } = await res.json();
     const img = loadImg(url);
     await (img.complete ? Promise.resolve() : new Promise((r) => { img.addEventListener('load', r, { once: true }); img.addEventListener('error', r, { once: true }); }));
-    const px = guessSquare(img);
+    const px = detectGrid(img) || guessSquare(img);
     $('pxPerSq').value = px;
     updateScene({ bg: { url }, cols: Math.round(img.naturalWidth / px), rows: Math.round(img.naturalHeight / px) });
     toast(`Map uploaded (${img.naturalWidth}×${img.naturalHeight}px). Grid set to ${px}px squares; change it and press Fit grid if it doesn't line up.`, 6000);
@@ -1090,7 +1538,7 @@ async function uploadBg(file) {
 function guessSquare(img) {
   const w = img.naturalWidth, h = img.naturalHeight;
   const cands = [70, 72, 100, 128, 140, 150, 200, 256, 50, 64];
-  const fit = cands.filter((c) => w % c === 0 && h % c === 0 && w / c <= 120 && h / c <= 120 && w / c >= 5);
+  const fit = cands.filter((c) => w % c === 0 && h % c === 0 && w / c <= 200 && h / c <= 200 && w / c >= 5);
   return fit[0] || Number($('pxPerSq').value) || 70;
 }
 $('uploadBtn').onclick = () => $('fileIn').click();
@@ -1103,6 +1551,103 @@ $('fitBg').onclick = () => {
   updateScene({ cols: Math.round(img.naturalWidth / px), rows: Math.round(img.naturalHeight / px) });
   setTimeout(fitView, 150);
 };
+// ---------- importing maps ----------
+// Universal VTT (.uvtt / .dd2vtt / .df2vtt: Dungeon Scrawl, Dungeondraft, Dungeon Alchemist…) bring the image,
+// grid and walls; a plain image (Canvas of Kings, Inkarnate…) becomes a map with its grid worked out from the picture.
+const UVTT_EXT = /\.(uvtt|dd2vtt|df2vtt|json)$/i;
+const niceName = (f) => f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Imported map';
+async function importMapFile(file) {
+  if (!file) return;
+  try {
+    if (UVTT_EXT.test(file.name)) return await importUvtt(file);
+    if (/^image\/(png|jpeg|webp)$/.test(file.type)) return await importImage(file);
+    toast('Import a Universal VTT file (.uvtt, .dd2vtt, .df2vtt) or a PNG, JPG or WebP map image');
+  } catch (err) { toast('Import failed: ' + err.message, 6000); }
+}
+async function importUvtt(file) {
+  toast(`Reading ${file.name}…`, 20000);
+  let d;
+  try { d = JSON.parse(await file.text()); } catch { return toast(`${file.name} isn't a Universal VTT map file`, 5000); }
+  const r = d && d.resolution;
+  if (!r || !r.map_size || !(r.map_size.x > 0) || !(r.map_size.y > 0)) return toast(`${file.name} has no map size in it; is it a Universal VTT file?`, 5000);
+  const ox = (r.map_origin && r.map_origin.x) || 0, oy = (r.map_origin && r.map_origin.y) || 0;
+  const cols = Math.max(5, Math.ceil(r.map_size.x - 1e-6)), rows = Math.max(5, Math.ceil(r.map_size.y - 1e-6));
+  if (cols > 200 || rows > 200) return toast(`That map is ${cols} × ${rows} squares. Tabletop handles up to 200 × 200.`, 6000);
+  if (typeof d.image !== 'string' || d.image.length < 100) return toast(`${file.name} has no map image in it. Export it again with the image included.`, 6000);
+  const b64 = d.image.replace(/^data:[^,]*,/, '').replace(/\s+/g, '');
+  const mime = b64.startsWith('iVBOR') ? 'image/png' : b64.startsWith('/9j/') ? 'image/jpeg' : b64.startsWith('UklGR') ? 'image/webp' : null;
+  if (!mime) return toast('The map image in that file is in a format Tabletop can\'t show (needs PNG, JPG or WebP)', 6000);
+  toast('Uploading the map image…', 30000);
+  const blob = await (await fetch(`data:${mime};base64,${b64}`)).blob();
+  const url = await uploadFile(new File([blob], file.name, { type: mime }));
+  const P = (p) => [Number(p.x) - ox, Number(p.y) - oy];
+  const walls = [];
+  const addPoly = (poly) => { if (!Array.isArray(poly)) return; for (let i = 1; i < poly.length; i++) if (poly[i - 1] && poly[i]) walls.push([...P(poly[i - 1]), ...P(poly[i])]); };
+  (d.line_of_sight || []).forEach(addPoly); (d.objects_line_of_sight || []).forEach(addPoly);
+  const doors = (d.portals || []).filter((p) => p && Array.isArray(p.bounds) && p.bounds.length >= 2).map((p) => [...P(p.bounds[0]), ...P(p.bounds[1])]);
+  const lights = (d.lights || []).filter((l) => l && l.position).map((l) => [...P(l.position), Number(l.range) || 0, '#' + String(l.color || 'ffd27f').replace('#', '').slice(-6)]);
+  const name = niceName(file.name);
+  pendingNewScene = true;
+  sendMsg({ type: 'sceneCreate', name, cols, rows, content: { bg: { url }, walls, doors, lights } });
+  toast(`Imported "${name}": ${cols} × ${rows} squares${walls.length ? `, ${walls.length} wall sections and ${doors.length} door${doors.length === 1 ? '' : 's'}. With fog of war on, Reveal room follows the walls` : ''}.`, 7000);
+}
+async function importImage(file) {
+  toast(`Uploading ${file.name}…`, 30000);
+  const url = await uploadFile(file);
+  const img = loadImg(url);
+  await (img.complete && img.naturalWidth ? Promise.resolve() : new Promise((res) => { img.addEventListener('load', res, { once: true }); img.addEventListener('error', res, { once: true }); }));
+  if (!img.naturalWidth) return toast('Couldn\'t open that image');
+  const found = detectGrid(img), px = found || guessSquare(img);
+  const cols = Math.max(5, Math.min(200, Math.round(img.naturalWidth / px))), rows = Math.max(5, Math.min(200, Math.round(img.naturalHeight / px)));
+  $('pxPerSq').value = px;
+  const name = niceName(file.name);
+  pendingNewScene = true;
+  sendMsg({ type: 'sceneCreate', name, cols, rows, content: { bg: { url } } });
+  toast(found ? `Imported "${name}": found a grid of ${px} px squares, so ${cols} × ${rows} squares.`
+    : `Imported "${name}" as ${cols} × ${rows} squares of ${px} px. If the grid doesn't line up, go to Build map → Background image, type the pixels per square and press Fit grid.`, 8000);
+}
+// Find the grid in a map image: grid lines repeat at a fixed spacing, so look for the spacing at which
+// the picture's edges line up best with themselves. Returns pixels per square, or 0 if there's no clear grid.
+function detectGrid(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const profile = (alongX) => {
+    const n = alongX ? w : h, prof = new Float32Array(n), cv = document.createElement('canvas');
+    cv.width = alongX ? n : 1; cv.height = alongX ? 1 : n;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    for (let k = 0; k < 32; k++) {
+      const at = Math.floor(((k + 0.5) / 32) * (alongX ? h : w));
+      g.clearRect(0, 0, cv.width, cv.height);
+      if (alongX) g.drawImage(img, 0, at, w, 1, 0, 0, w, 1); else g.drawImage(img, at, 0, 1, h, 0, 0, 1, h);
+      const d = g.getImageData(0, 0, cv.width, cv.height).data;
+      let prev = 0;
+      for (let i = 0; i < n; i++) { const L = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11; if (i) prof[i] += Math.abs(L - prev); prev = L; }
+    }
+    let mean = 0; for (const v of prof) mean += v; mean /= n;
+    for (let i = 0; i < n; i++) prof[i] -= mean;
+    return prof;
+  };
+  const period = (prof) => {
+    const n = prof.length, maxLag = Math.min(400, Math.floor(n / 3)), score = new Float32Array(maxLag + 1);
+    let zero = 0; for (let i = 0; i < n; i++) zero += prof[i] * prof[i]; zero /= n;
+    if (!(zero > 0)) return null;
+    let best = 0;
+    for (let lag = 20; lag <= maxLag; lag++) { let s = 0; for (let i = 0; i + lag < n; i++) s += prof[i] * prof[i + lag]; score[lag] = s / (n - lag) / zero; if (score[lag] > score[best]) best = lag; }
+    if (!best || score[best] < 0.2) return null;
+    // a multiple of the real spacing also scores well: take the smallest spacing that scores nearly as high
+    for (let lag = 20; lag < best; lag++) if (score[lag] > score[best] * 0.85 && score[lag] >= score[lag - 1] && score[lag] >= score[lag + 1] && Math.abs(best / lag - Math.round(best / lag)) < 0.08) return lag;
+    return best;
+  };
+  try {
+    const px = period(profile(true)), py = period(profile(false));
+    if (!px || !py || Math.abs(px - py) > Math.max(2, px * 0.03)) return 0;
+    const raw = (px + py) / 2, squares = Math.round(w / raw);
+    const fit = w / squares; // whole squares across the image
+    return Math.abs(fit - raw) < raw * 0.04 ? Math.round(fit * 100) / 100 : Math.round(raw);
+  } catch { return 0; } // e.g. a cross-origin image
+}
+$('importMap').onclick = () => $('importIn').click();
+$('importIn').onchange = () => { importMapFile($('importIn').files[0]); $('importIn').value = ''; };
+
 const board = $('board');
 board.addEventListener('dragover', (e) => { if (me.isDM && e.dataTransfer.types.includes('Files')) { e.preventDefault(); board.classList.add('drop'); } });
 board.addEventListener('dragleave', () => board.classList.remove('drop'));
@@ -1111,6 +1656,8 @@ board.addEventListener('drop', async (e) => {
   e.preventDefault(); board.classList.remove('drop');
   if (!me.isDM) return;
   const files = [...e.dataTransfer.files];
+  const uv = files.find((f) => UVTT_EXT.test(f.name));
+  if (uv) return importMapFile(uv);
   if (mode === 'build' && tool !== 'token') return uploadBg(files[0]);
   const c = toCell(toWorld(e)), s = sc();
   const items = await uploadTokens(files);
@@ -1297,7 +1844,7 @@ function trySet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */
 function start(name) { me.name = name; $('join').remove(); connect(); }
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
-window.tabletop = { view, cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
+window.tabletop = { view, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
 const preset = params.get('name') || (dmKey ? 'DM' : '');
 if (preset) start(preset);
 else {

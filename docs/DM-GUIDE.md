@@ -67,6 +67,25 @@ The description box reads key words (snowy, coast, walled, ruined, crypt, kobold
 
 Monsters stay out of players' sight: under the fog until you reveal their area, or marked hidden if fog is off. Dungeons start fogged by default (the **Start with fog of war** box). Everything generated can then be edited with the normal tools: use Select to drag a box round a building and move it, or click any prop to move or delete it.
 
+## Import a map
+
+Made the map somewhere else? Click **Build map**, then **📥 Import map…** under Maps, or drag the file onto the map. It opens as a new private map.
+
+| From | Export it as | What comes in |
+| --- | --- | --- |
+| **Dungeon Scrawl** | Export → **Universal VTT** (`.uvtt`, Pro) | Map, grid, walls and doors |
+| **Dungeondraft, Dungeon Alchemist**, other map makers | **Universal VTT** (`.dd2vtt`, `.df2vtt`, `.uvtt`) | Map, grid, walls and doors |
+| **Canvas of Kings** | Export → **PNG** or **WebP**, with the **square grid** turned on | The map; the grid is found from the lines |
+| Dungeon Scrawl (free), Inkarnate, anything else | PNG, JPG or WebP | The map; the grid is found if it has grid lines |
+
+**Walls:** with a Universal VTT map, **Reveal room** follows its walls: turn on Fog of war, pick Reveal room and click inside a room. It reveals the room and stops at walls and doors. In Build mode (and while using Reveal room) you see the imported walls in blue and doors in orange; players never receive them.
+
+![An imported Universal VTT map in Build mode: walls in blue, the door in orange, one room revealed](images/import-walls.jpg)
+
+**Images:** Tabletop looks for grid lines and sizes the map so the squares match, and tells you what it found. If it couldn't find a grid (or got it wrong), open **Background image**, type how many pixels one square is in the image and press **Fit grid**. Exporting from Canvas of Kings with the square grid showing gives the best result. Hex grids aren't supported yet.
+
+Maps can be up to 200 × 200 squares, and images up to 100 MB.
+
 ## Build a map by hand
 
 In **Build map** mode the tools are on the left; one square is 5 ft. The line under Undo/Redo says what the current tool does.
@@ -123,6 +142,26 @@ Click **Token library…** in the right-hand panel: 215 ready-made tokens in cat
 
 **Players** click their own token to get the same HP box for their character: they can track their own damage, temp HP, initiative bonus and conditions (but nobody else's). Monsters they can't see (hidden, or in the fog) don't appear in their initiative list.
 
+## Table tools
+
+The bar on the left of the map in Play mode has the tools you and the players use during play. `Esc` always goes back to **Move**.
+
+| Tool | Key | What it does |
+| --- | --- | --- |
+| Move | V | Drag tokens. Dragging a token shows how far it has moved; press `Space` mid-drag to add a corner |
+| Ruler | R | Drag to measure in feet; `Space` adds a corner. Everyone sees it while you measure |
+| Spell | T | Spell templates: cone, sphere, cube, line, cylinder (see below) |
+| Ping | P | Click to flash a spot for everyone. `Shift`+click also moves everyone's view there. `Alt`+click pings with any tool |
+| Label | L | Text on the map, and notes only you can see (see below) |
+
+**Diagonals:** by default every square counts 5 ft, diagonals too (the 5e rule). For the 5 / 10 / 5 variant, set **Ruler diagonals** in Build map → map settings. It's per map.
+
+**Spell templates:** pick the shape in the bar at the bottom of the map. Drag from where the spell starts and let go: the drag sets the direction and size (a sphere's or cylinder's drag sets its radius; a cube goes from one corner to the opposite one). Or type the size and just click. The squares it covers are shaded. Click a template to select it: drag to move it, drag its dot to re-aim or resize, `Del` removes it. You can change or remove anyone's; **Clear all** removes every template on the map. Players' templates are in their own colour, with their name when selected.
+
+**Labels and notes:** with the Label tool, click the map, type the text, pick a size and press Enter. Tick **DM note** for something only you see (shown as a yellow sticky note): trap DCs, what's in the chest, reminders. Drag a label to move it; click it to edit or delete it. With fog of war on, players see a label once its square is revealed.
+
+Players' moves and rulers show on your screen too. Your own token moves aren't shown to players, so dragging a monster in the dark gives nothing away (your ruler and pings are shown).
+
 ## Dice
 
 Everyone rolls in the right-hand panel: the die buttons, or type any roll such as `2d6+3`, `4d6kh3` or `d100`. Rolls happen on your PC, so nobody can fudge them, and everyone sees the log. Tick **Roll privately** for rolls players shouldn't see; a player's private roll is seen only by them and you.
@@ -131,4 +170,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Importing MapTool campaigns, map labels, ruler and spell templates, and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
+Importing MapTool campaigns, and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
