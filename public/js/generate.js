@@ -94,7 +94,7 @@ function makeMap(cols, rows, seed) {
     },
     prop(kind, x, y, rot = 0) { if (M.inb(x, y)) props.push({ kind, x, y, rot }); },
     propAt: (x, y) => props.some((p) => p.x === x && p.y === y),
-    token(entry, x, y, extra = {}) { if (entry && M.inb(x, y)) tokens.push({ label: extra.label || entry.name, icon: entry.icon, color: entry.color, size: entry.size, x, y, owner: '', ...extra }); }
+    token(entry, x, y, extra = {}) { if (entry && M.inb(x, y)) tokens.push({ label: extra.label || entry.name, icon: entry.icon, color: entry.color, size: entry.size, x, y, owner: '', ...(entry.hp ? { hp: entry.hp, maxHp: entry.hp } : {}), ...(entry.init != null ? { initBonus: entry.init } : {}), ...extra }); }
   };
   return M;
 }

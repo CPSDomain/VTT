@@ -105,6 +105,24 @@ Click **Token library…** in the right-hand panel: 215 ready-made tokens in cat
 - **Click any token** to edit it in the Selected token panel: name, art, colour, owner and size. **Duplicate** copies it with the next number. Delete removes it.
 - **Hidden from players:** a hidden token shows faded with a dashed ring on your screen only. Untick to reveal it. Tick **Add hidden** before adding to place an ambush.
 
+## Combat
+
+![Combat](images/combat.jpg)
+
+**Start:** click **⚔ Start combat** at the top of the right-hand panel. Every token on the map joins; remove anyone who isn't fighting with ✕, or add more later with **+ Selected** (or **⚔ Add to initiative** on a selected token).
+
+**Roll initiative:** **🎲 Roll for monsters** rolls 1d20 + initiative bonus for every monster without a score (your rolls stay private). Players click 🎲 next to their name or type their score; you can type anyone's. The list sorts itself, highest first.
+
+**Run turns:** **Next turn ▶** moves down the list and starts the next round at the bottom; **◀** goes back. Whose turn it is glows gold on the map. Click a name to select that token and bring it into view. **End combat** (click twice) clears the tracker.
+
+**Hit points:** select a token to see its HP box. Library monsters come with their standard HP and initiative bonus; for others, type HP and max HP. To hurt or heal, type the amount and press **Damage** or **Heal** (Enter = damage, Shift+Enter = heal). Temporary HP soaks damage first. At 0 HP a token is darkened and crossed out.
+
+**What players see of HP** is set per token under **Players see**: HP numbers, a health bar only, or nothing. By default player characters show numbers and everything else shows a bar.
+
+**Conditions:** click the icons under Conditions to toggle them; they appear on the token and in the initiative list.
+
+**Players** click their own token to get the same HP box for their character: they can track their own damage, temp HP, initiative bonus and conditions (but nobody else's). Monsters they can't see (hidden, or in the fog) don't appear in their initiative list.
+
 ## Dice
 
 Everyone rolls in the right-hand panel: the die buttons, or type any roll such as `2d6+3`, `4d6kh3` or `d100`. Rolls happen on your PC, so nobody can fudge them, and everyone sees the log. Tick **Roll privately** for rolls players shouldn't see; a player's private roll is seen only by them and you.
@@ -113,4 +131,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Initiative tracker, importing MapTool campaigns, map labels and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
+Importing MapTool campaigns, map labels, ruler and spell templates, and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.

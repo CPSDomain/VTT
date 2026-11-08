@@ -9,13 +9,16 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
 const PROPS = CATALOG.props.map((p) => p.id);
 const DM_ONLY = new Set(CATALOG.props.filter((p) => p.dmOnly).map((p) => p.id)); // secret doors, traps
-const ICONS = new Set(Object.keys(JSON.parse(fs.readFileSync(path.join(PUBLIC, 'tokens.json'), 'utf8')).icons));
+const TOKENS_JSON = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'tokens.json'), 'utf8'));
+const ICONS = new Set(Object.keys(TOKENS_JSON.icons));
+const CONDITIONS = new Set((TOKENS_JSON.conditions || []).map((c) => c.id));
+const HP_SHOW = ['numbers', 'bar', 'none'];
 const UPLOAD_URL = /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/;
 const MAX_SIDE = 120;
 const MIME = {
@@ -175,6 +178,42 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
   const playersOnScene = (sceneId) => clients().filter((c) => !c.user.isDM && sceneId === state.activeScene);
 
+  // How much of a token's health a player may see. Their own tokens: everything. Others: by the token's
+  // "players see HP" setting (default: numbers for player characters, just a bar for everything else).
+  function tokenFor(t, u) {
+    if (u.isDM || (t.owner && t.owner === u.name)) return t;
+    const show = t.hpShow || (t.owner ? 'numbers' : 'bar');
+    if (show === 'numbers') return t;
+    const { hp, maxHp, tempHp, initBonus, ...rest } = t;
+    if (show === 'bar' && maxHp > 0 && hp != null) rest.hpPct = Math.round(clamp(hp / maxHp, 0, 1) * 100);
+    return rest;
+  }
+
+  // ---------- initiative ----------
+  const combatOf = (sc) => (sc.combat = sc.combat || { active: false, round: 1, turnId: null, entries: [] });
+  function sortCombat(sc) {
+    const c = combatOf(sc);
+    c.entries = c.entries.filter((e) => sc.tokens[e.id]);
+    c.entries.sort((a, b) => (b.init ?? -999) - (a.init ?? -999) || ((sc.tokens[b.id].initBonus || 0) - (sc.tokens[a.id].initBonus || 0)) || sc.tokens[a.id].label.localeCompare(sc.tokens[b.id].label));
+    // until the first Next, the turn stays with whoever is top of the order as initiatives come in
+    if (!c.started || (c.turnId && !c.entries.some((e) => e.id === c.turnId))) c.turnId = c.entries[0] ? c.entries[0].id : null;
+    if (!c.turnId && c.entries.length) c.turnId = c.entries[0].id;
+  }
+  // Players see only combatants they can see; if it's an unseen creature's turn they just see that.
+  function combatFor(sc, u) {
+    const c = combatOf(sc);
+    if (u.isDM || !c.active) return c;
+    const entries = c.entries.filter((e) => sc.tokens[e.id] && tokVisible(sc, sc.tokens[e.id], u));
+    const turnSeen = entries.some((e) => e.id === c.turnId);
+    return { active: true, round: c.round, turnId: turnSeen ? c.turnId : null, hiddenTurn: !turnSeen && !!c.turnId, entries };
+  }
+  function sendCombat(sc) {
+    clients().forEach((c) => {
+      if (c.user.isDM) send(c, { type: 'combat', sceneId: sc.id, combat: combatOf(sc) });
+      else if (sc.id === state.activeScene) send(c, { type: 'combat', sceneId: sc.id, combat: combatFor(sc, c.user) });
+    });
+  }
+
   // What a player is allowed to see of a scene: no secret doors, traps or hidden tokens,
   // and under fog of war only the revealed cells (plus their own tokens).
   function playerScene(sc, u) {
@@ -183,8 +222,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     const fog = fogOn(sc), tiles = {}, props = {}, tokens = {};
     for (const [k, t] of Object.entries(sc.tiles)) { if (!fog) { tiles[k] = t; continue; } const [x, y] = k.split(',').map(Number); if (revealed(sc, x, y)) tiles[k] = t; }
     for (const [k, p] of Object.entries(sc.props)) if (!DM_ONLY.has(p.kind) && revealed(sc, p.x, p.y)) props[k] = p;
-    for (const [k, t] of Object.entries(sc.tokens)) if (tokVisible(sc, t, u)) tokens[k] = t;
-    return { ...sc, tiles, props, tokens };
+    for (const [k, t] of Object.entries(sc.tokens)) if (tokVisible(sc, t, u)) tokens[k] = tokenFor(t, u);
+    return { ...sc, tiles, props, tokens, combat: combatFor(sc, u) };
   }
   function sendSceneFull(sc) {
     syncFog(sc);
@@ -198,9 +237,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     toDMs({ type: 'token', sceneId: sc.id, token: tok });
     for (const c of playersOnScene(sc.id)) {
       const now = tokVisible(sc, tok, c.user), was = before ? tokVisible(sc, before, c.user) : false;
-      if (now) send(c, { type: 'token', sceneId: sc.id, token: tok });
+      if (now) send(c, { type: 'token', sceneId: sc.id, token: tokenFor(tok, c.user) });
       else if (was) send(c, { type: 'removeToken', sceneId: sc.id, id: tok.id });
     }
+    // a combatant stepping in or out of sight changes the players' initiative list
+    if (sc.combat && sc.combat.active && sc.combat.entries.some((e) => e.id === tok.id) && (!before || tokVisible(sc, before, {}) !== tokVisible(sc, tok, {}) || before.x !== tok.x || before.y !== tok.y || before.hidden !== tok.hidden)) sendCombat(sc);
   }
   function viewFor(u) {
     const base = { activeScene: state.activeScene, log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
@@ -218,6 +259,13 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (m.hidden != null) t.hidden = !!m.hidden;
     if (m.icon !== undefined) t.icon = typeof m.icon === 'string' && ICONS.has(m.icon) ? m.icon : null;
     if (m.img !== undefined) t.img = typeof m.img === 'string' && UPLOAD_URL.test(m.img) ? m.img : null;
+    const hpVal = (v, lo) => (v === null || v === '' ? null : clamp(int(v, 0), lo, 99999));
+    if (m.hp !== undefined) t.hp = hpVal(m.hp, -999);
+    if (m.maxHp !== undefined) t.maxHp = hpVal(m.maxHp, 0);
+    if (m.tempHp !== undefined) t.tempHp = clamp(int(m.tempHp, 0), 0, 9999);
+    if (m.hpShow !== undefined) t.hpShow = HP_SHOW.includes(m.hpShow) ? m.hpShow : undefined;
+    if (m.initBonus !== undefined) t.initBonus = clamp(int(m.initBonus, 0), -10, 30);
+    if (m.conditions !== undefined) t.conditions = Array.isArray(m.conditions) ? [...new Set(m.conditions.filter((c) => CONDITIONS.has(c)))].slice(0, 24) : [];
     if (m.x != null) t.x = clamp(int(m.x, 0), 0, sc.cols - (t.size || 1));
     if (m.y != null) t.y = clamp(int(m.y, 0), 0, sc.rows - (t.size || 1));
     return t;
@@ -297,16 +345,97 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         break;
       }
       case 'tokenUpdate': {
-        if (!u.isDM || !tok) return;
+        if (!tok) return;
+        const mine = tok.owner && tok.owner === u.name;
+        if (!u.isDM && !mine) return;
         const before = { ...tok };
-        Object.assign(tok, tokenFields({ ...msg, x: msg.x ?? tok.x, y: msg.y ?? tok.y, size: msg.size ?? tok.size }, sc, tok));
+        // players can only change their own character's health, conditions and initiative bonus
+        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus'].filter((k) => k in msg).map((k) => [k, msg[k]]));
+        Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
+        tokenChanged(sc, tok, before);
+        if (sc.combat && sc.combat.active && 'initBonus' in m) { sortCombat(sc); sendCombat(sc); }
+        save();
+        break;
+      }
+      case 'hpChange': { // damage (negative) or healing (positive); temporary HP soaks damage first
+        if (!tok || (!u.isDM && !(tok.owner && tok.owner === u.name))) return;
+        const amt = clamp(int(msg.amount, 0), -99999, 99999);
+        if (!amt || (tok.hp == null && tok.maxHp == null)) return;
+        const before = { ...tok };
+        let hp = tok.hp ?? tok.maxHp ?? 0, temp = tok.tempHp || 0;
+        if (amt < 0) { const soak = Math.min(temp, -amt); temp -= soak; hp = Math.max(0, hp - (-amt - soak)); }
+        else hp = tok.maxHp ? Math.min(tok.maxHp, hp + amt) : hp + amt;
+        tok.hp = hp; tok.tempHp = temp;
         tokenChanged(sc, tok, before); save();
         break;
       }
       case 'removeToken':
         if (!u.isDM || !tok) return;
         delete sc.tokens[msg.id];
-        toScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: msg.id }); save();
+        toScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: msg.id });
+        if (sc.combat && sc.combat.entries.some((e) => e.id === msg.id)) { sortCombat(sc); sendCombat(sc); }
+        save();
+        break;
+
+      // ----- initiative -----
+      case 'combatStart': case 'combatAdd': {
+        if (!u.isDM || !sc) return;
+        const c = combatOf(sc);
+        if (msg.type === 'combatStart' && !c.active) Object.assign(c, { active: true, round: 1, turnId: null, started: false, entries: [] });
+        c.active = true;
+        const ids = Array.isArray(msg.ids) ? msg.ids : [];
+        for (const id of ids.slice(0, 200)) if (sc.tokens[id] && !c.entries.some((e) => e.id === id)) c.entries.push({ id, init: null });
+        sortCombat(sc); sendCombat(sc); save();
+        break;
+      }
+      case 'combatRemove':
+        if (!u.isDM || !sc || !sc.combat) return;
+        if (sc.combat.turnId === msg.tokenId) { const i = sc.combat.entries.findIndex((e) => e.id === msg.tokenId); const nx = sc.combat.entries[i + 1] || sc.combat.entries[0]; sc.combat.turnId = nx && nx.id !== msg.tokenId ? nx.id : null; }
+        sc.combat.entries = sc.combat.entries.filter((e) => e.id !== msg.tokenId);
+        sortCombat(sc); sendCombat(sc); save();
+        break;
+      case 'combatInit': { // set an initiative score by hand: the DM for anyone, a player for their own token
+        const c = sc && sc.combat, e = c && c.entries.find((x) => x.id === msg.tokenId), t = e && sc.tokens[e.id];
+        if (!t || (!u.isDM && !(t.owner && t.owner === u.name))) return;
+        e.init = msg.init === null || msg.init === '' ? null : clamp(int(msg.init, 0), -10, 60);
+        sortCombat(sc); sendCombat(sc); save();
+        break;
+      }
+      case 'combatRoll': { // roll 1d20 + initiative bonus. DM: any listed tokens, or "monsters"; player: their own
+        const c = sc && sc.combat; if (!c || !c.active) return;
+        let list = c.entries;
+        if (msg.who === 'monsters') list = list.filter((e) => !sc.tokens[e.id].owner);
+        else if (Array.isArray(msg.tokenIds)) list = list.filter((e) => msg.tokenIds.includes(e.id));
+        if (!u.isDM) list = list.filter((e) => sc.tokens[e.id].owner === u.name);
+        if (msg.onlyUnrolled) list = list.filter((e) => e.init == null);
+        for (const e of list.slice(0, 100)) {
+          const t = sc.tokens[e.id], b = t.initBonus || 0;
+          const r = rollDice('1d20' + (b ? (b > 0 ? '+' : '') + b : ''));
+          e.init = r.total;
+          // monsters' rolls stay between the DM and the dice
+          const who = u.isDM && !t.owner ? 'DM' : u.name;
+          const entry = { who, label: t.label === who ? 'Initiative' : `${t.label} · Initiative`, expr: '1d20' + (b ? (b > 0 ? '+' : '') + b : ''), ...r, private: u.isDM && !t.owner, time: Date.now() };
+          state.log.push(entry);
+          clients().forEach((cl) => canSee(cl.user, entry) && send(cl, { type: 'roll', entry }));
+        }
+        state.log = state.log.slice(-200);
+        sortCombat(sc); sendCombat(sc); save();
+        break;
+      }
+      case 'combatNext': case 'combatPrev': {
+        const c = sc && sc.combat;
+        if (!u.isDM || !c || !c.active || !c.entries.length) return;
+        sortCombat(sc); c.started = true;
+        const i = Math.max(0, c.entries.findIndex((e) => e.id === c.turnId));
+        if (msg.type === 'combatNext') { if (i + 1 >= c.entries.length) { c.round++; c.turnId = c.entries[0].id; } else c.turnId = c.entries[i + 1].id; }
+        else if (i === 0) { if (c.round > 1) { c.round--; c.turnId = c.entries[c.entries.length - 1].id; } } else c.turnId = c.entries[i - 1].id;
+        sendCombat(sc); save();
+        break;
+      }
+      case 'combatEnd':
+        if (!u.isDM || !sc) return;
+        sc.combat = { active: false, round: 1, turnId: null, entries: [] };
+        sendCombat(sc); save();
         break;
 
       // ----- token library (DM only): uploaded images reusable as token art -----
@@ -390,13 +519,14 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
             if (v) { // send what's now in view
               const tiles = {}; for (const k of set) if (sc.tiles[k]) tiles[k] = sc.tiles[k];
               const props = Object.values(sc.props).filter((p) => set.has(p.x + ',' + p.y) && !DM_ONLY.has(p.kind));
-              const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user));
+              const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user)).map((t) => tokenFor(t, c.user));
               send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens });
             } else { // cover it again: tokens that dropped out of sight go too
               const gone = Object.values(sc.tokens).filter((t) => touches(t) && !tokVisible(sc, t, c.user)).map((t) => t.id);
               send(c, { type: 'fogHide', sceneId: sc.id, cells: changed, tokens: gone });
             }
           }
+          if (sc.combat && sc.combat.active) sendCombat(sc);
         }
         save();
         break;

@@ -13,14 +13,9 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 | 0.4 | 69 props, token library (215 tokens + uploads), hidden tokens, map generators, Select tool for map pieces |
 | 0.5 | Fog of war with Reveal room, brushes, and nothing hidden sent to players |
 | 0.6 | Map generator v2: describe the map in words, many more settings, dungeon styles, wilderness kinds, building interiors, seeds |
+| 0.7 | Combat: initiative tracker, HP with damage/heal and per-token visibility, 24 conditions, monster stats |
 
 ## Next
-
-### 0.7 — Combat 📋
-- Initiative tracker: add tokens, roll or type initiative, turn order, next turn, round counter
-- Whose turn it is highlighted on the map
-- HP bars on tokens (DM chooses who sees exact numbers), temporary HP
-- Conditions as markers on tokens (prone, poisoned, concentrating, and the rest of the standard set)
 
 ### 0.8 — Table tools 📋
 - Ruler: measure distance in feet, with 5e diagonal rules

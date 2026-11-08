@@ -5,6 +5,23 @@ let onReady = () => {};
 export const ready = fetch('tokens.json').then((r) => r.json()).then((d) => { data = d; onReady(); return d; }).catch(() => data);
 export const whenArtLoads = (fn) => { onReady = fn; };
 export const builtins = () => data.library;
+export const conditions = () => data.conditions || [];
+const condById = () => Object.fromEntries((data.conditions || []).map((c) => [c.id, c]));
+
+// A small round condition badge (white icon on the condition's colour).
+export function drawCondition(g, id, cx, cy, r, redraw = () => {}) {
+  const c = condById()[id]; if (!c) return;
+  g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fillStyle = c.color; g.fill();
+  g.lineWidth = Math.max(1, r * 0.18); g.strokeStyle = 'rgba(0,0,0,.75)'; g.stroke();
+  const ic = iconImage(c.icon, '#ffffff', redraw);
+  if (ic && ic.complete && ic.naturalWidth) { const s = r * 1.45; g.drawImage(ic, cx - s / 2, cy - s / 2, s, s); }
+}
+export function conditionThumb(id, px, canvas) {
+  const c = canvas || document.createElement('canvas'); c.width = c.height = px * 2;
+  const g = c.getContext('2d');
+  const paint = () => { g.clearRect(0, 0, c.width, c.height); drawCondition(g, id, px, px, px - 2, paint); };
+  paint(); return c;
+}
 export const credit = () => data.credit;
 
 function luminance(hex) {

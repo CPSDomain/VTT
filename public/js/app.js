@@ -1,7 +1,7 @@
 import { CELL, TERRAINS, PROPS, PROP_CATS, DM_ONLY, texture, drawProp, swatch } from './art.js';
 import { generate, SCHEMA, defaults } from './generate.js';
 import { interpret, EXAMPLES } from './prompt.js';
-import { drawTokenArt, thumb, builtins, credit, whenArtLoads } from './tokens.js';
+import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -62,8 +62,9 @@ function onMessage(msg) {
     }
     case 'presence': players = msg.players; renderPlayers(); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
-    case 'token': if (s) { s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); } break;
-    case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); } break;
+    case 'token': if (s) { s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
+    case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); } } break;
+    case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); renderInit(); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
     case 'prop': if (s) s.props[msg.prop.id] = msg.prop; break;
     case 'fog': if (s) { const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = msg.reveal ? 1 : 0; fogDirty = true; if (fogTool === 'room' && hover) fogPreview = roomCells(s, hover); } break;
@@ -128,6 +129,7 @@ function sceneChanged(refit) {
   const s = sc();
   if (!s) return;
   fogDirty = true;
+  renderInit(); renderEditor();
   if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
   if (s.bg) loadImg(s.bg.url);
@@ -261,15 +263,41 @@ function render() {
   drawFog(s);
 
   // tokens (hidden ones only ever reach the DM, drawn faded)
+  const turnId = s.combat && s.combat.active ? s.combat.turnId : null;
   for (const t of Object.values(s.tokens)) {
     const pos = drag && drag.id === t.id ? drag.pos : { x: t.x * CELL, y: t.y * CELL };
     const rad = (t.size * CELL) / 2, cx = pos.x + rad, cy = pos.y + rad;
+    if (t.id === turnId) { // whose turn it is: a glowing gold ring
+      ctx.save(); ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 18; ctx.lineWidth = 5; ctx.strokeStyle = '#fbbf24';
+      ctx.beginPath(); ctx.arc(cx, cy, rad - 1, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
     ctx.globalAlpha = t.hidden ? 0.5 : 1;
     drawTokenArt(ctx, t, cx, cy, rad - 4, draw);
+    const pct = hpFraction(t);
+    if (pct === 0) { // down: darken and cross out
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(220,38,38,.9)'; ctx.lineWidth = Math.max(3, rad * 0.12); const d = rad * 0.45;
+      ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); ctx.stroke();
+    }
     ctx.lineWidth = t.id === selected ? 4 : 2.5;
     ctx.strokeStyle = t.id === selected ? '#fff' : t.owner && t.owner !== '*' ? 'rgba(255,255,255,.75)' : 'rgba(0,0,0,.65)';
     if (t.hidden) ctx.setLineDash([6, 4]);
     ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    // health bar along the bottom of the token
+    if (pct != null) {
+      const bw = t.size * CELL * 0.72, bh = Math.max(4, t.size * 3), bx = cx - bw / 2, by = pos.y + t.size * CELL - 14 - bh;
+      ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = pct > 0.5 ? '#22c55e' : pct > 0.25 ? '#f59e0b' : '#ef4444'; ctx.fillRect(bx, by, bw * pct, bh);
+      if (t.tempHp > 0 && t.maxHp > 0) { ctx.fillStyle = '#38bdf8'; ctx.fillRect(bx + bw * Math.min(1, pct), by, Math.min(bw * (1 - pct) + bw * 0.25, bw * t.tempHp / t.maxHp), bh); }
+    }
+    // condition badges round the top-right of the token
+    const conds = t.conditions || [];
+    if (conds.length) {
+      const r = Math.max(7, rad * 0.24), shown = conds.slice(0, conds.length > 5 ? 4 : 5);
+      shown.forEach((id, i) => { const a = -Math.PI / 2 + 0.5 + i * 0.62; drawCondition(ctx, id, cx + Math.cos(a) * (rad - 3), cy + Math.sin(a) * (rad - 3), r, draw); });
+      if (conds.length > 5) { const a = -Math.PI / 2 + 0.5 + 4 * 0.62, x = cx + Math.cos(a) * (rad - 3), y = cy + Math.sin(a) * (rad - 3);
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = '#111'; ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `700 ${r}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('+' + (conds.length - 4), x, y + 1); }
+    }
     ctx.globalAlpha = 1;
     if (view.zoom > 0.55) { // name tag under the token
       ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -544,7 +572,7 @@ function tokenAt(s, p) {
 // art chosen for the next token(s) placed: { icon } or { img }, plus defaults from the library entry
 let art = { name: 'Plain token' };
 function setArt(entry) {
-  art = entry ? { icon: entry.icon || null, img: entry.url || entry.img || null, name: entry.name } : { name: 'Plain token' };
+  art = entry ? { icon: entry.icon || null, img: entry.url || entry.img || null, name: entry.name, hp: entry.hp, init: entry.init } : { name: 'Plain token' };
   if (entry) {
     $('tLabel').value = nextFreeName(entry.name);
     if (entry.color) $('tColor').value = entry.color;
@@ -562,26 +590,133 @@ function nextFreeName(base) {
   let n = 1; while (names.has(`${base} ${n}`)) n++;
   return `${base} ${n}`;
 }
-function select(id) { selected = id; renderEditor(); draw(); }
+function select(id) { selected = id; renderEditor(); renderInit(); draw(); }
 function addToken(x, y) {
   const label = $('tLabel').value.trim() || 'Token';
-  sendMsg({ type: 'addToken', sceneId: editing, label, color: $('tColor').value, owner: $('tOwner').value, size: $('tSize').value, x, y, icon: art.icon || null, img: art.img || null, hidden: $('tHidden').checked });
+  const stats = art.hp ? { hp: art.hp, maxHp: art.hp } : {};
+  if (art.init != null) stats.initBonus = art.init;
+  sendMsg({ type: 'addToken', sceneId: editing, label, color: $('tColor').value, owner: $('tOwner').value, size: $('tSize').value, x, y, icon: art.icon || null, img: art.img || null, hidden: $('tHidden').checked, ...stats });
   // number the next one automatically: "Goblin 1" -> "Goblin 2"
   const m = label.match(/^(.*?)(\d+)$/);
   $('tLabel').value = m ? m[1] + (Number(m[2]) + 1) : label + ' 2';
 }
 
-// ----- selected token editor (DM) -----
+// ----- selected token panel: DM edits everything; players edit their own character's health and conditions -----
+const mine = (t) => t && t.owner && t.owner === me.name;
+// fraction of health left (0–1), or null when unknown/not shown
+function hpFraction(t) {
+  if (t.maxHp > 0 && t.hp != null) return Math.max(0, Math.min(1, t.hp / t.maxHp));
+  if (t.hpPct != null) return t.hpPct / 100;
+  return null;
+}
 function renderEditor() {
   const t = selected && sc() && sc().tokens[selected];
-  $('editSec').classList.toggle('off', !(me.isDM && t));
-  if (!t || !me.isDM) return;
-  const keep = document.activeElement;
-  if (keep !== $('eLabel')) $('eLabel').value = t.label;
-  if (keep !== $('eOwner')) $('eOwner').value = t.owner || '';
-  $('eColor').value = t.color; $('eSize').value = String(t.size); $('eHidden').checked = !!t.hidden;
-  thumb(t, 44, $('editArt'));
+  const show = !!t && (me.isDM || mine(t));
+  $('editSec').classList.toggle('off', !show);
+  if (!show) return;
+  $('editTitle').textContent = me.isDM ? 'Selected token' : t.label;
+  const keep = document.activeElement, setv = (id, v) => { if (keep !== $(id)) $(id).value = v ?? ''; };
+  if (me.isDM) {
+    setv('eLabel', t.label); setv('eOwner', t.owner || '');
+    $('eColor').value = t.color; $('eSize').value = String(t.size); $('eHidden').checked = !!t.hidden;
+    $('eHpShow').value = t.hpShow || '';
+    thumb(t, 44, $('editArt'));
+    const c = sc().combat; $('eToInit').textContent = c && c.active && c.entries.some((e) => e.id === t.id) ? '✓ In initiative' : '⚔ Add to initiative';
+  }
+  setv('eHp', t.hp); setv('eMaxHp', t.maxHp); setv('eTemp', t.tempHp || ''); setv('eInit', t.initBonus ?? '');
+  const on = new Set(t.conditions || []);
+  $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
 }
+function buildConditionGrid() {
+  const box = $('eConds'); box.innerHTML = '';
+  for (const c of conditions()) {
+    const b = document.createElement('button'); b.dataset.id = c.id; b.title = c.name;
+    b.appendChild(conditionThumb(c.id, 14));
+    b.onclick = () => {
+      const t = sc() && sc().tokens[selected]; if (!t) return;
+      const set = new Set(t.conditions || []); set.has(c.id) ? set.delete(c.id) : set.add(c.id);
+      updateSelected({ conditions: [...set] });
+    };
+    box.appendChild(b);
+  }
+}
+const numOrNull = (v) => (String(v).trim() === '' ? null : Number(v));
+$('eHp').onchange = () => updateSelected({ hp: numOrNull($('eHp').value) });
+$('eMaxHp').onchange = () => { const t = sc().tokens[selected]; const max = numOrNull($('eMaxHp').value); updateSelected(t && t.hp == null && max != null ? { maxHp: max, hp: max } : { maxHp: max }); };
+$('eTemp').onchange = () => updateSelected({ tempHp: Number($('eTemp').value) || 0 });
+$('eInit').onchange = () => updateSelected({ initBonus: Number($('eInit').value) || 0 });
+$('eHpShow').onchange = () => updateSelected({ hpShow: $('eHpShow').value || null });
+const applyHp = (sign) => {
+  const n = Math.abs(parseInt($('eAmt').value, 10)); if (!n || !selected) return;
+  const t = sc().tokens[selected];
+  if (t && t.hp == null && t.maxHp == null) return toast('Set the token\'s HP first');
+  sendMsg({ type: 'hpChange', sceneId: editing, id: selected, amount: sign * n }); $('eAmt').value = '';
+};
+$('eDmg').onclick = () => applyHp(-1); $('eHeal').onclick = () => applyHp(1);
+$('eAmt').onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); applyHp(e.shiftKey ? 1 : -1); } };
+$('eToInit').onclick = () => {
+  if (!selected) return;
+  const c = sc().combat;
+  sendMsg({ type: c && c.active ? 'combatAdd' : 'combatStart', sceneId: editing, ids: [selected] });
+};
+
+// ----- initiative panel -----
+function renderInit() {
+  const s = sc(), c = s && s.combat;
+  const active = !!(c && c.active);
+  $('initSec').classList.toggle('off', !active);
+  $('startSec').classList.toggle('off', active || !me.isDM);
+  if (!active) return;
+  $('initRound').textContent = `Round ${c.round}`;
+  $('initHidden').style.display = c.hiddenTurn ? '' : 'none';
+  const list = $('initList'); list.innerHTML = '';
+  if (!c.entries.length) list.innerHTML = '<div class="hint">No one yet. Select a token and click "+ Selected", or add everyone on the map.</div>';
+  for (const e of c.entries) {
+    const t = s.tokens[e.id]; if (!t) continue;
+    const row = document.createElement('div');
+    const frac = hpFraction(t);
+    row.className = 'irow' + (e.id === c.turnId ? ' turn' : '') + (frac === 0 ? ' down' : '');
+    const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = e.id === c.turnId ? '▸' : ''; row.appendChild(arrow);
+    row.appendChild(thumb(t, 13));
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = (t.hidden ? '◌ ' : '') + t.label;
+    for (const id of (t.conditions || []).slice(0, 4)) { const cc = conditions().find((x) => x.id === id); if (cc) { const dot = document.createElement('span'); dot.className = 'ci'; dot.style.background = cc.color; dot.title = cc.name; nm.appendChild(dot); } }
+    row.appendChild(nm);
+    // health
+    const hp = document.createElement('span'); hp.className = 'hp';
+    if (t.hp != null && t.maxHp != null) { hp.innerHTML = `<b>${t.hp}</b>/${t.maxHp}`; if (t.tempHp > 0) { const tm = document.createElement('span'); tm.className = 'tmp'; tm.textContent = ` +${t.tempHp}`; hp.appendChild(tm); } }
+    else if (frac != null) { const bar = document.createElement('div'); bar.className = 'minibar'; const f = document.createElement('div'); f.style.width = frac * 100 + '%'; f.style.background = frac > 0.5 ? '#22c55e' : frac > 0.25 ? '#f59e0b' : '#ef4444'; bar.appendChild(f); hp.appendChild(bar); }
+    row.appendChild(hp);
+    // initiative: editable by the DM, and by a player for their own token
+    if (me.isDM || mine(t)) {
+      if (e.init == null && (mine(t) || !me.isDM)) { const rb = document.createElement('button'); rb.className = 'rl'; rb.textContent = '🎲'; rb.title = `Roll initiative (1d20${t.initBonus ? (t.initBonus > 0 ? '+' : '') + t.initBonus : ''})`; rb.onclick = (ev) => { ev.stopPropagation(); sendMsg({ type: 'combatRoll', sceneId: editing, tokenIds: [t.id] }); }; row.appendChild(rb); }
+      const inp = document.createElement('input'); inp.type = 'number'; inp.value = e.init ?? ''; inp.placeholder = '–'; inp.title = 'Initiative';
+      inp.onclick = (ev) => ev.stopPropagation();
+      inp.onchange = () => sendMsg({ type: 'combatInit', sceneId: editing, tokenId: t.id, init: inp.value === '' ? null : Number(inp.value) });
+      row.appendChild(inp);
+    } else { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = e.init ?? '–'; row.appendChild(ini); }
+    if (me.isDM) { const x = document.createElement('button'); x.className = 'x'; x.textContent = '✕'; x.title = 'Remove from initiative'; x.onclick = (ev) => { ev.stopPropagation(); sendMsg({ type: 'combatRemove', sceneId: editing, tokenId: t.id }); }; row.appendChild(x); }
+    row.onclick = () => { select(t.id); centreOn(t); };
+    list.appendChild(row);
+  }
+}
+function centreOn(t) {
+  const r = canvas.getBoundingClientRect(), cx = (t.x + t.size / 2) * CELL, cy = (t.y + t.size / 2) * CELL;
+  const sx = view.x + cx * view.zoom, sy = view.y + cy * view.zoom;
+  if (sx < 60 || sy < 60 || sx > r.width - 60 || sy > r.height - 60) { view.x = r.width / 2 - cx * view.zoom; view.y = r.height / 2 - cy * view.zoom; draw(); }
+}
+// Everyone players can see, plus every monster (the DM decides who's actually in the fight)
+const allTokenIds = () => Object.values(sc().tokens).map((t) => t.id);
+$('combatStart').onclick = () => sendMsg({ type: 'combatStart', sceneId: editing, ids: allTokenIds() });
+$('initAddAll').onclick = () => sendMsg({ type: 'combatAdd', sceneId: editing, ids: allTokenIds() });
+$('initAddSel').onclick = () => selected ? sendMsg({ type: 'combatAdd', sceneId: editing, ids: [selected] }) : toast('Click a token on the map first');
+$('initRollMon').onclick = () => sendMsg({ type: 'combatRoll', sceneId: editing, who: 'monsters', onlyUnrolled: true });
+$('initNext').onclick = () => sendMsg({ type: 'combatNext', sceneId: editing });
+$('initPrev').onclick = () => sendMsg({ type: 'combatPrev', sceneId: editing });
+$('initEnd').onclick = (ev) => {
+  const b = ev.currentTarget;
+  if (!b.dataset.armed) { b.dataset.armed = 1; b.textContent = 'Click again to end'; setTimeout(() => { delete b.dataset.armed; b.textContent = 'End combat'; }, 3000); return; }
+  delete b.dataset.armed; b.textContent = 'End combat'; sendMsg({ type: 'combatEnd', sceneId: editing });
+};
 const updateSelected = (patch) => selected && sendMsg({ type: 'tokenUpdate', sceneId: editing, id: selected, ...patch });
 $('eLabel').onchange = () => updateSelected({ label: $('eLabel').value });
 $('eOwner').onchange = () => updateSelected({ owner: $('eOwner').value });
@@ -633,7 +768,7 @@ $('libUpload').onclick = () => $('libFiles').click();
 $('libFiles').onchange = async () => { const files = [...$('libFiles').files]; $('libFiles').value = ''; const added = await uploadTokens(files); if (added.length) { libCat = 'My uploads'; $('libSearch').value = ''; renderLibrary(); } };
 document.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => { b.closest('.modal').hidden = true; });
 document.querySelectorAll('.modal').forEach((m) => m.addEventListener('pointerdown', (e) => { if (e.target === m) m.hidden = true; }));
-whenArtLoads(() => { draw(); refreshArtPreview(); if (!$('libModal').hidden) renderLibrary(); });
+whenArtLoads(() => { draw(); refreshArtPreview(); buildConditionGrid(); renderInit(); renderEditor(); if (!$('libModal').hidden) renderLibrary(); });
 
 async function uploadFile(file) {
   const res = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': file.type, 'X-DM-Key': dmKey }, body: file });
@@ -1071,7 +1206,11 @@ function runGenerator(replace) {
   toast(`${out.name}: ${out.summary}`, 6000);
   // With fog on, the fog keeps monsters out of sight until their area is revealed, so they needn't be hidden too.
   const fog = $('genFog').checked;
-  const tokens = fog ? out.tokens.map((t) => ({ ...t, hidden: false })) : out.tokens;
+  // number repeated names so initiative and the map can tell them apart: Goblin 1, Goblin 2…
+  const counts = {}, seen = {};
+  out.tokens.forEach((t) => { counts[t.label] = (counts[t.label] || 0) + 1; });
+  const numbered = out.tokens.map((t) => (counts[t.label] > 1 ? { ...t, label: `${t.label} ${(seen[t.label] = (seen[t.label] || 0) + 1)}` } : t));
+  const tokens = fog ? numbered.map((t) => ({ ...t, hidden: false })) : numbered;
   const content = { tiles: out.tiles, props: out.props, tokens, fog: { on: fog, reveal: out.start ? [out.start] : [] } };
   if (replace) {
     sendMsg({ type: 'sceneReplace', sceneId: editing, name: out.name, cols: out.cols, rows: out.rows, content });

@@ -22,4 +22,10 @@ No app? Open `http://<the address>` in Chrome or Edge instead.
 - **Quick rolls:** add your attacks, saves and skills once under "My quick rolls" (e.g. name `Longsword hit`, roll `1d20+5`), copying the bonuses from your D&D Beyond sheet. Then click to roll. **Shift-click** for advantage, **Alt-click** for disadvantage.
 - **Roll privately** sends the result only to the DM.
 
+## In combat
+
+- The **Initiative** list appears at the top right when the DM starts a fight. Click **🎲** next to your name to roll initiative, or type your score.
+- Whose turn it is glows gold on the map and is highlighted in the list.
+- **Click your token** to open your character's box: set your HP and max HP, temporary HP and initiative bonus, type an amount and press **Damage** or **Heal**, and toggle conditions like Concentrating or Prone.
+
 Keep your character sheet in D&D Beyond as usual; Tabletop is for the map and the dice.

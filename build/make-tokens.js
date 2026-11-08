@@ -101,17 +101,50 @@ const L = {
   ]
 };
 
+// Standard 5e average HP and initiative bonus (Dex modifier) for common monsters and NPCs (SRD 5.1 where available).
+const STATS = {
+  Goblin: [7, 2], 'Goblin Boss': [21, 2], Hobgoblin: [11, 1], 'Hobgoblin Captain': [39, 2], Bugbear: [27, 2],
+  Kobold: [5, 2], 'Winged Kobold': [7, 3], Orc: [15, 1], 'Orc War Chief': [93, 1], Ogre: [59, -1], Troll: [84, 1],
+  Gnoll: [22, 1], Lizardfolk: [22, 0], Skeleton: [13, 2], 'Skeleton Archer': [13, 2], Zombie: [22, -2], Ghoul: [22, 2],
+  Wight: [45, 2], 'Vampire Spawn': [82, 3], Mummy: [58, -1], Specter: [22, 2], Ghost: [45, 1], Shadow: [16, 2],
+  Wolf: [11, 2], 'Dire Wolf': [37, 2], 'Brown Bear': [34, 0], 'Polar Bear': [42, 0], 'Giant Spider': [26, 3], 'Giant Rat': [7, 2],
+  'Swarm of Bats': [22, 2], 'Giant Centipede': [4, 2], Boar: [11, 0], Owlbear: [59, 1], 'Giant Scorpion': [52, 1], 'Giant Frog': [18, 1],
+  Bandit: [11, 1], 'Bandit Captain': [65, 3], Thug: [32, 0], Scout: [16, 2], Cultist: [9, 1], 'Cult Fanatic': [33, 2],
+  Guard: [11, 1], 'Town Guard': [11, 1], Knight: [52, 0], Veteran: [58, 1], Mage: [40, 2], Priest: [27, 0], Berserker: [67, 1],
+  Assassin: [78, 3], Gladiator: [112, 2], Archer: [75, 4], 'Young Dragon': [178, 0], 'Dragon Wyrmling': [75, 0],
+  'Red Dragon': [256, 0], Minotaur: [76, 0], Imp: [10, 3], Gargoyle: [52, 0], Harpy: [38, 1], 'Giant Eagle': [26, 3],
+  Commoner: [4, 0], Villager: [4, 0], Farmer: [4, 0], Noble: [9, 1], Acolyte: [9, 0], 'Stone Golem': [178, -1],
+  'Clay Golem': [133, -1], 'Flesh Golem': [93, -1], 'Iron Golem': [210, -1], Basilisk: [52, -1], Medusa: [127, 2],
+  'Hill Giant': [105, -1], 'Stone Giant': [126, 2], 'Frost Giant': [138, -1], 'Fire Giant': [162, -1], Cyclops: [138, 0],
+  'Gelatinous Cube': [84, -4], 'Black Pudding': [85, -3], Mimic: [58, 1], 'Phase Spider': [32, 2], Sprite: [2, 4], Dryad: [22, 1],
+  Hag: [82, 1], Werewolf: [58, 1], Wererat: [33, 2], Centaur: [45, 2], Griffon: [59, 2], Pegasus: [59, 2], Unicorn: [67, 2]
+};
+
+// 5e conditions plus a few common table states, shown as icons on tokens.
+const CONDITIONS = [
+  ['blinded', 'Blinded', 'blindfold', '#6b7280'], ['charmed', 'Charmed', 'charm', '#db2777'], ['deafened', 'Deafened', 'silenced', '#6b7280'],
+  ['frightened', 'Frightened', 'terror', '#7c3aed'], ['grappled', 'Grappled', 'grab', '#b45309'], ['incapacitated', 'Incapacitated', 'knockout', '#475569'],
+  ['invisible', 'Invisible', 'invisible', '#60a5fa'], ['paralyzed', 'Paralyzed', 'frozen-body', '#0ea5e9'], ['petrified', 'Petrified', 'stone-bust', '#78716c'],
+  ['poisoned', 'Poisoned', 'poison-bottle', '#16a34a'], ['prone', 'Prone', 'falling', '#a16207'], ['restrained', 'Restrained', 'manacles', '#57534e'],
+  ['stunned', 'Stunned', 'star-swirl', '#ca8a04'], ['unconscious', 'Unconscious', 'sleepy', '#334155'], ['exhaustion', 'Exhaustion', 'tired-eye', '#92400e'],
+  ['concentrating', 'Concentrating', 'concentration-orb', '#6366f1'], ['bleeding', 'Bleeding', 'bleeding-wound', '#b91c1c'], ['blessed', 'Blessed', 'angel-wings', '#d97706'],
+  ['hasted', 'Hasted', 'sprint', '#059669'], ['raging', 'Raging', 'enrage', '#dc2626'], ['burning', 'Burning', 'flame', '#ea580c'],
+  ['marked', 'Marked', 'targeted', '#e11d48'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
+];
+
 const icons = {}, library = [], missing = [];
 for (const [cat, rows] of Object.entries(L)) {
   for (const [icon, name, size, color] of rows) {
     if (!set.icons[icon]) { missing.push(icon); continue; }
     icons[icon] = set.icons[icon].body;
-    library.push({ id: 'b-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, cat, icon, size, color });
+    const st = STATS[name];
+    library.push({ id: 'b-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, cat, icon, size, color, ...(st ? { hp: st[0], init: st[1] } : {}) });
   }
 }
+const conditions = CONDITIONS.map(([id, name, icon, color]) => { if (!set.icons[icon]) missing.push(icon); icons[icon] = set.icons[icon].body; return { id, name, icon, color }; });
 const out = {
   credit: 'Token artwork from game-icons.net by Lorc, Delapouite and contributors, licensed CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/).',
-  size: set.width || 512, icons, library
+  size: set.width || 512, icons, library, conditions
 };
 fs.writeFileSync(path.join(__dirname, '..', 'public', 'tokens.json'), JSON.stringify(out));
-console.log(`${library.length} tokens, ${Object.keys(icons).length} icons, ${(JSON.stringify(out).length / 1024).toFixed(0)} KB`, missing.length ? 'MISSING: ' + missing.join(', ') : '');
+console.log(`${library.length} tokens (${library.filter((l) => l.hp).length} with stats), ${conditions.length} conditions, ${Object.keys(icons).length} icons, ${(JSON.stringify(out).length / 1024).toFixed(0)} KB`, missing.length ? 'MISSING: ' + missing.join(', ') : '');

@@ -75,6 +75,14 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![Token library](docs/images/token-library.jpg)
 
+**Combat**
+- Initiative tracker: start combat in one click, roll for all monsters at once, players roll their own; turn order, rounds, and whose turn glows on the map
+- Hit points with damage and healing buttons, temporary HP, health bars on tokens; choose per token whether players see numbers, a bar, or nothing
+- 24 conditions shown as icons on tokens; players manage their own character's HP and conditions
+- 88 library monsters come with their standard HP and initiative bonus
+
+![Combat: initiative order on the right, whose turn glows gold, health bars and condition icons on tokens](docs/images/combat.jpg)
+
 **Dice**
 - Rolled on the DM's PC so nobody can fudge them: `1d20+5`, `2d6+1d4-1`, `4d6kh3`, `1d20adv`, `d100`
 - Saved quick rolls per player (copy bonuses from D&D Beyond once), private rolls, natural 20 and 1 highlighted
