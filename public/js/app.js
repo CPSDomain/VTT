@@ -1,6 +1,7 @@
 import { CELL, TERRAINS, PROPS, PROP_CATS, DM_ONLY, texture, drawProp, swatch } from './art.js';
 import { generate, SCHEMA, defaults } from './generate.js';
 import { interpret, EXAMPLES } from './prompt.js';
+import { readMapTool, layout as mapToolLayout } from './maptool.js';
 import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1554,14 +1555,17 @@ $('fitBg').onclick = () => {
 // ---------- importing maps ----------
 // Universal VTT (.uvtt / .dd2vtt / .df2vtt: Dungeon Scrawl, Dungeondraft, Dungeon Alchemist…) bring the image,
 // grid and walls; a plain image (Canvas of Kings, Inkarnate…) becomes a map with its grid worked out from the picture.
-const UVTT_EXT = /\.(uvtt|dd2vtt|df2vtt|json)$/i;
+const UVTT_EXT = /\.(uvtt|dd2vtt|df2vtt|json)$/i, MAPTOOL_EXT = /\.(rpmap|cmpgn|rptok)$/i, TTMAP_EXT = /\.ttmap$/i;
+const IMPORTABLE = (f) => UVTT_EXT.test(f.name) || MAPTOOL_EXT.test(f.name) || TTMAP_EXT.test(f.name);
 const niceName = (f) => f.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Imported map';
 async function importMapFile(file) {
   if (!file) return;
   try {
     if (UVTT_EXT.test(file.name)) return await importUvtt(file);
+    if (MAPTOOL_EXT.test(file.name)) return await importMapTool(file);
+    if (TTMAP_EXT.test(file.name)) return await importTtmap(file);
     if (/^image\/(png|jpeg|webp)$/.test(file.type)) return await importImage(file);
-    toast('Import a Universal VTT file (.uvtt, .dd2vtt, .df2vtt) or a PNG, JPG or WebP map image');
+    toast('Import a MapTool file (.rpmap, .cmpgn, .rptok), a Tabletop map (.ttmap), a Universal VTT file (.uvtt, .dd2vtt, .df2vtt) or a PNG, JPG or WebP map image', 6000);
   } catch (err) { toast('Import failed: ' + err.message, 6000); }
 }
 async function importUvtt(file) {
@@ -1590,6 +1594,100 @@ async function importUvtt(file) {
   pendingNewScene = true;
   sendMsg({ type: 'sceneCreate', name, cols, rows, content: { bg: { url }, walls, doors, lights } });
   toast(`Imported "${name}": ${cols} × ${rows} squares${walls.length ? `, ${walls.length} wall sections and ${doors.length} door${doors.length === 1 ? '' : 's'}. With fog of war on, Reveal room follows the walls` : ''}.`, 7000);
+}
+// ----- Tabletop's own map files (.ttmap), made with Export map -----
+async function importTtmap(file) {
+  toast(`Importing ${file.name}…`, 60000);
+  pendingNewScene = true;
+  const res = await fetch('/api/import', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DM-Key': dmKey }, body: file });
+  if (!res.ok) { pendingNewScene = false; throw new Error(await res.text()); }
+  const r = await res.json();
+  toast(`Imported "${r.name}"`, 4000);
+}
+function exportMap() {
+  const s = sc(); if (!s) return;
+  const a = document.createElement('a');
+  a.href = `/api/export?key=${encodeURIComponent(dmKey)}&scene=${encodeURIComponent(editing)}`;
+  a.download = (s.name.replace(/[^\w\- ]+/g, '').trim() || 'map') + '.ttmap';
+  document.body.appendChild(a); a.click(); a.remove();
+  toast(`Exporting "${s.name}" with its images. Share the .ttmap file; another DM imports it with Import map.`, 6000);
+}
+// ----- MapTool -----
+async function uploadBlob(blob, name) {
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(blob.type)) { // e.g. BMP: turn it into a PNG first
+    const bmp = await createImageBitmap(blob), cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height;
+    cv.getContext('2d').drawImage(bmp, 0, 0); blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+  }
+  return uploadFile(new File([blob], name, { type: blob.type }));
+}
+function drawStamp(g, bmp, t) {
+  g.save();
+  g.translate(t.px + t.pw / 2, t.py + t.ph / 2);
+  if (t.facing != null && /TOP_DOWN/i.test(t.shape)) g.rotate((-t.facing - 90) * Math.PI / 180);
+  let w = t.pw, h = t.ph;
+  if (t.snapScale) { const k = Math.min(t.pw / bmp.width, t.ph / bmp.height); w = bmp.width * k; h = bmp.height * k; } // fits its squares, keeping its shape
+  g.drawImage(bmp, -w / 2, -h / 2, w, h);
+  g.restore();
+}
+async function importMapTool(file) {
+  toast(`Reading ${file.name}…`, 60000);
+  const mt = await readMapTool(file);
+  if (mt.kind === 'token') { // .rptok: into the token library
+    const t = mt.token, blob = await mt.asset(t.img);
+    if (!blob) return toast(`${file.name} has no token image in it`);
+    const url = await uploadBlob(blob, file.name);
+    sendMsg({ type: 'libraryAdd', items: [{ name: (t.name || niceName(file.name)).slice(0, 24), url, size: Math.min(4, t.fp) }] });
+    return toast(`Added "${t.name || niceName(file.name)}" to your token library (My uploads)`, 5000);
+  }
+  if (!mt.maps.length) return toast(`No maps found in ${file.name}`, 5000);
+  const made = [], notes = [];
+  for (const [i, z] of mt.maps.entries()) {
+    toast(`Importing ${z.name} (${i + 1} of ${mt.maps.length})…`, 60000);
+    const imgs = {}, sizes = {};
+    for (const id of new Set([z.mapAsset, z.bgTexture, ...z.tokens.map((t) => t.img)].filter(Boolean))) {
+      const blob = await mt.asset(id); if (!blob) continue;
+      try { const bmp = await createImageBitmap(blob); imgs[id] = { blob, bmp }; sizes[id] = { w: bmp.width, h: bmp.height }; } catch { /* not an image we can read */ }
+    }
+    const L = mapToolLayout(z, sizes);
+    if (!L) { notes.push(`${z.name} is empty`); continue; }
+    const cols = Math.min(200, L.cols), rows = Math.min(200, L.rows);
+    if (L.cols > 200 || L.rows > 200) notes.push(`${z.name} was cut to 200 × 200 squares`);
+    if (z.hex) notes.push(`${z.name} uses a hex grid; it's shown on squares`);
+    // the map picture: MapTool's map image, background texture and the stamps on its Background and Object layers, flattened into one image
+    const stamps = L.placed.filter((t) => (t.layer === 'BACKGROUND' || t.layer === 'OBJECT') && imgs[t.img])
+      .sort((a, b) => (a.layer === b.layer ? 0 : a.layer === 'BACKGROUND' ? -1 : 1) || a.z - b.z);
+    let bg = null;
+    if ((z.mapAsset && imgs[z.mapAsset]) || stamps.length || (z.bgTexture && imgs[z.bgTexture])) {
+      const W = cols * L.S, H = rows * L.S, k = Math.min(1, 8192 / Math.max(W, H));
+      const cv = document.createElement('canvas'); cv.width = Math.round(W * k); cv.height = Math.round(H * k);
+      const g = cv.getContext('2d'); g.scale(k, k); g.translate(-L.originX, -L.originY);
+      if (z.bgTexture && imgs[z.bgTexture]) g.fillStyle = g.createPattern(imgs[z.bgTexture].bmp, 'repeat'); else g.fillStyle = z.bgColour || '#1a1a1a';
+      g.fillRect(L.originX, L.originY, W, H);
+      if (z.mapAsset && imgs[z.mapAsset]) g.drawImage(imgs[z.mapAsset].bmp, z.boardX, z.boardY, sizes[z.mapAsset].w * z.imageScaleX, sizes[z.mapAsset].h * z.imageScaleY);
+      for (const t of stamps) drawStamp(g, imgs[t.img].bmp, t);
+      const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.9));
+      bg = { url: await uploadFile(new File([blob], 'map.webp', { type: 'image/webp' })) };
+    }
+    // tokens on the Token layer; GM-layer tokens come in hidden
+    const urls = {}, tokens = [];
+    for (const t of L.placed.filter((p) => p.layer === 'TOKEN' || p.layer === 'GM')) {
+      const x = t.cx - L.gx0, y = t.cy - L.gy0;
+      if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+      if (t.img && imgs[t.img] && !(t.img in urls)) urls[t.img] = await uploadBlob(imgs[t.img].blob, (t.name || 'token') + '.png').catch(() => null);
+      tokens.push({ label: (t.name || t.gmName || 'Token').slice(0, 24), img: (t.img && urls[t.img]) || null, size: Math.max(1, Math.min(4, t.fp)), x, y,
+        hidden: t.layer === 'GM' || !t.visible, owner: t.owners[0] || '', color: '#444444',
+        ...(t.hp != null ? { hp: t.hp, maxHp: t.maxHp != null ? t.maxHp : t.hp } : {}) });
+    }
+    // several tokens with the same name: number them, as Tabletop does (Goblin 1, Goblin 2…)
+    const count = {}; tokens.forEach((t) => { count[t.label] = (count[t.label] || 0) + 1; });
+    const seen = {}; tokens.forEach((t) => { if (count[t.label] > 1 && !/\d$/.test(t.label)) t.label = `${t.label.slice(0, 20)} ${seen[t.label] = (seen[t.label] || 0) + 1}`; });
+    const labels = z.labels.map((l) => ({ text: l.text, x: (l.x - L.originX) / L.S, y: (l.y - L.originY) / L.S }));
+    pendingNewScene = true;
+    sendMsg({ type: 'sceneCreate', name: z.name.slice(0, 40), cols, rows, content: { bg, tokens, labels } });
+    made.push(`${z.name} (${cols} × ${rows}, ${tokens.length} token${tokens.length === 1 ? '' : 's'})`);
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  toast(made.length ? `Imported from MapTool: ${made.join(', ')}.${notes.length ? ' ' + notes.join('; ') + '.' : ''}` : `Nothing to import: ${notes.join('; ')}`, 9000);
 }
 async function importImage(file) {
   toast(`Uploading ${file.name}…`, 30000);
@@ -1646,6 +1744,7 @@ function detectGrid(img) {
   } catch { return 0; } // e.g. a cross-origin image
 }
 $('importMap').onclick = () => $('importIn').click();
+$('exportMap').onclick = exportMap;
 $('importIn').onchange = () => { importMapFile($('importIn').files[0]); $('importIn').value = ''; };
 
 const board = $('board');
@@ -1656,7 +1755,7 @@ board.addEventListener('drop', async (e) => {
   e.preventDefault(); board.classList.remove('drop');
   if (!me.isDM) return;
   const files = [...e.dataTransfer.files];
-  const uv = files.find((f) => UVTT_EXT.test(f.name));
+  const uv = files.find(IMPORTABLE);
   if (uv) return importMapFile(uv);
   if (mode === 'build' && tool !== 'token') return uploadBg(files[0]);
   const c = toCell(toWorld(e)), s = sc();

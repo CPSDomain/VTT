@@ -16,13 +16,9 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 | 0.7 | Combat: initiative tracker, HP with damage/heal and per-token visibility, 24 conditions, monster stats |
 | 0.8 | Table tools: ruler with corners and movement distance, spell templates, ping, map labels and DM notes |
 | 0.9 | Map import: Universal VTT (Dungeon Scrawl, Dungeondraft, Dungeon Alchemist) with walls for Reveal room; map images (Canvas of Kings) with automatic grid finding |
+| 0.10 | MapTool import (campaigns, maps, tokens), export and import single maps, restore from backup |
 
 ## Next
-
-### 0.10 — MapTool and sharing maps 📋
-- MapTool import: campaigns (`.cmpgn`) and maps (`.rpmap`), with maps, tokens and revealed fog. *Needs a sample file from the group.*
-- Export and import single maps, to share between DMs or keep a library
-- Restore from a backup inside the app
 
 ### 1.0 — Ready for anyone 📋
 - Player passcodes, and the DM can remove a player
@@ -33,6 +29,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 
 ## Later 💡
 
+- **MapTool import, part 2:** revealed fog, vision blocking as walls, lights, drawings
 - **Lighting and vision:** light sources, darkvision, line of sight through walls and doors (imported Universal VTT maps already bring their walls, doors and lights)
 - **Handouts:** show an image or text to all players or one player
 - **Chat and whispers** next to the roll log

@@ -45,6 +45,7 @@ async function boot() {
     { label: 'File', submenu: [
       { label: 'Open data folder (maps, saves)', click: () => shell.openPath(dataDir) },
       { label: 'Back up table…', click: backup },
+      { label: 'Restore from backup…', click: restore },
       { type: 'separator' },
       { role: 'quit', label: 'Exit' }
     ] },
@@ -74,6 +75,39 @@ async function backup() {
     for (const f of fs.readdirSync(path.join(dataDir, 'uploads'))) fs.copyFileSync(path.join(dataDir, 'uploads', f), path.join(imgDir, f));
     dialog.showMessageBox(win, { type: 'info', message: 'Backup saved', detail: `${filePath}\n${imgDir}` });
   } catch (e) { dialog.showErrorBox('Backup failed', e.message); }
+}
+
+// Put a backup back: everything on the table now is replaced, after saving a safety copy of it.
+async function restore() {
+  const { filePaths } = await dialog.showOpenDialog(win, { title: 'Restore from backup', properties: ['openFile'], filters: [{ name: 'Tabletop backup', extensions: ['json'] }] });
+  const file = filePaths && filePaths[0];
+  if (!file) return;
+  let data;
+  try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return dialog.showErrorBox('Restore failed', 'That file isn\'t a Tabletop backup.'); }
+  if (!data || typeof data !== 'object' || !(data.scenes || data.map)) return dialog.showErrorBox('Restore failed', 'That file isn\'t a Tabletop backup.');
+  const maps = data.scenes ? Object.keys(data.scenes).length : 1;
+  const imgDir = file.replace(/\.json$/i, '') + '-images';
+  const hasImages = fs.existsSync(imgDir);
+  const { response } = await dialog.showMessageBox(win, {
+    type: 'warning', buttons: ['Restore', 'Cancel'], defaultId: 1, cancelId: 1, title: 'Restore from backup',
+    message: `Replace everything on the table with this backup (${maps} map${maps === 1 ? '' : 's'})?`,
+    detail: `${file}\n\nYour current maps, tokens and rolls are saved first as a safety copy in the data folder (before-restore-…json), so you can go back.` +
+      (hasImages ? '' : `\n\nThe backup's image folder (${path.basename(imgDir)}) wasn't found next to it: maps and tokens using uploaded images will show without them.`)
+  });
+  if (response !== 0) return;
+  const port = server.port, stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  try {
+    await server.close(); server = null;
+    const stateFile = path.join(dataDir, 'state.json');
+    if (fs.existsSync(stateFile)) fs.copyFileSync(stateFile, path.join(dataDir, `before-restore-${stamp}.json`));
+    fs.copyFileSync(file, stateFile);
+    if (hasImages) { const up = path.join(dataDir, 'uploads'); fs.mkdirSync(up, { recursive: true }); for (const f of fs.readdirSync(imgDir)) fs.copyFileSync(path.join(imgDir, f), path.join(up, f)); }
+  } catch (e) { dialog.showErrorBox('Restore failed', e.message); }
+  // start the table again on the same port, with the restored data
+  const dmKey = crypto.randomBytes(12).toString('hex');
+  try { server = await startServer({ port, dataDir, dmKey }); } catch (e) { dialog.showErrorBox('Tabletop DM could not restart', e.message); return app.quit(); }
+  win.loadURL(`http://localhost:${server.port}/?dm=${dmKey}`);
+  dialog.showMessageBox(win, { type: 'info', message: 'Backup restored', detail: 'Players need to reconnect (their app does this by itself after a few seconds).' });
 }
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

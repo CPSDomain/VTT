@@ -10,7 +10,7 @@ Everything you need to run a session in Tabletop: starting the server, getting p
 4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.
 5. The DM window opens. Top right shows **Players connect to 192.168.x.x:3000**: give that address to your players. The Copy button copies it.
 
-Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabletop DM\data`. **File → Back up table** saves a copy; **File → Open data folder** shows it. Updating to a new version keeps all of it.
+Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabletop DM\data`. **File → Back up table** saves a copy, and **File → Restore from backup…** puts one back (it saves a safety copy of the current table first); **File → Open data folder** shows it. Updating to a new version keeps all of it.
 
 ## Get players connected
 
@@ -73,6 +73,9 @@ Made the map somewhere else? Click **Build map**, then **📥 Import map…** un
 
 | From | Export it as | What comes in |
 | --- | --- | --- |
+| **MapTool** | The campaign file (`.cmpgn`), or File → Export → **Map** (`.rpmap`) | Every map: map image and stamps (one picture), tokens with images and sizes, GM-layer tokens hidden, labels |
+| **MapTool tokens** | Right-click a token → **Save As** (`.rptok`) | Goes into your token library (My uploads) |
+| **Another Tabletop** | Build map → **📤 Export map** (`.ttmap`) | The whole map: images, walls, props, tokens, labels, notes and fog |
 | **Dungeon Scrawl** | Export → **Universal VTT** (`.uvtt`, Pro) | Map, grid, walls and doors |
 | **Dungeondraft, Dungeon Alchemist**, other map makers | **Universal VTT** (`.dd2vtt`, `.df2vtt`, `.uvtt`) | Map, grid, walls and doors |
 | **Canvas of Kings** | Export → **PNG** or **WebP**, with the **square grid** turned on | The map; the grid is found from the lines |
@@ -83,6 +86,10 @@ Made the map somewhere else? Click **Build map**, then **📥 Import map…** un
 ![An imported Universal VTT map in Build mode: walls in blue, the door in orange, one room revealed](images/import-walls.jpg)
 
 **Images:** Tabletop looks for grid lines and sizes the map so the squares match, and tells you what it found. If it couldn't find a grid (or got it wrong), open **Background image**, type how many pixels one square is in the image and press **Fit grid**. Exporting from Canvas of Kings with the square grid showing gives the best result. Hex grids aren't supported yet.
+
+**MapTool:** a campaign with several maps becomes several Tabletop maps. MapTool maps have no edges, so each map is cut to what's on it (up to 200 × 200 squares). Not imported yet: fog of war, vision blocking, lights, drawings and macros, so turn fog on and reveal as you go. Hex grids come in as squares. If something's missing or out of place, keep the MapTool file: it helps to improve the import.
+
+**Sharing a map:** **📤 Export map** saves the map you're on, with its images, as one `.ttmap` file. Another DM imports it with Import map; it opens as a new private map.
 
 Maps can be up to 200 × 200 squares, and images up to 100 MB.
 

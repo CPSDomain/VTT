@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.9.0';
+const VERSION = '0.10.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
@@ -136,6 +136,66 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ ips, port: server.address().port, version: VERSION }));
+    }
+
+    if (p === '/api/export') { // DM only: one map, with its images, as a single file to share or keep
+      if (url.searchParams.get('key') !== dmKey) { res.writeHead(403); return res.end('DM only'); }
+      const sc = state.scenes[url.searchParams.get('scene')];
+      if (!sc) { res.writeHead(404); return res.end('No such map'); }
+      syncFog(sc);
+      const images = {};
+      const keep = (u) => { if (u && UPLOAD_URL.test(u) && !images[u]) { try { images[u] = fs.readFileSync(path.join(uploads, path.basename(u))).toString('base64'); } catch { /* missing image */ } } };
+      if (sc.bg) keep(sc.bg.url);
+      Object.values(sc.tokens).forEach((t) => keep(t.img));
+      const strip = (o) => { const { id, ...rest } = o; return rest; };
+      const map = {
+        name: sc.name, cols: sc.cols, rows: sc.rows, showGrid: sc.showGrid !== false, diag: sc.diag || '5', bg: sc.bg,
+        tiles: sc.tiles, props: Object.values(sc.props).map(strip), tokens: Object.values(sc.tokens).map(strip),
+        labels: Object.values(sc.labels || {}).map(strip), walls: sc.walls || [], doors: sc.doors || [], lights: sc.lights || [],
+        fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }
+      };
+      const body = JSON.stringify({ app: 'tabletop', kind: 'map', version: VERSION, map, images });
+      const file = (sc.name.replace(/[^\w\- ]+/g, '').trim() || 'map') + '.ttmap';
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="${file}"` });
+      return res.end(body);
+    }
+
+    if (p === '/api/import' && req.method === 'POST') { // DM only: a map exported from Tabletop (.ttmap)
+      if (req.headers['x-dm-key'] !== dmKey) { res.writeHead(403); return res.end('DM only'); }
+      const chunks = []; let size = 0, tooBig = false;
+      req.on('data', (c) => { size += c.length; if (size > 300 * 1024 * 1024) { tooBig = true; req.destroy(); } else chunks.push(c); });
+      req.on('end', () => {
+        if (tooBig) return;
+        const fail = (code, msg) => { res.writeHead(code, { 'Content-Type': 'text/plain' }); res.end(msg); };
+        let d; try { d = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return fail(400, 'That file isn\'t a Tabletop map'); }
+        if (!d || d.app !== 'tabletop' || d.kind !== 'map' || !d.map) return fail(400, 'That file isn\'t a Tabletop map');
+        if (state.order.length >= 200) return fail(400, 'You have 200 maps already. Delete some first.');
+        // save its images under their own content names, and point the map at them
+        const remap = {};
+        for (const [oldUrl, b64] of Object.entries(d.images || {})) {
+          const buf = Buffer.from(String(b64), 'base64');
+          const ext = buf[0] === 0x89 && buf[1] === 0x50 ? '.png' : buf[0] === 0xff && buf[1] === 0xd8 ? '.jpg' : buf.slice(0, 4).toString() === 'RIFF' ? '.webp' : buf.slice(0, 3).toString() === 'GIF' ? '.gif' : null;
+          if (!ext) continue;
+          const name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + ext;
+          try { fs.writeFileSync(path.join(uploads, name), buf); remap[oldUrl] = '/uploads/' + name; } catch { /* skip */ }
+        }
+        const m = d.map, to = (u) => remap[u] || null;
+        const sc = newScene(m.name, m.cols, m.rows);
+        fillScene(sc, {
+          tiles: m.tiles, props: m.props, labels: m.labels, walls: m.walls, doors: m.doors, lights: m.lights, fog: m.fog,
+          bg: m.bg && to(m.bg.url) ? { url: to(m.bg.url) } : null,
+          tokens: Array.isArray(m.tokens) ? m.tokens.map((t) => ({ ...t, img: t.img ? to(t.img) : null })) : []
+        });
+        sc.showGrid = m.showGrid !== false;
+        if (DIAGONALS.includes(m.diag)) sc.diag = m.diag;
+        syncFog(sc);
+        state.scenes[sc.id] = sc; state.order.push(sc.id);
+        toDMs({ type: 'sceneAdded', scene: sc, order: state.order }); save();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, id: sc.id, name: sc.name }));
+      });
+      req.on('close', () => { if (tooBig && !res.headersSent) { res.writeHead(413); res.end('File too large (300 MB max)'); } });
+      return;
     }
 
     if (p === '/api/upload' && req.method === 'POST') {
@@ -334,6 +394,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
     fogArrays.delete(sc.id);
     const a = fogArr(sc);
+    if (m.fog && typeof m.fog.data === 'string' && m.fog.data) { const b = Buffer.from(m.fog.data, 'base64'); if (b.length === a.length) a.set(b); }
     if (m.fog && Array.isArray(m.fog.reveal)) for (const r of m.fog.reveal.slice(0, 500)) {
       if (!Array.isArray(r)) continue;
       const [x0, y0, x1, y1] = r.map((v) => int(v, -1));

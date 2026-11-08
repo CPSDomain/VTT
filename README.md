@@ -50,7 +50,9 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Tools: paint, rectangle, room (floor plus walls in one drag), bucket fill, erase, props, tokens, with undo and redo
 - **Select tool:** move, rotate, nudge or delete any prop; box-select part of the map to move it, copy it (Alt-drag or Ctrl+C / Ctrl+V) or clear it
 - 14 terrains and 69 props: doors, double doors, secret doors, portcullises, windows, furniture, dungeon dressing, village pieces and nature
+- **Import from MapTool:** campaigns and maps (map images, stamps, tokens, labels) and tokens
 - **Import maps** from Dungeon Scrawl, Dungeondraft, Dungeon Alchemist and others (Universal VTT: map, grid, walls and doors), or any map image, e.g. from Canvas of Kings; the grid is found automatically
+- **Export a map** as one file to share with another DM
 - Upload your own battle maps (or drag them on) and line the grid up with them
 - Build maps privately, then **Show to players** when ready
 
