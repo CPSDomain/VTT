@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { startServer } = require('../../src/server');
+const { checkForUpdates } = require('../shared/update');
 
 app.setName('Tabletop DM'); // own settings folder and single-instance lock, separate from the player app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -36,7 +37,7 @@ async function boot() {
     icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
-  win.once('ready-to-show', () => { win.maximize(); win.show(); });
+  win.once('ready-to-show', () => { win.maximize(); win.show(); setTimeout(() => checkForUpdates(win), 4000); });
   win.on('page-title-updated', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.loadURL(`http://localhost:${server.port}/?dm=${dmKey}`);
@@ -55,6 +56,9 @@ async function boot() {
       { role: 'toggleDevTools' }
     ] },
     { label: 'Help', submenu: [
+      { label: 'Check for updates…', click: () => checkForUpdates(win, { manual: true }) },
+      { label: 'Guides and releases on GitHub', click: () => shell.openExternal('https://github.com/CPSDomain/VTT') },
+      { type: 'separator' },
       { label: 'Server info', click: () => dialog.showMessageBox(win, {
         type: 'info', title: 'Tabletop DM', message: `Tabletop DM ${server.version}`,
         detail: `Server port: ${server.port}\nData folder: ${dataDir}\n\nPlayers connect with the Tabletop Player app using the address shown at the top right of the DM window.\nTo change the port, edit ${configFile}`

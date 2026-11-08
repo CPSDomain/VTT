@@ -10,6 +10,7 @@
   },
   "files": [
     "apps/dm/**",
+    "apps/shared/**",
     "src/**",
     "public/**",
     "build/icon.png",
@@ -21,6 +22,12 @@
   "compression": "normal",
   "win": {
     "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
       {
         "target": "zip",
         "arch": [
@@ -43,5 +50,36 @@
     "icon": "build/icon.png",
     "category": "Game"
   },
-  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+  "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Tabletop DM",
+    "installerIcon": "build/icon.ico",
+    "uninstallerIcon": "build/icon.ico",
+    "deleteAppDataOnUninstall": false,
+    "artifactName": "${productName}-Setup-${version}.${ext}"
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "universal"
+        ]
+      }
+    ],
+    "icon": "build/icon.png",
+    "category": "public.app-category.games",
+    "identity": null
+  },
+  "dmg": {
+    "artifactName": "${productName}-${version}-mac.${ext}"
+  },
+  "appImage": {
+    "artifactName": "${productName}-${version}-linux-x86_64.${ext}"
+  }
 }

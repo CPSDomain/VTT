@@ -32,8 +32,8 @@ function toast(text, ms = 3000) {
 // ---------- connection ----------
 function connect() {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host);
-  ws.onopen = () => sendMsg({ type: 'join', name: me.name, key: dmKey });
-  ws.onclose = () => { $('status').textContent = 'Disconnected, reconnecting…'; $('status').style.display = ''; setTimeout(connect, 2000); };
+  ws.onopen = () => sendMsg({ type: 'join', name: me.name, key: dmKey, passcode });
+  ws.onclose = () => { if (denied) return; $('status').textContent = 'Disconnected, reconnecting…'; $('status').style.display = ''; setTimeout(connect, 2000); };
   ws.onmessage = (e) => onMessage(JSON.parse(e.data));
 }
 
@@ -44,6 +44,9 @@ function onMessage(msg) {
       me.isDM = msg.isDM; me.name = msg.name;
       document.body.classList.toggle('dm', me.isDM);
       const st = msg.state;
+      if (st.table) table = st.table;
+      if (!me.isDM && passcode) trySet('tt-code', passcode);
+      $('gate').hidden = true;
       active = st.activeScene;
       if (me.isDM) {
         scenes = st.scenes; order = st.order; library = st.library || [];
@@ -61,7 +64,9 @@ function onMessage(msg) {
       sceneChanged(true);
       break;
     }
-    case 'presence': players = msg.players; renderPlayers(); break;
+    case 'presence': players = msg.players; renderPlayers(); renderTablePanel(); break;
+    case 'table': table = msg.table; renderTablePanel(); renderPlayers(); break;
+    case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
     case 'token': if (s) { s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
     case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); } } break;
@@ -134,9 +139,64 @@ function showConn(info) {
   copy.onclick = () => { navigator.clipboard.writeText(addr).then(() => toast('Address copied: ' + addr)); };
   $('conn').append(label, b, copy);
 }
+// ----- who may join: passcode, removing and blocking players (DM) -----
+let table = { passcode: '', blocked: [] };
+function renderTablePanel() {
+  if (!me.isDM || $('tablePop').hidden) return;
+  if (document.activeElement !== $('tpCode')) $('tpCode').value = table.passcode || '';
+  $('tpCodeState').textContent = table.passcode ? 'Players need this passcode to join.' : 'No passcode: anyone who can reach your address can join.';
+  const list = $('tpPlayers'); list.innerHTML = '';
+  if (!players.length) list.innerHTML = '<div class="hint">No players connected.</div>';
+  for (const name of players) {
+    const row = document.createElement('div'); row.className = 'tprow';
+    const n = document.createElement('span'); n.textContent = name;
+    const rm = document.createElement('button'); rm.textContent = 'Remove'; rm.title = 'Disconnect them. They can join again.';
+    rm.onclick = () => sendMsg({ type: 'removePlayer', name });
+    const bl = document.createElement('button'); bl.textContent = 'Block'; bl.className = 'danger'; bl.title = 'Disconnect them and stop anyone joining with this name until you unblock it.';
+    bl.onclick = () => sendMsg({ type: 'removePlayer', name, block: true });
+    row.append(n, rm, bl); list.appendChild(row);
+  }
+  const bl = $('tpBlocked'); bl.innerHTML = '';
+  $('tpBlockedSec').style.display = table.blocked.length ? '' : 'none';
+  for (const name of table.blocked) {
+    const row = document.createElement('div'); row.className = 'tprow';
+    const n = document.createElement('span'); n.textContent = name;
+    const ub = document.createElement('button'); ub.textContent = 'Unblock'; ub.onclick = () => sendMsg({ type: 'unblock', name });
+    row.append(n, ub); bl.appendChild(row);
+  }
+}
+$('players').onclick = () => { $('tablePop').hidden = !$('tablePop').hidden; renderTablePanel(); };
+$('tpClose').onclick = () => { $('tablePop').hidden = true; };
+$('tpSave').onclick = () => { sendMsg({ type: 'setPasscode', passcode: $('tpCode').value }); toast($('tpCode').value.trim() ? 'Passcode set. Players already at the table stay connected.' : 'Passcode removed'); };
+$('tpCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('tpSave').click(); });
+// ----- players: when the table won't let us in -----
+let passcode = '', denied = false;
+function showDenied(reason) {
+  denied = true;
+  const gate = $('gate'); gate.hidden = false;
+  const ask = reason === 'passcode' || reason === 'passcode-wrong' || reason === 'wait';
+  $('gateMsg').textContent = {
+    passcode: 'This table has a passcode. Ask your DM for it.',
+    'passcode-wrong': 'That passcode isn\'t right. Check with your DM.',
+    wait: 'Too many wrong passcodes. Wait half a minute and try again.',
+    removed: 'The DM removed you from the table.',
+    blocked: `The DM has blocked the name "${me.name}" at this table.`
+  }[reason] || 'The table didn\'t let you in.';
+  $('gateCode').style.display = ask ? '' : 'none';
+  $('gateGo').textContent = ask ? 'Join' : 'Join again';
+  $('gateGo').style.display = reason === 'blocked' ? 'none' : '';
+  if (ask) { $('gateCode').value = ''; setTimeout(() => $('gateCode').focus(), 0); }
+  $('status').style.display = 'none';
+}
+$('gateForm').onsubmit = (e) => {
+  e.preventDefault();
+  if ($('gateCode').style.display !== 'none') passcode = $('gateCode').value.trim();
+  denied = false; $('gate').hidden = true; connect();
+};
 function renderPlayers() {
   $('players').innerHTML = `<span class="dot ${players.length ? 'on' : ''}"></span>`;
   $('players').append(players.length ? `${players.length} player${players.length > 1 ? 's' : ''}` : 'No players yet');
+  if (table.passcode) $('players').append(' 🔒');
   $('players').title = players.join(', ');
 }
 
@@ -1940,7 +2000,14 @@ $('macroForm').onsubmit = (e) => {
 // ---------- start ----------
 function tryGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function trySet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
-function start(name) { me.name = name; $('join').remove(); connect(); }
+function start(name) {
+  me.name = name; $('join').remove();
+  // the player app passes the passcode after #; a browser remembers the last one that worked here
+  const h = new URLSearchParams(location.hash.slice(1));
+  passcode = h.get('code') || (dmKey ? '' : tryGet('tt-code') || '');
+  if (h.get('code') != null) history.replaceState(null, '', location.pathname + location.search);
+  connect();
+}
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
 window.tabletop = { view, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };

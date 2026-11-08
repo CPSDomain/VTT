@@ -17,21 +17,21 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💡 idea
 | 0.8 | Table tools: ruler with corners and movement distance, spell templates, ping, map labels and DM notes |
 | 0.9 | Map import: Universal VTT (Dungeon Scrawl, Dungeondraft, Dungeon Alchemist) with walls for Reveal room; map images (Canvas of Kings) with automatic grid finding |
 | 0.10 | MapTool import (campaigns, maps, tokens), export and import single maps, restore from backup |
+| 1.0 | Table passcode, remove and block players, update check, Windows installers, automatic builds on GitHub, macOS and Linux apps |
 
 ## Next
 
-### 1.0 — Ready for anyone 📋
-- Player passcodes, and the DM can remove a player
-- Update check: the apps tell you when a new version is on GitHub
-- Windows installer and code signing (no more SmartScreen warning)
-- Automatic builds on GitHub when a version is tagged
-- Linux and macOS builds
+Pick what matters most to the group from **Later** below. Suggested for 1.1:
+
+### 1.1 — Seeing the table 📋
+- **Lighting and vision:** light sources, darkvision, line of sight through walls and doors (imported Universal VTT maps already bring their walls, doors and lights)
+- **Handouts:** show an image or text to all players or one player
 
 ## Later 💡
 
+- **Code signing:** no more "Windows protected your PC" (needs a paid certificate; see [RELEASING.md](RELEASING.md))
+- **Player PINs:** each player's name protected by their own PIN
 - **MapTool import, part 2:** revealed fog, vision blocking as walls, lights, drawings
-- **Lighting and vision:** light sources, darkvision, line of sight through walls and doors (imported Universal VTT maps already bring their walls, doors and lights)
-- **Handouts:** show an image or text to all players or one player
 - **Chat and whispers** next to the roll log
 - **Encounter builder:** SRD monsters with stat blocks, difficulty by party level, drop the encounter on the map
 - **Adventure import** from the TaleSpire DM agent's output (maps, encounters, notes)

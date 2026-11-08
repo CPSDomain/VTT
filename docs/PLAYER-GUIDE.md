@@ -2,14 +2,15 @@
 
 ## Connect
 
-1. Unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
+1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed), or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
    The first time, Windows says "Windows protected your PC": click **More info → Run anyway**.
 2. Type the **server address** your DM gives you (e.g. `192.168.1.20:3000`) and **your name**, then click **Connect**.
-3. Use the **same name every session**. Your DM gives your token to that name, and your quick rolls are saved under it.
+3. If the table has a passcode, the app asks for it: your DM can tell you it. The app remembers it for next time.
+4. Use the **same name every session**. Your DM gives your token to that name, and your quick rolls are saved under it.
 
 ![Connect screen](images/player-connect.jpg)
 
-The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) goes back to this screen.
+The app remembers the address and your name, and tells you when there's a new version (**Help → Check for updates…**). **Table → Disconnect** (Ctrl+D) goes back to this screen.
 
 No app? Open `http://<the address>` in Chrome or Edge instead.
 

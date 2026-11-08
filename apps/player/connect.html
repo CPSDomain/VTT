@@ -32,12 +32,18 @@
   <label for="name">Your name</label>
   <input id="name" placeholder="e.g. Alice" required maxlength="24">
   <div class="hint">Use the same name each session: the DM assigns tokens to it.</div>
+  <div id="codeBox" hidden>
+    <label for="code">Table passcode</label>
+    <input id="code" maxlength="40" autocomplete="off" spellcheck="false">
+    <div class="hint">This table has a passcode. Your DM can tell you it.</div>
+  </div>
   <button id="go">Connect</button>
   <div id="err"></div>
 </form>
 <script>
   const $ = (id) => document.getElementById(id);
   try { $('addr').value = localStorage.getItem('addr') || ''; $('name').value = localStorage.getItem('name') || ''; } catch {}
+  const savedCode = (a) => { try { return localStorage.getItem('code:' + a) || ''; } catch { return ''; } };
   if ($('addr').value) $('name').focus();
   if (new URLSearchParams(location.search).get('left')) $('err').textContent = '';
 
@@ -62,7 +68,16 @@
       const info = await r.json();
       if (info.app !== 'tabletop') throw new Error('not tabletop');
       try { localStorage.setItem('addr', $('addr').value.trim()); localStorage.setItem('name', name); } catch {}
-      location.href = origin + '/?name=' + encodeURIComponent(name);
+      let code = '';
+      if (info.passcode) {
+        code = $('codeBox').hidden ? savedCode(origin) : $('code').value.trim();
+        if (!code) { // ask for it; the table checks it when we join
+          $('codeBox').hidden = false; $('code').focus();
+          $('go').disabled = false; $('go').textContent = 'Connect'; return;
+        }
+        try { localStorage.setItem('code:' + origin, code); } catch {}
+      }
+      location.href = origin + '/?name=' + encodeURIComponent(name) + (code ? '#code=' + encodeURIComponent(code) : '');
     } catch (err) {
       $('err').textContent = err.name === 'AbortError' || err instanceof TypeError
         ? 'Couldn\'t reach the table. Check the address, that the DM has Tabletop DM open, and that you\'re on the same network (or Tailscale).'

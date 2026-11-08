@@ -1,6 +1,7 @@
 // Tabletop Player: desktop app that connects to a DM's Tabletop server.
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
+const { checkForUpdates } = require('../shared/update');
 
 app.setName('Tabletop Player'); // own settings folder and single-instance lock, separate from the DM app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
@@ -14,7 +15,7 @@ function create() {
     icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { win.show(); setTimeout(() => checkForUpdates(win), 4000); });
   win.on('page-title-updated', (e) => e.preventDefault());
   // Links that open new windows (e.g. a D&D Beyond sheet later) go to the normal browser.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
@@ -36,6 +37,12 @@ function create() {
       { role: 'reload' }, { role: 'togglefullscreen' }, { type: 'separator' },
       { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'resetZoom' }, { type: 'separator' },
       { role: 'toggleDevTools' }
+    ] },
+    { label: 'Help', submenu: [
+      { label: 'Check for updates…', click: () => checkForUpdates(win, { manual: true }) },
+      { label: 'Player guide', click: () => shell.openExternal('https://github.com/CPSDomain/VTT/blob/HEAD/docs/PLAYER-GUIDE.md') },
+      { type: 'separator' },
+      { label: `About Tabletop Player ${require("../../package.json").version}`, enabled: false }
     ] }
   ]));
 }

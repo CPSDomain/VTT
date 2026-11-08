@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.10.0';
+const VERSION = '1.0.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
@@ -53,10 +53,11 @@ function loadState(file) {
   try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* fresh table */ }
   if (s && s.version === 2) {
     s.library = s.library || [];
+    s.passcode = typeof s.passcode === 'string' ? s.passcode : ''; s.blocked = Array.isArray(s.blocked) ? s.blocked : [];
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [] };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [] };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -127,7 +128,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
     if (p === '/api/ping') {
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-      return res.end(JSON.stringify({ app: 'tabletop', version: VERSION }));
+      return res.end(JSON.stringify({ app: 'tabletop', version: VERSION, passcode: !!state.passcode }));
     }
 
     if (p === '/api/info') { // DM only: the addresses players can use to connect
@@ -315,7 +316,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
   function viewFor(u) {
     const base = { activeScene: state.activeScene, log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
-    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library }; }
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings() }; }
     return { ...base, scene: playerScene(state.scenes[state.activeScene], u) };
   }
 
@@ -403,7 +404,12 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     syncFog(sc);
   }
 
-  wss.on('connection', (ws) => {
+  // ---------- who may join ----------
+  const tableSettings = () => ({ passcode: state.passcode, blocked: state.blocked });
+  const sameName = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+  const wrongTries = new Map(); // address → { n, until }: slows down passcode guessing
+  wss.on('connection', (ws, req) => {
+    ws.addr = (req && req.socket && req.socket.remoteAddress) || '?';
     ws.user = { name: 'Guest', isDM: false, joined: false };
     ws.on('message', (raw) => {
       let msg; try { msg = JSON.parse(raw); } catch { return; }
@@ -421,7 +427,21 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     const u = ws.user;
     if (msg.type === 'join') {
       u.name = str(msg.name || 'Guest', 24).trim() || 'Guest';
-      u.isDM = msg.key === dmKey; u.joined = true;
+      u.isDM = msg.key === dmKey;
+      if (!u.isDM) {
+        const deny = (reason) => { send(ws, { type: 'denied', reason }); setTimeout(() => ws.close(), 50); };
+        if (state.blocked.some((b) => sameName(b, u.name))) return deny('blocked');
+        if (state.passcode) {
+          const t = wrongTries.get(ws.addr) || { n: 0, until: 0 };
+          if (Date.now() < t.until) return deny('wait');
+          if (String(msg.passcode || '') !== state.passcode) {
+            t.n++; if (t.n >= 5) { t.until = Date.now() + 30000; t.n = 0; } wrongTries.set(ws.addr, t);
+            return deny(msg.passcode ? 'passcode-wrong' : 'passcode');
+          }
+          wrongTries.delete(ws.addr);
+        }
+      }
+      u.joined = true;
       send(ws, { type: 'welcome', isDM: u.isDM, name: u.name, version: VERSION, state: viewFor(u) });
       return presence();
     }
@@ -595,6 +615,27 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         save();
         break;
       }
+
+      // ----- who may join (DM only) -----
+      case 'setPasscode':
+        if (!u.isDM) return;
+        state.passcode = str(msg.passcode, 40).trim();
+        toDMs({ type: 'table', table: tableSettings() }); save();
+        break;
+      case 'removePlayer': { // disconnect a player; with block, they can't come back under that name
+        if (!u.isDM || !msg.name) return;
+        const name = str(msg.name, 24).trim();
+        if (msg.block && !state.blocked.some((b) => sameName(b, name))) state.blocked.push(name);
+        clients().filter((c) => !c.user.isDM && sameName(c.user.name, name)).forEach((c) => { send(c, { type: 'denied', reason: msg.block ? 'blocked' : 'removed' }); c.user.joined = false; setTimeout(() => c.close(), 50); });
+        toDMs({ type: 'table', table: tableSettings() }); save();
+        setTimeout(presence, 100);
+        break;
+      }
+      case 'unblock':
+        if (!u.isDM) return;
+        state.blocked = state.blocked.filter((b) => !sameName(b, msg.name || ''));
+        toDMs({ type: 'table', table: tableSettings() }); save();
+        break;
 
       // ----- spell templates (anyone) -----
       case 'templateSet': {

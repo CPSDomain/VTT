@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/CPSDomain/VTT/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/CPSDomain/VTT?label=latest%20release&color=e8390e"></a>
-  <img alt="Platform: Windows" src="https://img.shields.io/badge/platform-Windows-1f1f1f">
+  <img alt="Platform: Windows, macOS, Linux" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f1f1f">
   <a href="CHANGELOG.md"><img alt="Changelog" src="https://img.shields.io/badge/changelog-what's%20new-ff6b35"></a>
 </p>
 
@@ -24,14 +24,16 @@ D&D Beyond stays the character manager; maps, tokens and dice live in Tabletop.
 
 ## Download
 
-Get the latest Windows build from the **[Releases page](https://github.com/CPSDomain/VTT/releases/latest)**:
+Get the latest version from the **[Releases page](https://github.com/CPSDomain/VTT/releases/latest)**:
 
-| File | For | How |
-| --- | --- | --- |
-| `Tabletop-DM-<version>-Windows.zip` | The DM | Unzip anywhere, run **Tabletop DM.exe** |
-| `Tabletop-Player-<version>-Windows.zip` | Each player | Unzip anywhere, run **Tabletop Player.exe** |
+| File | For |
+| --- | --- |
+| `Tabletop-DM-Setup-<version>.exe` | The DM: Windows installer |
+| `Tabletop-Player-Setup-<version>.exe` | Each player: Windows installer |
+| `…-Windows.zip` | Windows without installing: unzip anywhere and run the .exe |
+| `…-macOS.dmg`, `…-Linux.AppImage` | Mac and Linux |
 
-Nothing to install. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed yet: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect.
+The installers need no admin rights and add Start menu and desktop shortcuts. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect. The apps tell you when there's a new version; installing it over the old one keeps your maps and tokens.
 
 What changed in each version: **[CHANGELOG.md](CHANGELOG.md)**. What's coming: **[Roadmap](docs/ROADMAP.md)**.
 
@@ -94,6 +96,10 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Map labels for room names, and DM-only notes
 
 ![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
+
+**Running the table**
+- Optional table passcode; remove or block a player
+- The apps tell you when a new version is out
 
 **Dice**
 - Rolled on the DM's PC so nobody can fudge them: `1d20+5`, `2d6+1d4-1`, `4d6kh3`, `1d20adv`, `d100`

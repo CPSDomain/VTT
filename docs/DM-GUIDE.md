@@ -4,11 +4,13 @@ Everything you need to run a session in Tabletop: starting the server, getting p
 
 ## Start Tabletop DM
 
-1. Unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep, e.g. `Documents\Tabletop DM`. Keep all the files together; the .exe needs the rest of the folder.
-2. Double-click **Tabletop DM.exe**.
+1. Run `Tabletop-DM-Setup-<version>.exe` and click through it (no admin rights needed). It adds Tabletop DM to the Start menu and desktop. Or, without installing: unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep and run **Tabletop DM.exe** from there (keep all the files together).
+2. Start **Tabletop DM**.
 3. Windows shows "Windows protected your PC" because the app isn't code-signed yet. Click **More info**, then **Run anyway**. This happens once.
 4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.
 5. The DM window opens. Top right shows **Players connect to 192.168.x.x:3000**: give that address to your players. The Copy button copies it.
+
+**Updates:** when a new version is out, Tabletop DM tells you once a day (or **Help → Check for updates…**). Download the new installer and run it over the old version.
 
 Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabletop DM\data`. **File → Back up table** saves a copy, and **File → Restore from backup…** puts one back (it saves a safety copy of the current table first); **File → Open data folder** shows it. Updating to a new version keeps all of it.
 
@@ -22,6 +24,16 @@ Each player unzips `Tabletop-Player-<version>-Windows.zip`, runs **Tabletop Play
 | Elsewhere (online game) | Your Tailscale address, e.g. `100.x.x.x:3000` | Everyone installs [Tailscale](https://tailscale.com) (free) and joins your network once |
 
 To test alone, run Tabletop Player on the same PC and connect to `localhost:3000`.
+
+## Who can join
+
+Click the players count at the top right (e.g. **2 players**) for **Who can join**:
+
+- **Table passcode:** type one and click Save. Players then need it to join; the Player app and the browser ask for it. Clear it and Save to remove it. A 🔒 by the players count shows one is set. Players already at the table stay connected.
+- **Remove** disconnects a player. They can join again (with the passcode, if there is one).
+- **Block** disconnects them and stops anyone joining under that name until you **Unblock** it in the same panel.
+
+Players are still known only by their name: anyone with the passcode can pick any name. For a group of friends, that's usually all you need.
 
 ## Private prep vs what players see
 
@@ -177,4 +189,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Importing MapTool campaigns, and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
+Lighting and vision, handouts, chat. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).
