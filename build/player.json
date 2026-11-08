@@ -2,7 +2,8 @@
   "appId": "app.tabletop.player",
   "productName": "Tabletop Player",
   "extraMetadata": {
-    "main": "apps/player/main.js"
+    "main": "apps/player/main.js",
+    "name": "tabletop-player"
   },
   "directories": {
     "output": "dist/player",
@@ -38,15 +39,15 @@
   },
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "nsis": {
-    "oneClick": false,
+    "oneClick": true,
     "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Tabletop Player",
     "installerIcon": "build/icon.ico",
     "uninstallerIcon": "build/icon.ico",
     "deleteAppDataOnUninstall": false,
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "runAfterFinish": true
   }
 }

@@ -2,7 +2,8 @@
   "appId": "app.tabletop.dm",
   "productName": "Tabletop DM",
   "extraMetadata": {
-    "main": "apps/dm/main.js"
+    "main": "apps/dm/main.js",
+    "name": "tabletop-dm"
   },
   "directories": {
     "output": "dist/dm",
@@ -40,15 +41,15 @@
   },
   "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
   "nsis": {
-    "oneClick": false,
+    "oneClick": true,
     "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "Tabletop DM",
     "installerIcon": "build/icon.ico",
     "uninstallerIcon": "build/icon.ico",
     "deleteAppDataOnUninstall": false,
-    "artifactName": "${productName}-Setup-${version}.${ext}"
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "runAfterFinish": true
   }
 }

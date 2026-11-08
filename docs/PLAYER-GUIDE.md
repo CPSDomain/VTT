@@ -2,7 +2,7 @@
 
 ## Connect
 
-1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed), or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
+1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed; it installs in a few seconds and opens the app), or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
    The first time, Windows says "Windows protected your PC": click **More info → Run anyway**.
 2. Type the **server address** your DM gives you (e.g. `192.168.1.20:3000`) and **your name**, then click **Connect**.
 3. If the table has a passcode, the app asks for it: your DM can tell you it. The app remembers it for next time.

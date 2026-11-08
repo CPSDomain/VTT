@@ -3,6 +3,7 @@ const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 const { checkForUpdates } = require('../shared/update');
 
+process.on('uncaughtException', (e) => { try { require('electron').dialog.showErrorBox('Tabletop hit a problem', String((e && e.stack) || e)); } catch { /* not ready yet */ } });
 app.setName('Tabletop Player'); // own settings folder and single-instance lock, separate from the DM app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 let win = null;
@@ -16,6 +17,7 @@ function create() {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
   win.once('ready-to-show', () => { win.show(); setTimeout(() => checkForUpdates(win), 4000); });
+  setTimeout(() => { if (win && !win.isDestroyed() && !win.isVisible()) { win.show(); } }, 6000); // slow or odd graphics: show it anyway
   win.on('page-title-updated', (e) => e.preventDefault());
   // Links that open new windows (e.g. a D&D Beyond sheet later) go to the normal browser.
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });

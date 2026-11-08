@@ -2,6 +2,12 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.1.1] - 2026-11-08
+
+### Fixed
+- **The Windows installers did nothing when double-clicked** on some PCs (they only worked with Run as administrator). They now install in one step, for you, in your own user folder, with no questions and no admin rights, then open the app. The DM and Player apps also get their own install folders. If you installed an earlier version with Run as administrator, uninstall it first (Settings → Apps).
+- If an app's window doesn't appear (for example with unusual graphics drivers), it now shows anyway after a few seconds, and a problem at startup pops up a message instead of the app quietly closing.
+
 ## [1.1.0] - 2026-11-08
 
 ### Added

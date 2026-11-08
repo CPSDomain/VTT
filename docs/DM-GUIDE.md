@@ -4,7 +4,7 @@ Everything you need to run a session in Tabletop: starting the server, getting p
 
 ## Start Tabletop DM
 
-1. Run `Tabletop-DM-Setup-<version>.exe` and click through it (no admin rights needed). It adds Tabletop DM to the Start menu and desktop. Or, without installing: unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep and run **Tabletop DM.exe** from there (keep all the files together).
+1. Run `Tabletop-DM-Setup-<version>.exe` (no admin rights needed). It installs in a few seconds, adds Tabletop DM to the Start menu and desktop, and opens it. Or, without installing: unzip `Tabletop-DM-<version>-Windows.zip` to a folder you'll keep and run **Tabletop DM.exe** from there (keep all the files together).
 2. Start **Tabletop DM**.
 3. Windows shows "Windows protected your PC" because the app isn't code-signed yet. Click **More info**, then **Run anyway**. This happens once.
 4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.

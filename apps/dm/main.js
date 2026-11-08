@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { startServer } = require('../../src/server');
 const { checkForUpdates } = require('../shared/update');
 
+process.on('uncaughtException', (e) => { try { require('electron').dialog.showErrorBox('Tabletop hit a problem', String((e && e.stack) || e)); } catch { /* not ready yet */ } });
 app.setName('Tabletop DM'); // own settings folder and single-instance lock, separate from the player app
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
@@ -38,6 +39,7 @@ async function boot() {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
   });
   win.once('ready-to-show', () => { win.maximize(); win.show(); setTimeout(() => checkForUpdates(win), 4000); });
+  setTimeout(() => { if (win && !win.isDestroyed() && !win.isVisible()) { win.maximize(); win.show(); } }, 6000); // slow or odd graphics: show it anyway
   win.on('page-title-updated', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:/.test(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.loadURL(`http://localhost:${server.port}/?dm=${dmKey}`);
