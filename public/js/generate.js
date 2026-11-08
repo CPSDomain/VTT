@@ -261,7 +261,8 @@ export function village(size, seed, opts = {}, lib = {}) {
     M.token(lib['Town Guard'], 3, main[3][1] + 2); M.token(lib['Town Guard'], cols - 4, main[cols - 4][1] - 2);
     for (const [x0, y0, w, h] of fieldSpots) { M.token(lib.Farmer, x0 + 1, y0 + 1); if (M.chance(.6)) M.token(M.pick([lib.Cow, lib.Sheep, lib.Pig]), x0 + Math.floor(w / 2), y0 + Math.floor(h / 2)); }
   }
-  return { name: villageName(M), cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens };
+  const sy = main[0][1];
+  return { name: villageName(M), cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [0, sy - 5, 7, sy + 5] };
 }
 function villageName(M) {
   return M.pick(['Oak', 'Mill', 'Ash', 'Elm', 'Thorn', 'Stone', 'Raven', 'Wolf', 'Green', 'Fern', 'Kings', 'Black', 'Red', 'High', 'Low', 'Bram', 'Willow', 'Barrow']) +
@@ -369,7 +370,8 @@ export function dungeon(size, seed, opts = {}, lib = {}) {
   const cor = [...corridor];
   for (let k = 0; k < Math.floor(cor.length / 25); k++) { const [x, y] = M.pick(cor).split(',').map(Number); put('trap', x, y); }
   const name = M.pick(['The Sunken', 'The Forgotten', 'The Black', 'The Howling', 'The Drowned', 'The Ember']) + ' ' + M.pick(['Crypt', 'Halls', 'Warrens', 'Vault', 'Keep', 'Catacombs', 'Mine']);
-  return { name, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens };
+  const e = rooms[0]; // the entrance room, with its walls
+  return { name, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [e.x - 1, e.y - 1, e.x + e.w, e.y + e.h] };
 }
 
 // ---------- forest road ----------
@@ -414,7 +416,8 @@ export function forest(size, seed, opts = {}, lib = {}) {
     for (let k = 0; k < 3; k++) M.token(lib.Wolf, pondX + M.int(-6, 6), pondY + M.int(5, 7) * (M.chance(.5) ? 1 : -1), { hidden: true });
   }
   const name = M.pick(['Old', 'Dark', 'King\'s', 'Merchant\'s', 'Wolf', 'Hollow']) + ' ' + M.pick(['Road', 'Way', 'Trail', 'Wood Road']);
-  return { name, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens };
+  const ry = road[0][1];
+  return { name, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [0, ry - 5, 7, ry + 5] };
 }
 
 export const GENERATORS = { village, dungeon, forest };

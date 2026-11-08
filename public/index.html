@@ -76,6 +76,14 @@
   #status { position:absolute; top:10px; left:10px; background:rgba(0,0,0,.65); padding:5px 11px; border-radius:20px; font-size:12px; pointer-events:none; }
   #zoomCtl { position:absolute; right:10px; bottom:10px; display:flex; gap:4px; }
   #zoomCtl button { background:rgba(20,20,20,.85); width:32px; padding:5px 0; }
+  #fogBar { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:4px; background:rgba(22,22,22,.92); border:1px solid var(--line); border-radius:10px; padding:4px 6px; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  body.dm #fogBar { display:flex !important; }
+  #fogBar button, #fogBar select { padding:4px 9px; font-size:12px; background:transparent; }
+  #fogBar select { background:var(--panel2); padding:3px 4px; }
+  #fogBar .fogbtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .fogswitch { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:0 6px; cursor:pointer; white-space:nowrap; }
+  .fogswitch input { width:auto; accent-color:var(--accent); }
+  .fogsep { width:1px; height:20px; background:var(--line); margin:0 2px; }
   #cellInfo:empty { display:none; }
   #cellInfo { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.65); padding:4px 9px; border-radius:6px; font-size:11px; color:var(--dim); pointer-events:none; font-variant-numeric:tabular-nums; }
 
@@ -225,6 +233,17 @@
   <div id="board">
     <canvas id="c"></canvas>
     <div id="status">Connecting…</div>
+    <div id="fogBar" class="dm-only">
+      <label class="fogswitch" title="Fog of war for this map: players only see what you reveal"><input type="checkbox" id="fogOn"><span>Fog of war</span></label>
+      <span class="fogsep"></span>
+      <button class="fogbtn" data-fog="room" title="Click inside a room to reveal it and its walls (stops at doors)">Reveal room</button>
+      <button class="fogbtn" data-fog="reveal" title="Paint to reveal">Reveal brush</button>
+      <button class="fogbtn" data-fog="hide" title="Paint to cover up again">Cover brush</button>
+      <select id="fogSize" title="Brush size"><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="9">9</option></select>
+      <span class="fogsep"></span>
+      <button id="fogRevealAll" class="fogbtn" title="Reveal the whole map">Reveal all</button>
+      <button id="fogCoverAll" class="fogbtn" title="Cover the whole map">Cover all</button>
+    </div>
     <div id="cellInfo"></div>
     <div id="zoomCtl"><button id="zoomOut" title="Zoom out">−</button><button id="zoomFit" title="Fit map to screen (Home)">⤢</button><button id="zoomIn" title="Zoom in">+</button></div>
   </div>
@@ -302,8 +321,9 @@
       <div class="hint" style="margin-top:14px">Size</div>
       <div class="seg" id="genSize" style="display:inline-flex;margin-top:6px"><button data-size="small">Small</button><button data-size="medium" class="on">Medium</button><button data-size="large">Large</button></div>
       <label class="check"><input type="checkbox" id="genCreatures" checked> <span id="genCreaturesLabel">Add villagers and animals</span></label>
+      <label class="check"><input type="checkbox" id="genFog"> <span>Start with fog of war (only the way in is revealed)</span></label>
       <div class="row" id="genMonsterRow" style="display:none"><span class="fixed hint" style="margin:0">Monsters</span><select id="genMonsters"><option value="goblinoid">Goblins &amp; hobgoblins</option><option value="kobold">Kobolds</option><option value="undead">Undead</option><option value="beasts">Beasts &amp; vermin</option></select></div>
-      <div class="hint">Creatures in dungeons and on the forest road start hidden from players. New maps are private until you press Show to players.</div>
+      <div class="hint">Monsters stay out of players' sight: under the fog until you reveal their area, or hidden (reveal them yourself) if fog is off. New maps are private until you press Show to players.</div>
       <div class="row" style="margin-top:16px"><button id="genNew" class="primary">Create new map</button><button id="genReplace" title="Regenerate the map you're on (replaces everything on it)">Reroll this map</button></div>
     </div>
   </div>

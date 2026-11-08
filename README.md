@@ -54,12 +54,15 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![Generate a map](docs/images/generate-dialog.jpg)
 
-**What players see**
-- Secret doors, traps and hidden monsters exist only on the DM's screen: they are never sent to players
+**Fog of war, and what players see**
+- Turn on fog of war and players see only what you reveal. **Reveal room** opens a whole room with one click, stopping at doors; brushes reveal or cover by hand
+- Nothing under the fog, and no secret door, trap or hidden monster, is ever sent to players' screens
+- Monsters in the dark are invisible to players until they step into the light, or you reveal their room
+- Generated dungeons can start fogged with only the entrance showing
 
 | DM's view | Player's view |
 | --- | --- |
-| ![DM view of a generated dungeon, with hidden kobolds and secret doors](docs/images/dungeon-dm.jpg) | ![The same dungeon on a player's screen](docs/images/dungeon-player.jpg) |
+| ![DM view: the whole dungeon, unrevealed areas shaded, kobolds and secret doors visible](docs/images/fog-dm.jpg) | ![Player view: only the revealed rooms, everything else dark](docs/images/fog-player.jpg) |
 
 **Tokens**
 - A library of 215 ready-made tokens: dragons of every colour, kobolds, goblinoids, humanoids, undead, beasts, giants and monsters, fiends and fey, villagers, farm animals, hero classes

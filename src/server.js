@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
 const TERRAINS = CATALOG.terrains.map((t) => t.id);
@@ -36,14 +36,19 @@ function newScene(name, cols = 30, rows = 20) {
   return {
     id: uid(), name: str(name || 'New map', 40),
     cols: clamp(int(cols, 30), 5, MAX_SIDE), rows: clamp(int(rows, 20), 5, MAX_SIDE),
-    cell: 50, showGrid: true, bg: null, tiles: {}, props: {}, tokens: {}
+    cell: 50, showGrid: true, bg: null, tiles: {}, props: {}, tokens: {},
+    fog: { on: false, data: '' } // data: base64, one byte per cell (1 = revealed), row by row
   };
 }
 
 function loadState(file) {
   let s = null;
   try { s = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* fresh table */ }
-  if (s && s.version === 2) { s.library = s.library || []; return s; }
+  if (s && s.version === 2) {
+    s.library = s.library || [];
+    for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
+    return s;
+  }
   const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [] };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
@@ -71,8 +76,35 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     clearTimeout(saveTimer);
     saveTimer = setTimeout(saveNow, 400);
   };
+  // ---------- fog of war ----------
+  // Kept in memory as one byte per cell; written back to sc.fog.data before saving or sending.
+  const fogArrays = new Map();
+  function fogArr(sc) {
+    let a = fogArrays.get(sc.id);
+    if (!a || a.length !== sc.cols * sc.rows) {
+      a = new Uint8Array(sc.cols * sc.rows);
+      if (sc.fog && sc.fog.data) { const b = Buffer.from(sc.fog.data, 'base64'); if (b.length === a.length) a.set(b); }
+      fogArrays.set(sc.id, a);
+    }
+    return a;
+  }
+  const syncFog = (sc) => { if (sc && sc.fog) sc.fog.data = Buffer.from(fogArr(sc)).toString('base64'); };
+  const fogOn = (sc) => !!(sc.fog && sc.fog.on);
+  const revealed = (sc, x, y) => !fogOn(sc) || fogArr(sc)[y * sc.cols + x] === 1;
+  function tokenRevealed(sc, t) {
+    for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (revealed(sc, x, y)) return true;
+    return false;
+  }
+  // Can this player see this token? Never if hidden; under fog only in revealed cells, or if it's theirs.
+  function tokVisible(sc, t, u) {
+    if (t.hidden) return false;
+    if (!fogOn(sc) || (t.owner && (t.owner === u.name || t.owner === '*'))) return true;
+    return tokenRevealed(sc, t);
+  }
+
   function saveNow() {
     clearTimeout(saveTimer);
+    Object.values(state.scenes).forEach(syncFog);
     try {
       fs.writeFileSync(stateFile + '.tmp', JSON.stringify(state));
       fs.renameSync(stateFile + '.tmp', stateFile);
@@ -141,30 +173,39 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   const toPlayersOnScene = (sceneId, msg) => clients().forEach((c) => !c.user.isDM && sceneId === state.activeScene && send(c, msg));
   const canSee = (u, e) => !e.private || u.isDM || u.name === e.who;
 
-  // What players are allowed to see of a scene: no secret doors, traps or hidden tokens.
-  function playerScene(sc) {
+  const playersOnScene = (sceneId) => clients().filter((c) => !c.user.isDM && sceneId === state.activeScene);
+
+  // What a player is allowed to see of a scene: no secret doors, traps or hidden tokens,
+  // and under fog of war only the revealed cells (plus their own tokens).
+  function playerScene(sc, u) {
     if (!sc) return null;
-    const props = {}, tokens = {};
-    for (const [k, p] of Object.entries(sc.props)) if (!DM_ONLY.has(p.kind)) props[k] = p;
-    for (const [k, t] of Object.entries(sc.tokens)) if (!t.hidden) tokens[k] = t;
-    return { ...sc, props, tokens };
+    syncFog(sc);
+    const fog = fogOn(sc), tiles = {}, props = {}, tokens = {};
+    for (const [k, t] of Object.entries(sc.tiles)) { if (!fog) { tiles[k] = t; continue; } const [x, y] = k.split(',').map(Number); if (revealed(sc, x, y)) tiles[k] = t; }
+    for (const [k, p] of Object.entries(sc.props)) if (!DM_ONLY.has(p.kind) && revealed(sc, p.x, p.y)) props[k] = p;
+    for (const [k, t] of Object.entries(sc.tokens)) if (tokVisible(sc, t, u)) tokens[k] = t;
+    return { ...sc, tiles, props, tokens };
   }
   function sendSceneFull(sc) {
+    syncFog(sc);
     clients().forEach((c) => {
       if (c.user.isDM) send(c, { type: 'sceneFull', scene: sc });
-      else if (sc.id === state.activeScene) send(c, { type: 'sceneFull', scene: playerScene(sc), active: true });
+      else if (sc.id === state.activeScene) send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
     });
   }
-  // Token changes: DMs always hear; players only if the token is visible (and lose it when it's hidden).
-  function tokenChanged(sc, tok, wasHidden) {
+  // Token changes: DMs always hear. Each player gets it if they can see it now, or loses it if they could before.
+  function tokenChanged(sc, tok, before) {
     toDMs({ type: 'token', sceneId: sc.id, token: tok });
-    if (!tok.hidden) toPlayersOnScene(sc.id, { type: 'token', sceneId: sc.id, token: tok });
-    else if (!wasHidden) toPlayersOnScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: tok.id });
+    for (const c of playersOnScene(sc.id)) {
+      const now = tokVisible(sc, tok, c.user), was = before ? tokVisible(sc, before, c.user) : false;
+      if (now) send(c, { type: 'token', sceneId: sc.id, token: tok });
+      else if (was) send(c, { type: 'removeToken', sceneId: sc.id, id: tok.id });
+    }
   }
   function viewFor(u) {
     const base = { activeScene: state.activeScene, log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
-    if (u.isDM) return { ...base, scenes: state.scenes, order: state.order, library: state.library };
-    return { ...base, scene: playerScene(state.scenes[state.activeScene]) };
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library }; }
+    return { ...base, scene: playerScene(state.scenes[state.activeScene], u) };
   }
 
   // Validated token fields shared by add, update and generated maps.
@@ -201,6 +242,16 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       const id = uid();
       sc.tokens[id] = { id, ...tokenFields({ label: '?', color: '#e8390e', owner: '', size: 1, ...t }, sc) };
     }
+    // fog: { on, reveal: [[x0, y0, x1, y1], ...] } — e.g. a generated dungeon with only the entrance showing
+    sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
+    fogArrays.delete(sc.id);
+    const a = fogArr(sc);
+    if (m.fog && Array.isArray(m.fog.reveal)) for (const r of m.fog.reveal.slice(0, 500)) {
+      if (!Array.isArray(r)) continue;
+      const [x0, y0, x1, y1] = r.map((v) => int(v, -1));
+      for (let y = Math.max(0, y0); y <= Math.min(sc.rows - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(sc.cols - 1, x1); x++) a[y * sc.cols + x] = 1;
+    }
+    syncFog(sc);
   }
 
   wss.on('connection', (ws) => {
@@ -232,22 +283,24 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       // ----- tokens -----
       case 'move':
         if (!tok || (!u.isDM && (tok.hidden || (tok.owner !== u.name && tok.owner !== '*')))) return;
-        tok.x = clamp(int(msg.x, tok.x), 0, sc.cols - tok.size);
-        tok.y = clamp(int(msg.y, tok.y), 0, sc.rows - tok.size);
-        tokenChanged(sc, tok, tok.hidden); save();
+        { const before = { ...tok };
+          tok.x = clamp(int(msg.x, tok.x), 0, sc.cols - tok.size);
+          tok.y = clamp(int(msg.y, tok.y), 0, sc.rows - tok.size);
+          tokenChanged(sc, tok, before); }
+        save();
         break;
       case 'addToken': {
         if (!u.isDM || !sc || Object.keys(sc.tokens).length >= 500) return;
         const id = uid();
         sc.tokens[id] = { id, ...tokenFields({ label: '?', color: '#e8390e', owner: '', size: 1, x: 1, y: 1, ...msg }, sc) };
-        tokenChanged(sc, sc.tokens[id], true); save();
+        tokenChanged(sc, sc.tokens[id], null); save();
         break;
       }
       case 'tokenUpdate': {
         if (!u.isDM || !tok) return;
-        const wasHidden = !!tok.hidden;
+        const before = { ...tok };
         Object.assign(tok, tokenFields({ ...msg, x: msg.x ?? tok.x, y: msg.y ?? tok.y, size: msg.size ?? tok.size }, sc, tok));
-        tokenChanged(sc, tok, wasHidden); save();
+        tokenChanged(sc, tok, before); save();
         break;
       }
       case 'removeToken':
@@ -286,7 +339,12 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           else continue;
           applied.push([x, y, t]);
         }
-        if (applied.length) { toScene(sc.id, { type: 'tiles', sceneId: sc.id, cells: applied }); save(); }
+        if (applied.length) {
+          toDMs({ type: 'tiles', sceneId: sc.id, cells: applied });
+          const seen = fogOn(sc) ? applied.filter(([x, y]) => revealed(sc, x, y)) : applied; // nothing leaks from under the fog
+          if (seen.length) toPlayersOnScene(sc.id, { type: 'tiles', sceneId: sc.id, cells: seen });
+          save();
+        }
         break;
       }
       case 'propSet': { // add or update a prop; ids come from the DM client so undo can refer to them
@@ -296,7 +354,51 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!inside(x, y)) return;
         if (!sc.props[id] && Object.keys(sc.props).length >= 3000) return;
         sc.props[id] = { id, kind: msg.kind, x, y, rot: ((int(msg.rot, 0) % 4) + 4) % 4 };
-        (DM_ONLY.has(msg.kind) ? toDMs : (m) => toScene(sc.id, m))({ type: 'prop', sceneId: sc.id, prop: sc.props[id] }); save();
+        toDMs({ type: 'prop', sceneId: sc.id, prop: sc.props[id] });
+        // players see it only if it's not secret and not under fog; if it moved into fog, they lose it
+        toPlayersOnScene(sc.id, !DM_ONLY.has(msg.kind) && revealed(sc, x, y)
+          ? { type: 'prop', sceneId: sc.id, prop: sc.props[id] } : { type: 'propRemove', sceneId: sc.id, propId: id });
+        save();
+        break;
+      }
+
+      // ----- fog of war (DM only) -----
+      case 'fogSet': // turn fog on or off for a map
+        if (!u.isDM || !sc) return;
+        sc.fog.on = !!msg.on;
+        sendSceneFull(sc); save();
+        break;
+      case 'fogAll': // reveal or cover the whole map
+        if (!u.isDM || !sc) return;
+        fogArr(sc).fill(msg.reveal ? 1 : 0);
+        sendSceneFull(sc); save();
+        break;
+      case 'fog': { // reveal or cover a list of cells
+        if (!u.isDM || !sc || !Array.isArray(msg.cells) || msg.cells.length > 30000) return;
+        const a = fogArr(sc), v = msg.reveal ? 1 : 0, changed = [];
+        for (const c of msg.cells) {
+          const x = int(c && c[0], -1), y = int(c && c[1], -1);
+          if (!inside(x, y) || a[y * sc.cols + x] === v) continue;
+          a[y * sc.cols + x] = v; changed.push([x, y]);
+        }
+        if (!changed.length) return;
+        toDMs({ type: 'fog', sceneId: sc.id, reveal: !!v, cells: changed });
+        if (fogOn(sc)) {
+          const set = new Set(changed.map(([x, y]) => x + ',' + y));
+          const touches = (t) => { for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) if (set.has(x + ',' + y)) return true; return false; };
+          for (const c of playersOnScene(sc.id)) {
+            if (v) { // send what's now in view
+              const tiles = {}; for (const k of set) if (sc.tiles[k]) tiles[k] = sc.tiles[k];
+              const props = Object.values(sc.props).filter((p) => set.has(p.x + ',' + p.y) && !DM_ONLY.has(p.kind));
+              const tokens = Object.values(sc.tokens).filter((t) => touches(t) && tokVisible(sc, t, c.user));
+              send(c, { type: 'fogReveal', sceneId: sc.id, cells: changed, tiles, props, tokens });
+            } else { // cover it again: tokens that dropped out of sight go too
+              const gone = Object.values(sc.tokens).filter((t) => touches(t) && !tokVisible(sc, t, c.user)).map((t) => t.id);
+              send(c, { type: 'fogHide', sceneId: sc.id, cells: changed, tokens: gone });
+            }
+          }
+        }
+        save();
         break;
       }
       case 'propRemove':
@@ -310,6 +412,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (!u.isDM || state.order.length >= 200) return;
         const s = newScene(msg.name, msg.cols, msg.rows);
         if (msg.content) fillScene(s, msg.content);
+        syncFog(s);
         state.scenes[s.id] = s; state.order.push(s.id);
         toDMs({ type: 'sceneAdded', scene: s, order: state.order }); save();
         break;
@@ -325,6 +428,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       }
       case 'sceneDuplicate': {
         if (!u.isDM || !sc || state.order.length >= 200) return;
+        syncFog(sc);
         const s = JSON.parse(JSON.stringify(sc));
         s.id = uid(); s.name = str(sc.name + ' (copy)', 40);
         state.scenes[s.id] = s; state.order.splice(state.order.indexOf(sc.id) + 1, 0, s.id);
@@ -342,7 +446,13 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           patch.bg = msg.bg && typeof msg.bg.url === 'string' && /^(\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)|https?:\/\/.{3,500})$/.test(msg.bg.url)
             ? { url: msg.bg.url } : null;
         }
+        const oldFog = fogArr(sc), oldCols = sc.cols, oldRows = sc.rows;
         Object.assign(sc, patch);
+        if (sc.cols !== oldCols || sc.rows !== oldRows) { // keep revealed areas where they were
+          const nf = new Uint8Array(sc.cols * sc.rows);
+          for (let y = 0; y < Math.min(oldRows, sc.rows); y++) for (let x = 0; x < Math.min(oldCols, sc.cols); x++) nf[y * sc.cols + x] = oldFog[y * oldCols + x];
+          fogArrays.set(sc.id, nf);
+        }
         if (patch.cols || patch.rows) { // trim anything that fell off a shrunk map
           for (const k of Object.keys(sc.tiles)) { const [x, y] = k.split(',').map(Number); if (x >= sc.cols || y >= sc.rows) delete sc.tiles[k]; }
           for (const [k, p] of Object.entries(sc.props)) if (p.x >= sc.cols || p.y >= sc.rows) delete sc.props[k];
@@ -400,7 +510,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
   function activate(id) {
     state.activeScene = id;
-    clients().forEach((c) => send(c, c.user.isDM ? { type: 'active', sceneId: id } : { type: 'sceneFull', scene: playerScene(state.scenes[id]), active: true }));
+    clients().forEach((c) => send(c, c.user.isDM ? { type: 'active', sceneId: id } : { type: 'sceneFull', scene: playerScene(state.scenes[id], c.user), active: true }));
   }
 
   return new Promise((resolve, reject) => {

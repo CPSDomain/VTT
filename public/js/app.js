@@ -65,10 +65,27 @@ function onMessage(msg) {
     case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
     case 'prop': if (s) s.props[msg.prop.id] = msg.prop; break;
+    case 'fog': if (s) { const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = msg.reveal ? 1 : 0; fogDirty = true; if (fogTool === 'room' && hover) fogPreview = roomCells(s, hover); } break;
+    case 'fogReveal': // player: an area came into view, with what's in it
+      if (s) {
+        const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = 1;
+        Object.assign(s.tiles, msg.tiles); msg.props.forEach((p) => { s.props[p.id] = p; }); msg.tokens.forEach((t) => { s.tokens[t.id] = t; });
+        fogDirty = true;
+      }
+      break;
+    case 'fogHide': // player: an area was covered again; forget what was there
+      if (s) {
+        const a = fogArr(s), set = new Set(msg.cells.map(([x, y]) => x + ',' + y));
+        for (const [x, y] of msg.cells) { a[y * s.cols + x] = 0; delete s.tiles[x + ',' + y]; }
+        for (const p of Object.values(s.props)) if (set.has(p.x + ',' + p.y)) delete s.props[p.id];
+        msg.tokens.forEach((id) => { delete s.tokens[id]; if (selected === id) select(null); });
+        fogDirty = true;
+      }
+      break;
     case 'propRemove': if (s) delete s.props[msg.propId]; break;
     case 'sceneMeta': if (s) { Object.assign(s, msg.patch); if (msg.sceneId === editing) sceneChanged(false); } break;
     case 'sceneFull':
-      if (msg.active) { scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(true); }
+      if (msg.active) { const switched = active !== msg.scene.id; scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(switched); }
       else { scenes[msg.scene.id] = msg.scene; if (msg.scene.id === editing) sceneChanged(false); }
       break;
     case 'sceneAdded':
@@ -109,7 +126,8 @@ function renderPlayers() {
 function sceneChanged(refit) {
   const s = sc();
   if (!s) return;
-  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); if (refit) clearMapSelection(); }
+  fogDirty = true;
+  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
   if (s.bg) loadImg(s.bg.url);
   if (refit) fitView();
@@ -239,6 +257,8 @@ function render() {
   }
   ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(0, 0, W, Hh);
 
+  drawFog(s);
+
   // tokens (hidden ones only ever reach the DM, drawn faded)
   for (const t of Object.values(s.tokens)) {
     const pos = drag && drag.id === t.id ? drag.pos : { x: t.x * CELL, y: t.y * CELL };
@@ -288,8 +308,117 @@ function drawSelection(s) {
     ctx.strokeRect((pr.x + dx) * CELL + 1, (pr.y + dy) * CELL + 1, CELL - 2, CELL - 2); ctx.setLineDash([]);
   }
 }
+// ---------- fog of war ----------
+// One byte per cell (1 = revealed). Players never receive what's under the fog; the DM sees it shaded.
+const fogCache = new WeakMap();
+let fogDirty = true, fogMask = null, fogTool = null, fogPreview = null, fogStroke = null;
+const fogOn = (s) => !!(s && s.fog && s.fog.on);
+function fogArr(s) {
+  let a = fogCache.get(s);
+  if (!a || a.length !== s.cols * s.rows) {
+    a = new Uint8Array(s.cols * s.rows);
+    const d = s.fog && s.fog.data;
+    if (d) { const bin = atob(d); if (bin.length === a.length) for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); }
+    fogCache.set(s, a); fogDirty = true;
+  }
+  return a;
+}
+// A small soft-edged mask (4 px per cell, padded so the map border stays dark), scaled up when drawn.
+function drawFog(s) {
+  if (!fogOn(s)) return;
+  const a = fogArr(s), S = 4, P = 2;
+  if (fogDirty || !fogMask || fogMask.key !== s) {
+    const w = (s.cols + 2 * P) * S, h = (s.rows + 2 * P) * S;
+    const c1 = document.createElement('canvas'); c1.width = w; c1.height = h;
+    const g1 = c1.getContext('2d'); g1.fillStyle = '#09090b'; g1.fillRect(0, 0, w, h);
+    for (let y = 0; y < s.rows; y++) for (let x = 0; x < s.cols; x++) if (a[y * s.cols + x]) g1.clearRect((x + P) * S, (y + P) * S, S, S);
+    const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
+    const g2 = c2.getContext('2d'); g2.filter = 'blur(1.5px)'; g2.drawImage(c1, 0, 0);
+    fogMask = c2; fogMask.key = s; fogDirty = false;
+  }
+  ctx.save();
+  ctx.globalAlpha = me.isDM ? 0.55 : 1;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(fogMask, -P * CELL, -P * CELL, (s.cols + 2 * P) * CELL, (s.rows + 2 * P) * CELL);
+  ctx.restore();
+}
+const DOORISH = new Set(['door', 'doubledoor', 'dooropen', 'secretdoor', 'portcullis', 'archway', 'bars']);
+// The room under a cell: floor connected without passing walls or doors, plus the walls and doors round it.
+function roomCells(s, c) {
+  const tileAt = (x, y) => s.tiles[x + ',' + y];
+  if (!inside(s, c.x, c.y) || !tileAt(c.x, c.y)) return null;
+  const doors = new Set(Object.values(s.props).filter((p) => DOORISH.has(p.kind)).map((p) => p.x + ',' + p.y));
+  const seen = new Set(), out = new Set(), q = [[c.x, c.y]], startWall = tileAt(c.x, c.y) === 'wall';
+  while (q.length) {
+    const [x, y] = q.pop(), k = x + ',' + y;
+    if (seen.has(k) || !inside(s, x, y)) continue;
+    const t = tileAt(x, y);
+    if (!t || (t === 'wall' && !startWall)) continue;
+    seen.add(k); out.add(k);
+    if (doors.has(k) && !(x === c.x && y === c.y)) continue; // reveal the doorway, but don't spill through it
+    if (startWall) continue;
+    q.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+  }
+  for (const k of seen) { // walls (and doors in them) round the edge
+    const [x, y] = k.split(',').map(Number);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const nk = (x + dx) + ',' + (y + dy);
+      if (tileAt(x + dx, y + dy) === 'wall' || doors.has(nk)) out.add(nk);
+    }
+  }
+  return [...out].map((k) => k.split(',').map(Number)).filter(([x, y]) => inside(s, x, y));
+}
+let fogPending = [], fogPendingReveal = true, fogTimer = null;
+function fogCells(s, cells, reveal) {
+  const a = fogArr(s), v = reveal ? 1 : 0;
+  if (reveal !== fogPendingReveal) flushFog();
+  fogPendingReveal = reveal;
+  for (const [x, y] of cells) { const i = y * s.cols + x; if (a[i] !== v) { a[i] = v; fogPending.push([x, y]); } }
+  fogDirty = true;
+  if (!fogTimer) fogTimer = setTimeout(flushFog, 60);
+}
+function flushFog() {
+  clearTimeout(fogTimer); fogTimer = null;
+  if (fogPending.length) { sendMsg({ type: 'fog', sceneId: editing, reveal: fogPendingReveal, cells: fogPending }); fogPending = []; }
+}
+function fogBrushAt(s, cx, cy, reveal) {
+  const n = Number($('fogSize').value), o = Math.floor((n - 1) / 2), cells = [];
+  for (let y = cy - o; y < cy - o + n; y++) for (let x = cx - o; x < cx - o + n; x++) if (inside(s, x, y)) cells.push([x, y]);
+  fogCells(s, cells, reveal);
+}
+function setFogTool(t) {
+  if (t && !fogOn(sc())) { toast('Tick "Fog of war" on the left of this bar first'); t = null; }
+  fogTool = fogTool === t ? null : t;
+  document.querySelectorAll('#fogBar [data-fog]').forEach((b) => b.classList.toggle('on', b.dataset.fog === fogTool));
+  fogPreview = null;
+  canvas.style.cursor = fogTool ? 'crosshair' : '';
+  if (!fogTool) updateCursor();
+  draw();
+}
+function renderFogBar() { const s = sc(); if (!s) return; $('fogOn').checked = fogOn(s); if (!fogOn(s) && fogTool) setFogTool(null); }
+document.querySelectorAll('#fogBar [data-fog]').forEach((b) => b.onclick = () => setFogTool(b.dataset.fog));
+$('fogOn').onchange = () => {
+  const on = $('fogOn').checked;
+  sendMsg({ type: 'fogSet', sceneId: editing, on });
+  toast(on ? 'Fog on: players now see only what you reveal. Use Reveal room or the brushes.' : 'Fog off: players see the whole map');
+};
+$('fogRevealAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of war" first'); sendMsg({ type: 'fogAll', sceneId: editing, reveal: true }); };
+$('fogCoverAll').onclick = () => { if (!fogOn(sc())) return toast('Tick "Fog of war" first'); sendMsg({ type: 'fogAll', sceneId: editing, reveal: false }); };
+
 function drawToolPreview(s) {
   drawSelection(s);
+  if (me.isDM && fogTool && hover) {
+    const z = view.zoom;
+    if (fogTool === 'room' && fogPreview) {
+      ctx.fillStyle = 'rgba(255,200,90,.22)';
+      for (const [x, y] of fogPreview) ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+    } else if (fogTool !== 'room') {
+      const n = Number($('fogSize').value), o = Math.floor((n - 1) / 2);
+      ctx.lineWidth = 2 / z; ctx.strokeStyle = fogTool === 'reveal' ? '#fcd34d' : '#94a3b8';
+      ctx.strokeRect((hover.x - o) * CELL, (hover.y - o) * CELL, n * CELL, n * CELL);
+    }
+    return;
+  }
   if (!me.isDM || mode !== 'build' || !hover) return;
   ctx.lineWidth = 2 / view.zoom;
   if (rectDrag) {
@@ -533,6 +662,16 @@ canvas.addEventListener('pointerdown', (e) => {
   const p = toWorld(e), c = toCell(p);
   const building = me.isDM && mode === 'build';
 
+  if (me.isDM && fogTool) { // fog tools take the click, in Play or Build mode
+    if (fogTool === 'room') {
+      const cells = roomCells(s, c);
+      if (!cells) toast('Reveal room works on built or generated maps. On an uploaded image map, use the Reveal brush.');
+      else fogCells(s, cells, true);
+      flushFog();
+    } else { fogStroke = { reveal: fogTool === 'reveal', last: c }; fogBrushAt(s, c.x, c.y, fogStroke.reveal); }
+    draw(); return;
+  }
+
   if (!building || tool === 'select') {
     const t = tokenAt(s, p);
     select(t ? t.id : null);
@@ -562,8 +701,10 @@ canvas.addEventListener('pointermove', (e) => {
   if (!hover || hover.x !== c.x || hover.y !== c.y) {
     hover = c;
     $('cellInfo').textContent = inside(s, c.x, c.y) ? `${String.fromCharCode(65 + (c.x % 26))}${c.x >= 26 ? Math.floor(c.x / 26) : ''}${c.y + 1}` : '';
-    if (me.isDM && mode === 'build') draw();
+    if (me.isDM && fogTool === 'room' && !fogStroke) fogPreview = roomCells(s, c);
+    if (me.isDM && (mode === 'build' || fogTool)) draw();
   }
+  if (fogStroke) { line(fogStroke.last, c, (x, y) => fogBrushAt(s, x, y, fogStroke.reveal)); fogStroke.last = c; draw(); return; }
   if (pan) { view.x = pan.vx + e.clientX - pan.sx; view.y = pan.vy + e.clientY - pan.sy; draw(); }
   else if (drag) { drag.pos = { x: p.x - drag.off.x, y: p.y - drag.off.y }; draw(); }
   else if (stroke) { line(lastCell, c, (x, y) => paintAt(s, x, y)); lastCell = c; draw(); }
@@ -577,6 +718,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerup', () => {
   const s = sc();
+  if (fogStroke) { fogStroke = null; flushFog(); }
   if (drag && s) {
     const t = s.tokens[drag.id];
     const x = Math.round(drag.pos.x / CELL), y = Math.round(drag.pos.y / CELL);
@@ -693,6 +835,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); return redo(); }
   if ((e.key === 'Delete' || e.key === 'Backspace') && selected) return sendMsg({ type: 'removeToken', sceneId: editing, id: selected });
+  if (e.key === 'Escape' && fogTool) return setFogTool(null);
   if (mode !== 'build') return;
   const s = sc(), k = e.key.toLowerCase();
   if (tool === 'select' && s) {
@@ -729,6 +872,7 @@ function setMode(m) {
 }
 function setTool(t) {
   tool = t;
+  if (fogTool && typeof setFogTool === 'function') setFogTool(null);
   document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', b.dataset.tool === t));
   $('brushRow').style.display = t === 'brush' || t === 'erase' ? '' : 'none';
   if (t !== 'select') clearMapSelection(); else showSelection();
@@ -843,14 +987,17 @@ const libByName = () => Object.fromEntries(builtins().map((b) => [b.name, b]));
 function syncGenDialog() {
   document.querySelectorAll('#genTypes button').forEach((b) => b.classList.toggle('on', b.dataset.gen === genType));
   document.querySelectorAll('#genSize button').forEach((b) => b.classList.toggle('on', b.dataset.size === genSize));
-  $('genCreaturesLabel').textContent = { village: 'Add villagers and animals', dungeon: 'Add monsters (hidden until you reveal them)', forest: 'Add bandits and wolves (hidden until you reveal them)' }[genType];
+  $('genCreaturesLabel').textContent = { village: 'Add villagers and animals', dungeon: 'Add monsters', forest: 'Add bandits and wolves' }[genType];
   $('genMonsterRow').style.display = genType === 'dungeon' ? '' : 'none';
   $('genReplace').textContent = `Reroll "${sc() ? sc().name : 'this map'}"`;
 }
 function runGenerator(replace) {
   const seed = (Math.random() * 2 ** 31) | 0;
   const out = GENERATORS[genType](genSize, seed, { creatures: $('genCreatures').checked, monsters: $('genMonsters').value }, libByName());
-  const content = { tiles: out.tiles, props: out.props, tokens: out.tokens };
+  // With fog on, the fog keeps monsters out of sight until their area is revealed, so they needn't be hidden too.
+  const fog = $('genFog').checked;
+  const tokens = fog ? out.tokens.map((t) => ({ ...t, hidden: false })) : out.tokens;
+  const content = { tiles: out.tiles, props: out.props, tokens, fog: { on: fog, reveal: out.start ? [out.start] : [] } };
   if (replace) {
     sendMsg({ type: 'sceneReplace', sceneId: editing, name: out.name, cols: out.cols, rows: out.rows, content });
     undoStack.length = redoStack.length = 0; updateUndo();
@@ -862,8 +1009,8 @@ function runGenerator(replace) {
   }
   $('genModal').hidden = true;
 }
-$('genBtn').onclick = () => { syncGenDialog(); $('genModal').hidden = false; };
-document.querySelectorAll('#genTypes button').forEach((b) => b.onclick = () => { genType = b.dataset.gen; syncGenDialog(); });
+$('genBtn').onclick = () => { $('genFog').checked = genType === 'dungeon'; syncGenDialog(); $('genModal').hidden = false; };
+document.querySelectorAll('#genTypes button').forEach((b) => b.onclick = () => { genType = b.dataset.gen; $('genFog').checked = genType === 'dungeon'; syncGenDialog(); });
 document.querySelectorAll('#genSize button').forEach((b) => b.onclick = () => { genSize = b.dataset.size; syncGenDialog(); });
 $('genNew').onclick = () => runGenerator(false);
 $('genReplace').onclick = (e) => {

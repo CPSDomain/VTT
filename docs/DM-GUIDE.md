@@ -1,6 +1,6 @@
 # DM guide
 
-Everything you need to run a session in Tabletop: starting the server, getting players in, building or generating maps, and running play.
+Everything you need to run a session in Tabletop: starting the server, getting players in, building or generating maps, fog of war, and running play.
 
 ## Start Tabletop DM
 
@@ -31,6 +31,19 @@ The dropdown at the top picks which map **you** are looking at.
 - A grey **PRIVATE PREP** badge means only you see this map. Build in peace.
 - When a map is ready, click **Show to players**.
 
+## Fog of war
+
+The bar at the top of the map controls fog for the map you're on.
+
+1. Tick **Fog of war**. Players now see nothing until you reveal it; you see everything, with unrevealed areas shaded.
+2. **Reveal room:** click inside a room. It reveals the room and its walls and stops at doors, so the party opens one room at a time. Hover first to see what will open. Works on built and generated maps; on an uploaded image map, use the brush.
+3. **Reveal brush** / **Cover brush:** paint to reveal, or to cover an area again. Pick the size (1, 3, 5 or 9 squares) next to them.
+4. **Reveal all** / **Cover all** do the whole map. Press **Esc** to put the fog tool down and go back to moving tokens.
+
+Nothing under the fog is sent to players' screens. Monsters standing in fog are invisible to players and appear when they walk into a revealed area or you reveal theirs, so with fog on you rarely need **Hidden from players**. Players always see their own tokens.
+
+Generated maps can start fogged with only the way in revealed (the **Start with fog of war** box; on by default for dungeons).
+
 ## Generate a map
 
 Click **Build map**, then **Generate a map…**. Pick a type and size, and click **Create new map**. The new map opens privately.
@@ -43,7 +56,7 @@ Click **Build map**, then **Generate a map…**. Pick a type and size, and click
 | Dungeon | Rooms joined by corridors, with doors, portcullises, secret doors and traps, and themed rooms: throne room, crypt, library, prison, shrine, treasure room, barracks, flooded or collapsed rooms |
 | Forest road | A road through groves of trees, with a bandit campsite, a pond and old ruins |
 
-Tick the creatures box to fill the map: villagers, shopkeepers and animals in a village; monsters in a dungeon (goblins, kobolds, undead or beasts); bandits and wolves on the forest road. **Dungeon and forest creatures start hidden**, so you reveal them when the party finds them.
+Tick the creatures box to fill the map: villagers, shopkeepers and animals in a village; monsters in a dungeon (goblins, kobolds, undead or beasts); bandits and wolves on the forest road. Monsters stay out of players' sight: under the fog until you reveal their room, or marked hidden (reveal them yourself) if fog is off.
 
 Not happy with it? **Reroll** regenerates the map you're on. Everything generated can then be edited with the normal tools: use Select to drag a box round a building and move it, or click any prop to move or delete it.
 
@@ -93,4 +106,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-Fog of war, initiative tracker, importing MapTool campaigns, map labels and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
+Initiative tracker, importing MapTool campaigns, map labels and player passcodes. Players are identified only by name, so anyone typing another player's name gets their view: fine for a trusted group.
