@@ -1,6 +1,6 @@
 {
   "name": "tabletop",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Self-hosted virtual tabletop for D&D",
   "main": "apps/dm/main.js",
   "scripts": {
@@ -8,7 +8,8 @@
     "dm": "electron apps/dm/main.js",
     "player": "electron apps/player/main.js",
     "build:win": "electron-builder --win --config build/dm.json && electron-builder --win --config build/player.json",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "postinstall": "node scripts/patch-nsis.js"
   },
   "author": "Tabletop",
   "license": "UNLICENSED",

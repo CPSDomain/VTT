@@ -2,6 +2,11 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.6.1] - 2026-11-09
+
+### Fixed
+- **The installers could close straight after "Windows protected your PC" and install nothing** (even with Run as administrator; Windows logged a crash in System.dll). The cause was a bug in the installer template that comes with the build tools: it read past the end of the Programs folder's name. The faulty lookup is removed; Tabletop still installs to the same place (`%LOCALAPPDATA%\Programs`) unless you choose another folder.
+
 ## [1.6.0] - 2026-11-09
 
 ### Added
