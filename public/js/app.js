@@ -1,7 +1,7 @@
 import { CELL, TERRAINS, PROPS, PROP_CATS, DM_ONLY, texture, drawProp, swatch } from './art.js';
 import { generate, SCHEMA, defaults } from './generate.js';
 import { interpret, EXAMPLES } from './prompt.js';
-import { readMapTool, layout as mapToolLayout } from './maptool.js';
+import { readMapTool, layout as mapToolLayout, inArea as inMapToolArea } from './maptool.js';
 import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1981,6 +1981,44 @@ function drawStamp(g, bmp, t) {
   g.drawImage(bmp, -w / 2, -h / 2, w, h);
   g.restore();
 }
+// MapTool drawings, painted into the map picture
+function fillArea(g, segs) { // non-zero fill of an Area's edges, a row at a time
+  if (!segs.length) return;
+  const y0 = Math.floor(Math.min(...segs.map((s) => Math.min(s[1], s[3])))), y1 = Math.ceil(Math.max(...segs.map((s) => Math.max(s[1], s[3]))));
+  for (let y = y0; y < y1; y++) {
+    const py = y + 0.5, xs = [];
+    for (const [a, b, c, d, dir] of segs) { if (b === d || py < Math.min(b, d) || py >= Math.max(b, d)) continue; xs.push([a + (c - a) * (py - b) / (d - b), dir]); }
+    xs.sort((p, q) => p[0] - q[0]);
+    let w = 0;
+    for (let i = 0; i < xs.length; i++) { const was = w; w += xs[i][1]; if (was !== 0 && i > 0) g.fillRect(xs[i - 1][0], y, xs[i][0] - xs[i - 1][0], 1); }
+  }
+}
+function drawMapToolDrawing(g, d) {
+  g.save();
+  g.globalAlpha = Math.max(0, Math.min(1, d.opacity));
+  g.lineWidth = d.width; g.lineCap = d.square ? 'square' : 'round'; g.lineJoin = 'round';
+  if (d.stroke) g.strokeStyle = d.stroke; if (d.fill) g.fillStyle = d.fill;
+  g.beginPath();
+  if (d.kind === 'line') { d.pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); }
+  else if (d.kind === 'rect') g.rect(d.x, d.y, d.w, d.h);
+  else if (d.kind === 'oval') g.ellipse(d.x + d.w / 2, d.y + d.h / 2, d.w / 2, d.h / 2, 0, 0, Math.PI * 2);
+  else if (d.kind === 'cross') { g.moveTo(d.x, d.y); g.lineTo(d.x + d.w, d.y + d.h); g.moveTo(d.x + d.w, d.y); g.lineTo(d.x, d.y + d.h); }
+  else if (d.kind === 'path') {
+    let k = 0; const c = d.coords;
+    for (const t of d.types) {
+      if (t === 0) { g.moveTo(c[k], c[k + 1]); k += 2; } else if (t === 1) { g.lineTo(c[k], c[k + 1]); k += 2; }
+      else if (t === 2) { g.quadraticCurveTo(c[k], c[k + 1], c[k + 2], c[k + 3]); k += 4; } else if (t === 3) { g.bezierCurveTo(c[k], c[k + 1], c[k + 2], c[k + 3], c[k + 4], c[k + 5]); k += 6; } else if (t === 4) g.closePath();
+    }
+  } else if (d.kind === 'area') {
+    if (d.fill) fillArea(g, d.segs);
+    for (const [a, b, c2, e] of d.segs) { g.moveTo(a, b); g.lineTo(c2, e); }
+    if (d.stroke) g.stroke();
+    g.restore(); return;
+  }
+  if (d.fill && d.kind !== 'line' && d.kind !== 'cross') g.fill();
+  if (d.stroke) g.stroke();
+  g.restore();
+}
 async function importMapTool(file) {
   toast(`Reading ${file.name}…`, 60000);
   const mt = await readMapTool(file);
@@ -1992,6 +2030,9 @@ async function importMapTool(file) {
     return toast(`Added "${t.name || niceName(file.name)}" to your token library (My uploads)`, 5000);
   }
   if (!mt.maps.length) return toast(`No maps found in ${file.name}`, 5000);
+  let unitsToFeet = 1;
+  // a token's MapTool light as [bright, dim] feet; lights the file doesn't define (a single map file) count as a torch
+  const lightOf = (t) => { for (const id of t.lights) { const l = mt.lightDefs[id]; if (l) return [Math.round(l[0] * unitsToFeet), Math.round(l[1] * unitsToFeet)]; } return [20, 40]; };
   const made = [], notes = [];
   for (const [i, z] of mt.maps.entries()) {
     toast(`Importing ${z.name} (${i + 1} of ${mt.maps.length})…`, 60000);
@@ -2000,6 +2041,7 @@ async function importMapTool(file) {
       const blob = await mt.asset(id); if (!blob) continue;
       try { const bmp = await createImageBitmap(blob); imgs[id] = { blob, bmp }; sizes[id] = { w: bmp.width, h: bmp.height }; } catch { /* not an image we can read */ }
     }
+    unitsToFeet = 5 / (z.unitsPerCell || 5);
     const L = mapToolLayout(z, sizes);
     if (!L) { notes.push(`${z.name} is empty`); continue; }
     const cols = Math.min(200, L.cols), rows = Math.min(200, L.rows);
@@ -2009,14 +2051,18 @@ async function importMapTool(file) {
     const stamps = L.placed.filter((t) => (t.layer === 'BACKGROUND' || t.layer === 'OBJECT') && imgs[t.img])
       .sort((a, b) => (a.layer === b.layer ? 0 : a.layer === 'BACKGROUND' ? -1 : 1) || a.z - b.z);
     let bg = null;
-    if ((z.mapAsset && imgs[z.mapAsset]) || stamps.length || (z.bgTexture && imgs[z.bgTexture])) {
+    if ((z.mapAsset && imgs[z.mapAsset]) || stamps.length || (z.bgTexture && imgs[z.bgTexture]) || z.drawings.length) {
       const W = cols * L.S, H = rows * L.S, k = Math.min(1, 8192 / Math.max(W, H));
       const cv = document.createElement('canvas'); cv.width = Math.round(W * k); cv.height = Math.round(H * k);
       const g = cv.getContext('2d'); g.scale(k, k); g.translate(-L.originX, -L.originY);
       if (z.bgTexture && imgs[z.bgTexture]) g.fillStyle = g.createPattern(imgs[z.bgTexture].bmp, 'repeat'); else g.fillStyle = z.bgColour || '#1a1a1a';
       g.fillRect(L.originX, L.originY, W, H);
       if (z.mapAsset && imgs[z.mapAsset]) g.drawImage(imgs[z.mapAsset].bmp, z.boardX, z.boardY, sizes[z.mapAsset].w * z.imageScaleX, sizes[z.mapAsset].h * z.imageScaleY);
-      for (const t of stamps) drawStamp(g, imgs[t.img].bmp, t);
+      // MapTool's layers, bottom to top: background stamps and drawings, then object stamps and drawings, then drawings on the token layer
+      for (const layer of ['BACKGROUND', 'OBJECT', 'TOKEN']) {
+        for (const t of stamps) if (t.layer === layer) drawStamp(g, imgs[t.img].bmp, t);
+        for (const d of z.drawings) if (d.layer === layer) drawMapToolDrawing(g, d);
+      }
       const blob = await new Promise((r) => cv.toBlob(r, 'image/webp', 0.9));
       bg = { url: await uploadFile(new File([blob], 'map.webp', { type: 'image/webp' })) };
     }
@@ -2028,14 +2074,32 @@ async function importMapTool(file) {
       if (t.img && imgs[t.img] && !(t.img in urls)) urls[t.img] = await uploadBlob(imgs[t.img].blob, (t.name || 'token') + '.png').catch(() => null);
       tokens.push({ label: (t.name || t.gmName || 'Token').slice(0, 24), img: (t.img && urls[t.img]) || null, size: Math.max(1, Math.min(4, t.fp)), x, y,
         hidden: t.layer === 'GM' || !t.visible, owner: t.owners[0] || '', color: '#444444',
+        ...(t.lights.length ? { light: lightOf(t) } : {}), ...(t.hasSight && /dark/i.test(t.sight) ? { darkvision: 60 } : {}),
         ...(t.hp != null ? { hp: t.hp, maxHp: t.maxHp != null ? t.maxHp : t.hp } : {}) });
     }
     // several tokens with the same name: number them, as Tabletop does (Goblin 1, Goblin 2…)
     const count = {}; tokens.forEach((t) => { count[t.label] = (count[t.label] || 0) + 1; });
     const seen = {}; tokens.forEach((t) => { if (count[t.label] > 1 && !/\d$/.test(t.label)) t.label = `${t.label.slice(0, 20)} ${seen[t.label] = (seen[t.label] || 0) + 1}`; });
     const labels = z.labels.map((l) => ({ text: l.text, x: (l.x - L.originX) / L.S, y: (l.y - L.originY) / L.S }));
+    // fog: squares whose middle MapTool had revealed
+    let fog = { on: false };
+    if (z.hasFog) {
+      const a = new Uint8Array(cols * rows);
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+        const px = L.originX + (x + 0.5) * L.S, py = L.originY + (y + 0.5) * L.S;
+        if (z.exposed.some((segs) => inMapToolArea(segs, px, py))) a[y * cols + x] = 1;
+      }
+      let bin = ''; for (let i = 0; i < a.length; i++) bin += String.fromCharCode(a[i]);
+      fog = { on: true, data: btoa(bin) };
+    }
+    // vision blocking and walls → wall lines; lights on stamps and hidden tokens → lights on the map
+    const sq = (v, o) => Math.round(((v - o) / L.S) * 1000) / 1000;
+    const walls = z.blockSegs.slice(0, 20000).map(([a, b, c, d]) => [sq(a, L.originX), sq(b, L.originY), sq(c, L.originX), sq(d, L.originY)]);
+    const lights = L.placed.filter((t) => t.lights.length && t.layer !== 'TOKEN').map((t) => { const l = lightOf(t); return [sq(t.px + t.pw / 2, L.originX), sq(t.py + t.ph / 2, L.originY), (l[1] / 5), '#ffd27f']; });
+    const vision = z.visionType !== 'OFF' ? { on: true, ambient: z.visionType === 'NIGHT' ? 'dark' : 'bright' } : undefined;
+    if (walls.length || fog.on || vision) notes.push(`${z.name}: ${[walls.length ? `${walls.length} wall lines` : '', fog.on ? 'fog' : '', vision ? `vision (${vision.ambient === 'dark' ? 'night' : 'day'})` : '', lights.length ? `${lights.length} lights` : ''].filter(Boolean).join(', ')}`);
     pendingNewScene = true;
-    sendMsg({ type: 'sceneCreate', name: z.name.slice(0, 40), cols, rows, content: { bg, tokens, labels } });
+    sendMsg({ type: 'sceneCreate', name: z.name.slice(0, 40), cols, rows, content: { bg, tokens, labels, walls, lights, fog, vision } });
     made.push(`${z.name} (${cols} × ${rows}, ${tokens.length} token${tokens.length === 1 ? '' : 's'})`);
     await new Promise((r) => setTimeout(r, 150));
   }

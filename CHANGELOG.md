@@ -2,6 +2,18 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.3.0] - 2026-11-08
+
+### Added
+- **MapTool import, part 2.** Campaigns and maps from MapTool now bring across much more:
+  - **Fog of war:** what had been revealed in MapTool (for the party and each token) stays revealed; the map starts with fog on if it had fog.
+  - **Walls:** vision blocking (VBL) and the wall lines of newer MapTool versions become walls, used by line of sight and by Reveal room. In Build mode you see them in blue.
+  - **Lights:** light sources on tokens (torches, lanterns, the campaign's own lights) become token lights; lights on stamps and hidden tokens light the map. In a single map file (`.rpmap`), which doesn't carry the campaign's light list, a lit token gets a torch.
+  - **Sight:** tokens with a darkvision sight type get darkvision 60 ft.
+  - **Vision:** a map set to Day or Night vision in MapTool comes in with vision on, bright or dark.
+  - **Drawings:** lines, rectangles, ovals, crosses and shapes on the Background, Object and Token layers are painted into the map picture (GM-layer drawings and spell templates are left out).
+- With vision and fog of war on, the fog now catches up with what the party can see as soon as a map is shown or a player joins.
+
 ## [1.2.0] - 2026-11-08
 
 ### Added

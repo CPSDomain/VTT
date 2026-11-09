@@ -59,6 +59,73 @@ function footprintSize(tok) {
   }
   return 1;
 }
+// java.awt.geom.Area is saved as its edges ("curves"), each running top to bottom with a direction.
+// We keep them as straight segments [x0, y0, x1, y1, direction] (curves become their chords).
+function areaSegs(el) {
+  const out = [];
+  const curves = kid(el, 'curves');
+  for (const c of kids(curves)) {
+    if (!/Order[123]$/.test(c.tagName)) continue;
+    const x0 = num(c, 'x0', NaN), y0 = num(c, 'y0', NaN), x1 = num(c, 'x1', NaN), y1 = num(c, 'y1', NaN);
+    if ([x0, y0, x1, y1].some((v) => !Number.isFinite(v))) continue;
+    out.push([x0, y0, x1, y1, num(c, 'direction', 1) || 1]);
+  }
+  return out;
+}
+// is a point inside an Area? (non-zero winding: add up the edges crossed going right)
+export function inArea(segs, px, py) {
+  let w = 0;
+  for (const [x0, y0, x1, y1, dir] of segs) {
+    if (y0 === y1 || py < Math.min(y0, y1) || py >= Math.max(y0, y1)) continue;
+    const x = x0 + (x1 - x0) * (py - y0) / (y1 - y0);
+    if (x > px) w += dir;
+  }
+  return w !== 0;
+}
+const colourOf = (paint) => {
+  if (!paint || !/ColorPaint/.test(paint.getAttribute('class') || paint.tagName)) return null;
+  const c = num(paint, 'color', 0) >>> 0, a = (c >>> 24) / 255;
+  return `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a || 1})`;
+};
+const point = (el) => (el ? [num(el, 'x'), num(el, 'y')] : null);
+// a drawing: its shape in map pixels, and how it's painted
+function drawingInfo(de) {
+  const d = kid(de, 'drawable'), pen = kid(de, 'pen');
+  if (!d || !pen || bool(pen, 'eraser', false)) return [];
+  const cls = d.getAttribute('class') || '';
+  if (/Template/.test(cls)) return []; // spell templates in MapTool are temporary; not brought across
+  let stroke = colourOf(kid(pen, 'paint')) || colourOf(kid(pen, 'foregroundPaint'));
+  let fill = colourOf(kid(pen, 'backgroundPaint'));
+  if (!stroke && txt(pen, 'color') != null && num(pen, 'foregroundMode', 0) === 0) { const c = num(pen, 'color') >>> 0; stroke = `rgb(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255})`; }
+  if (!fill && txt(pen, 'backgroundColor') != null && num(pen, 'backgroundMode', 1) === 0) { const c = num(pen, 'backgroundColor') >>> 0; fill = `rgb(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255})`; }
+  const style = { stroke, fill, width: num(pen, 'thickness', 3) || 3, opacity: num(pen, 'opacity', 1) || 1, square: bool(pen, 'squareCap', false) };
+  if (/DrawablesGroup/.test(cls)) return kids(kid(d, 'drawableList')).flatMap(drawingInfo);
+  if (/LineSegment/.test(cls)) {
+    const pts = kids(kid(d, 'points')).map(point).filter(Boolean);
+    return pts.length > 1 ? [{ ...style, kind: 'line', pts, width: num(d, 'width', style.width) || style.width }] : [];
+  }
+  if (/drawing\.(Rectangle|Oval|Cross)$/.test(cls)) {
+    const a = point(kid(d, 'startPoint')), b = point(kid(d, 'endPoint'));
+    if (!a || !b) return [];
+    const kind = /Oval/.test(cls) ? 'oval' : /Cross/.test(cls) ? 'cross' : 'rect';
+    return [{ ...style, kind, x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(b[0] - a[0]), h: Math.abs(b[1] - a[1]) }];
+  }
+  if (/ShapeDrawable/.test(cls)) {
+    const sh = kid(d, 'shape'); if (!sh) return [];
+    const sc = sh.getAttribute('class') || '';
+    if (/Rectangle|Ellipse/.test(sc)) return [{ ...style, kind: /Ellipse/.test(sc) ? 'oval' : 'rect', x: num(sh, 'x'), y: num(sh, 'y'), w: num(sh, 'width'), h: num(sh, 'height') }];
+    if (/geom\.Area$/.test(sc)) return [{ ...style, kind: 'area', segs: areaSegs(sh) }];
+    if (/Path2D|GeneralPath/.test(sc)) {
+      const typesB64 = txt(sh, 'pointTypes'); const coordsEl = kid(sh, 'doubleCoords') || kid(sh, 'floatCoords');
+      if (!typesB64 || !coordsEl) return [];
+      const types = [...atob(typesB64)].map((ch) => ch.charCodeAt(0)).slice(0, num(sh, 'numTypes', 1e9));
+      const coords = kids(coordsEl).map((c) => Number(c.textContent));
+      return [{ ...style, kind: 'path', types, coords }];
+    }
+  }
+  return [];
+}
+
 function tokenInfo(t) {
   const facing = txt(t, 'facing');
   const img = (() => {
@@ -79,7 +146,9 @@ function tokenInfo(t) {
     snapScale: bool(t, 'snapToScale', true), snapGrid: bool(t, 'snapToGrid', true), visible: bool(t, 'isVisible', true),
     facing: facing == null ? null : Number(facing), shape: txt(t, 'tokenShape') || '', type: txt(t, 'tokenType') || 'NPC',
     owners: kids(kid(t, 'ownerList'), 'string').map((s) => s.textContent.trim()), fp: footprintSize(t), img,
-    hp: pnum('hp', 'hitpoints', 'currenthp', 'hpcurrent'), maxHp: pnum('maxhp', 'hpmax', 'maxhitpoints')
+    hp: pnum('hp', 'hitpoints', 'currenthp', 'hpcurrent'), maxHp: pnum('maxhp', 'hpmax', 'maxhitpoints'),
+    sight: txt(t, 'sightType') || '', hasSight: bool(t, 'hasSight', false),
+    lights: kids(kid(t, 'lightSourceList')).map((a) => txt(kid(a, 'lightSourceId'), 'baGUID')).filter(Boolean)
   };
 }
 function zoneInfo(z) {
@@ -98,8 +167,25 @@ function zoneInfo(z) {
   let bgColour = null, bgTexture = null;
   if (paint && /ColorPaint/.test(paint.getAttribute('class') || '')) { const c = num(paint, 'color', -16777216) >>> 0; bgColour = '#' + (c & 0xffffff).toString(16).padStart(6, '0'); }
   if (paint && /TexturePaint/.test(paint.getAttribute('class') || '')) bgTexture = md5Of(kid(paint, 'assetId')) || md5Of(kid(paint, 'asset'));
+  // fog: what's been revealed, for the whole party and each token's own exploration
+  const exposed = [areaSegs(kid(z, 'exposedArea'))];
+  for (const e of kids(kid(z, 'exposedAreaMeta'), 'entry')) { const m = [...e.children].map(deref).find((c) => c && /ExposedAreaMetaData$/.test(c.tagName)); if (m) exposed.push(areaSegs(kid(m, 'exposedAreaHistory'))); }
+  // walls: vision blocking shapes (their outlines), and the wall lines newer MapTool versions draw
+  const blockSegs = [...areaSegs(kid(z, 'topology')), ...areaSegs(kid(z, 'coverVbl')), ...areaSegs(kid(z, 'hillVbl'))].map(([a, b, c, d]) => [a, b, c, d]);
+  const wallEl = kid(z, 'walls');
+  if (wallEl) {
+    const verts = {};
+    for (const v of wallEl.querySelectorAll('[id][x][y]')) verts[v.getAttribute('id')] = [Number(v.getAttribute('x')), Number(v.getAttribute('y'))];
+    for (const w of wallEl.querySelectorAll('[from][to]')) { const a = verts[w.getAttribute('from')], b = verts[w.getAttribute('to')]; if (a && b) blockSegs.push([a[0], a[1], b[0], b[1]]); }
+  }
+  const drawings = [];
+  for (const [field, layer] of [['backgroundDrawables', 'BACKGROUND'], ['objectDrawables', 'OBJECT'], ['drawables', 'TOKEN']]) {
+    for (const de of kids(kid(z, field))) drawingInfo(de).forEach((d) => drawings.push({ ...d, layer }));
+  }
   return {
     name: txt(z, 'playerAlias') || txt(z, 'name') || 'MapTool map',
+    exposed: exposed.filter((a) => a.length), blockSegs, drawings,
+    hasFog: bool(z, 'hasFog', false), visionType: (txt(z, 'visionType') || 'OFF').toUpperCase(), unitsPerCell: num(z, 'unitsPerCell', 5) || 5,
     gridSize: num(grid, 'size', 50) || 50, offX: num(grid, 'offsetX'), offY: num(grid, 'offsetY'),
     hex: /Hex|Isometric/i.test(gridClass), gridless: /Gridless/i.test(gridClass),
     mapAsset: md5Of(kid(z, 'mapAsset')), boardX: num(bp, 'x'), boardY: num(bp, 'y'),
@@ -147,8 +233,20 @@ export async function readMapTool(file) {
   const root = doc.documentElement;
   const asset = assetReader(zip);
   if (/Token$/.test(root.tagName)) return { kind: 'token', token: tokenInfo(root), asset }; // .rptok
+  // light sources defined in a campaign: GUID → [bright, dim] in feet (a light with no colour is bright,
+  // the widest one is how far dim light reaches, as in MapTool's own D20 lights)
+  const lightDefs = {};
+  for (const ls of doc.getElementsByTagName('*')) {
+    if (!/LightSource$/.test(ls.tagName) || ls.hasAttribute('reference') || /Attached/.test(ls.tagName)) continue;
+    const id = txt(kid(ls, 'id'), 'baGUID'); if (!id) continue;
+    if (/AURA/i.test(txt(ls, 'type') || '')) continue;
+    const ls2 = kids(kid(ls, 'lightList')).map((l) => ({ r: num(l, 'radius', 0), dark: !!kid(l, 'paint'), gm: bool(l, 'isGM', false) })).filter((l) => l.r > 0 && !l.gm);
+    if (!ls2.length) continue;
+    const bright = Math.min(...ls2.filter((l) => !l.dark).map((l) => l.r).concat(ls2.length === 1 ? [ls2[0].r] : [])), dim = Math.max(...ls2.map((l) => l.r));
+    lightDefs[id] = [Number.isFinite(bright) ? bright : dim / 2, dim];
+  }
   const zones = [...doc.getElementsByTagName('*')].filter((el) => !el.hasAttribute('reference') && (el.tagName === 'zone' || /\.Zone$/.test(el.tagName)) && kid(el, 'grid'));
-  return { kind: 'maps', maps: zones.map(zoneInfo), asset };
+  return { kind: 'maps', maps: zones.map(zoneInfo), asset, lightDefs };
 }
 
 // Lay a MapTool map out on our grid: where it starts, how many squares, and where each piece goes.
@@ -166,6 +264,11 @@ export function layout(z, imgSizes) {
     return { ...t, px: x, py: y, pw: w, ph: h, cx, cy };
   });
   for (const l of z.labels) rects.push([l.x - S / 2, l.y - S / 2, l.x + S / 2, l.y + S / 2]);
+  for (const d of z.drawings || []) {
+    const xs = d.pts ? d.pts.map((p) => p[0]) : d.segs ? d.segs.flatMap((g) => [g[0], g[2]]) : d.coords ? d.coords.filter((_, i) => i % 2 === 0) : [d.x, d.x + d.w];
+    const ys = d.pts ? d.pts.map((p) => p[1]) : d.segs ? d.segs.flatMap((g) => [g[1], g[3]]) : d.coords ? d.coords.filter((_, i) => i % 2 === 1) : [d.y, d.y + d.h];
+    if (xs.length) rects.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+  }
   if (!rects.length) return null;
   const minX = Math.min(...rects.map((r) => r[0])), minY = Math.min(...rects.map((r) => r[1]));
   const maxX = Math.max(...rects.map((r) => r[2])), maxY = Math.max(...rects.map((r) => r[3]));

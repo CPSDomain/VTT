@@ -114,7 +114,7 @@ Made the map somewhere else? Click **Build map**, then **📥 Import map…** un
 
 | From | Export it as | What comes in |
 | --- | --- | --- |
-| **MapTool** | The campaign file (`.cmpgn`), or File → Export → **Map** (`.rpmap`) | Every map: map image and stamps (one picture), tokens with images and sizes, GM-layer tokens hidden, labels |
+| **MapTool** | The campaign file (`.cmpgn`), or File → Export → **Map** (`.rpmap`) | Every map: map image, stamps and drawings (one picture), tokens with images, sizes and lights, GM-layer tokens hidden, labels, revealed fog, vision blocking as walls, Day/Night vision |
 | **MapTool tokens** | Right-click a token → **Save As** (`.rptok`) | Goes into your token library (My uploads) |
 | **Another Tabletop** | Build map → **📤 Export map** (`.ttmap`) | The whole map: images, walls, props, tokens, labels, notes and fog |
 | **Dungeon Scrawl** | Export → **Universal VTT** (`.uvtt`, Pro) | Map, grid, walls and doors |
@@ -128,7 +128,7 @@ Made the map somewhere else? Click **Build map**, then **📥 Import map…** un
 
 **Images:** Tabletop looks for grid lines and sizes the map so the squares match, and tells you what it found. If it couldn't find a grid (or got it wrong), open **Background image**, type how many pixels one square is in the image and press **Fit grid**. Exporting from Canvas of Kings with the square grid showing gives the best result. Hex grids aren't supported yet.
 
-**MapTool:** a campaign with several maps becomes several Tabletop maps. MapTool maps have no edges, so each map is cut to what's on it (up to 200 × 200 squares). Not imported yet: fog of war, vision blocking, lights, drawings and macros, so turn fog on and reveal as you go. Hex grids come in as squares. If something's missing or out of place, keep the MapTool file: it helps to improve the import.
+**MapTool:** a campaign with several maps becomes several Tabletop maps. MapTool maps have no edges, so each map is cut to what's on it (up to 200 × 200 squares). Fog of war comes across as it was (what had been revealed stays revealed), vision blocking becomes walls for line of sight and Reveal room, token lights and darkvision come across, and drawings are painted into the map. A campaign file brings its own light sources; a single `.rpmap` doesn't carry them, so lit tokens get a torch. Not imported: macros, token properties other than HP, GM-layer drawings and spell templates. Hex grids come in as squares. If something's missing or out of place, keep the MapTool file: it helps to improve the import.
 
 **Sharing a map:** **📤 Export map** saves the map you're on, with its images, as one `.ttmap` file. Another DM imports it with Import map; it opens as a new private map.
 
@@ -219,4 +219,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-See the [roadmap](ROADMAP.md) for what's next. Importing fog and vision blocking from MapTool. See the [roadmap](ROADMAP.md).
+The encounter builder, multi-level maps, music and weather are still to come: see the [roadmap](ROADMAP.md).

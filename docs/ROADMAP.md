@@ -20,13 +20,11 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.0 | Table passcode, remove and block players, update check, Windows installers, automatic builds on GitHub, macOS and Linux apps |
 | 1.1 | Lighting and vision (line of sight, lights, darkvision, doors, explore-to-reveal, DM preview), handouts; Windows only |
 | 1.2 | Chat and whispers with speech bubbles, the DM speaking as NPCs, D&D Beyond links on characters, player PINs |
+| 1.3 | MapTool import part 2: revealed fog, vision blocking as walls, lights, sight, Day/Night vision, drawings |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
-
-### 1.3 — MapTool, part 2 📋
-- Bring the rest of a MapTool map across: revealed fog, vision blocking as walls (for 1.1's line of sight), lights, and drawings
 
 ### 1.4 — Encounters and levels 📋
 - **Encounter builder:** pick SRD monsters with their stat blocks, see the difficulty for the party's level, and drop the encounter on the map

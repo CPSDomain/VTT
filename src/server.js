@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -163,6 +163,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (is && !was) send(c, { type: 'token', sceneId: sc.id, token: tokenFor(t, c.user) });
         else if (!is && was) send(c, { type: 'removeToken', sceneId: sc.id, id: t.id });
       }
+    }
+    // the party's view counts as explored even when nobody's connected yet
+    if (visionOn(sc) && fogOn(sc) && sc.vision.explore !== false && sc.vision.shared !== false && sc.id === state.activeScene) {
+      const now = sightFor(sc, ''), a = fogArr(sc); for (let i = 0; i < now.length; i++) if (now[i] && !a[i]) explore.add(i);
     }
     // with fog of war on, what the party sees stays revealed (they've explored it)
     if (explore.size) revealFog(sc, [...explore].map((i) => [i % sc.cols, Math.floor(i / sc.cols)]), true);
@@ -362,6 +366,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
   function sendSceneFull(sc) {
     syncFog(sc); sights.delete(sc.id);
+    if (visionOn(sc)) scheduleVision(sc);
     clients().forEach((c) => {
       if (c.user.isDM) send(c, { type: 'sceneFull', scene: sc });
       else if (sc.id === state.activeScene) send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
@@ -457,6 +462,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     sc.walls = Array.isArray(m.walls) ? m.walls.slice(0, 20000).map(seg).filter(Boolean) : [];
     sc.doors = Array.isArray(m.doors) ? m.doors.slice(0, 1000).map(seg).filter(Boolean) : [];
     sc.lights = Array.isArray(m.lights) ? m.lights.slice(0, 500).filter((l) => Array.isArray(l) && l.length >= 3).map((l) => [clamp(num(l[0], 0), 0, sc.cols), clamp(num(l[1], 0), 0, sc.rows), clamp(num(l[2], 0), 0, 100), color(l[3], '#ffd27f')]) : [];
+    if (m.vision && typeof m.vision === 'object') sc.vision = { on: !!m.vision.on, ambient: AMBIENT.includes(m.vision.ambient) ? m.vision.ambient : 'bright', shared: m.vision.shared !== false, explore: m.vision.explore !== false };
     if (Array.isArray(m.labels)) for (const l of m.labels.slice(0, 300)) { const lb = labelFields(l, sc); if (lb) { lb.id = uid(); sc.labels[lb.id] = lb; } }
     // fog: { on, reveal: [[x0, y0, x1, y1], ...] } — e.g. a generated dungeon with only the entrance showing
     sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
@@ -567,6 +573,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         }
       }
       u.joined = true;
+      if (!u.isDM && visionOn(state.scenes[state.activeScene])) scheduleVision(state.scenes[state.activeScene]);
       send(ws, { type: 'welcome', isDM: u.isDM, name: u.name, version: VERSION, pinSet: !!state.pins[u.name.toLowerCase()], state: viewFor(u) });
       return presence();
     }
@@ -1057,6 +1064,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
   function activate(id) {
     state.activeScene = id; sights.delete(id);
+    if (visionOn(state.scenes[id])) scheduleVision(state.scenes[id]); // explored fog catches up with what the party can see
     clients().forEach((c) => send(c, c.user.isDM ? { type: 'active', sceneId: id } : { type: 'sceneFull', scene: playerScene(state.scenes[id], c.user), active: true }));
   }
 
