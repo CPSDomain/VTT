@@ -4,6 +4,8 @@
 //   every half hour, and remove it when Tabletop DM closes. Also asks the router for its internet address.
 const dgram = require('dgram');
 const http = require('http');
+const https = require('https');
+const net = require('net');
 
 const SSDP = { host: '239.255.255.250', port: 1900 };
 const TARGETS = [
@@ -104,6 +106,30 @@ function sharedAddress(ip) {
   if (p.length !== 4 || p.some((n) => !Number.isInteger(n))) return false;
   return p[0] === 10 || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168) || (p[0] === 100 && p[1] >= 64 && p[1] <= 127) || p[0] === 0;
 }
+// this connection's internet address, from a public "what's my IP" service (when the router doesn't say, and to
+// spot a second router in between); tests point TABLETOP_PUBLIC_IP_URL at their own
+const IP_SERVICES = process.env.TABLETOP_PUBLIC_IP_URL ? [process.env.TABLETOP_PUBLIC_IP_URL] : ['https://api.ipify.org', 'https://checkip.amazonaws.com'];
+function fetchText(url, timeout = 4000) {
+  return new Promise((resolve, reject) => {
+    const req = (url.startsWith('https:') ? https : http).get(url, { timeout, headers: { 'User-Agent': 'Tabletop' } }, (res) => {
+      let b = ''; res.setEncoding('utf8'); res.on('data', (c) => { b += c; if (b.length > 200) req.destroy(); }); res.on('end', () => (res.statusCode === 200 ? resolve(b.trim()) : reject(new Error('HTTP ' + res.statusCode))));
+    });
+    req.on('timeout', () => req.destroy(new Error('timed out'))); req.on('error', reject);
+  });
+}
+async function publicAddress() {
+  for (const u of IP_SERVICES) { try { const ip = await fetchText(u); if (/^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) return ip; } catch { /* try the next */ } }
+  return null;
+}
+// can the table be reached at that address? Tries it from here, through the router (works when the router
+// allows connections back in from inside: many do, some don't, so a "no" proves nothing)
+function reachable(ip, port, timeout = 4000) {
+  return new Promise((resolve) => {
+    const req = http.get({ host: ip, port, path: '/api/ping', timeout }, (res) => { let b = ''; res.on('data', (c) => { b += c; }); res.on('end', () => resolve(/"app":"tabletop"/.test(b))); });
+    req.on('timeout', () => req.destroy()); req.on('error', () => resolve(false));
+  });
+}
+
 function friendly(e) {
   if (e.upnpCode === 718) return 'Another device on your network already uses this port on the router. Choose a different port.';
   if (e.upnpCode === 606 || e.upnpCode === 401) return 'The router refused: its UPnP settings don\'t allow apps to open ports.';
@@ -121,9 +147,25 @@ function openPort(port, { description = 'Tabletop DM', onChange = () => {}, ssdp
       if (closed) return;
       const lease = await addMapping(gw, port, description);
       let ext = null; try { ext = await externalAddress(gw); } catch { /* some routers don't say */ }
+      if (ext && !/^\d{1,3}(\.\d{1,3}){3}$/.test(ext)) ext = null;
+      const pub = await publicAddress();
       if (closed) { removeMapping(gw, port).catch(() => {}); return; }
-      if (ext && sharedAddress(ext)) set({ state: 'shared', external: ext, local: gw.localAddress, message: `The router opened the port, but its internet address (${ext}) is shared by your internet provider or a second router, so players outside can't reach it. Ask your provider for a public IP address.` });
-      else set({ state: 'open', external: ext ? `${ext}:${port}` : null, local: gw.localAddress, lease, message: ext ? 'Port opened on your router' : 'Port opened on your router (it didn\'t say its internet address)' });
+      const local = gw.localAddress;
+      if (ext && pub && ext !== pub) { // the router's own internet address isn't the one the internet sees: something else sits in between
+        set({ state: 'shared', external: `${pub}:${port}`, router: ext, local, lease, message: `Your router opened the port, but there's another router between it and the internet (your router's address is ${ext}, the internet sees ${pub}). Players outside can only reach you if that other router also forwards port ${port} to your router, or is set to bridge mode. If your internet provider shares one address between customers, ask them for a public IP address.` });
+      } else if (ext && sharedAddress(ext) && !pub) {
+        set({ state: 'shared', external: null, router: ext, local, lease, message: `Your router opened the port, but its internet address (${ext}) isn't a public one: there's another router, or your internet provider, in between. Players outside can't reach you unless that is sorted out.` });
+      } else {
+        const addr = pub || ext;
+        if (!addr) set({ state: 'open', external: null, local, lease, checked: false, message: `Your router opened port ${port}, but Tabletop couldn't find your internet address. Search "what is my IP" on this PC: players outside connect to that address followed by :${port}.` });
+        else {
+          set({ state: 'open', external: `${addr}:${port}`, local, lease, checked: null, message: 'Port opened on your router. Checking that players outside can reach it…' });
+          const ok = await reachable(addr, port);
+          if (closed) return;
+          set({ state: 'open', external: `${addr}:${port}`, local, lease, checked: ok, message: ok ? 'Port opened on your router, and checked: players outside can reach this address.'
+            : `Port opened on your router. Tabletop couldn't check it from inside your network (many routers don't allow that), so test it once: with Tabletop DM running, enter port ${port} at canyouseeme.org, or connect from a phone on mobile data.` });
+        }
+      }
       clearTimeout(timer); timer = setTimeout(run, 30 * 60 * 1000); // renew well before it runs out
     } catch (e) {
       if (closed) return;
@@ -139,4 +181,4 @@ function openPort(port, { description = 'Tabletop DM', onChange = () => {}, ssdp
   };
 }
 
-module.exports = { openPort, findGateway, addMapping, removeMapping, externalAddress, sharedAddress, search };
+module.exports = { openPort, findGateway, addMapping, removeMapping, externalAddress, sharedAddress, search, publicAddress, reachable };

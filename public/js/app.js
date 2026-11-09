@@ -180,11 +180,12 @@ function showConn(info) {
 function renderNet() {
   const n = netInfo; if (!n) return;
   const r = n.router || {}, open = r.state === 'open', chip = $('netChip');
-  const wan = open && r.external ? r.external : '';
+  const wan = r.external || ''; // shown even when it may not work, so the DM can test it
   if (chip) {
     chip.className = open ? 'open' : r.state === 'working' ? '' : 'warn';
-    chip.textContent = open ? '🌐 Online' : r.state === 'working' ? '🌐 Opening port…' : r.state === 'off' ? '🌐 Same network only' : '🌐 Not reachable online';
-    if (open && wan) { const ad = document.createElement('span'); ad.className = 'addr'; ad.textContent = ': ' + wan; chip.append(ad); }
+    chip.textContent = open ? (r.checked === false || !wan ? '🌐 Online?' : '🌐 Online') : r.state === 'working' ? '🌐 Opening port…' : r.state === 'off' ? '🌐 Same network only' : '🌐 Not reachable online';
+    if (open && (r.checked === false || !wan)) chip.className = 'warn';
+    if (open && wan) { const ad = document.createElement('span'); ad.className = 'addr'; ad.textContent = (chip.textContent.endsWith('?') ? ' ' : ': ') + wan; chip.append(ad); }
     chip.title = open ? 'Players outside your network connect to ' + (wan || 'your internet address') + '. Click for connection settings.' : (r.message || 'Click for connection settings');
   }
   if ($('tablePop').hidden) return;
@@ -193,9 +194,9 @@ function renderNet() {
   $('tpWan').textContent = wan || (r.state === 'working' ? 'checking…' : '—');
   $('tpWanCopy').disabled = !wan;
   const st = $('tpWanState');
-  st.className = 'hint ' + (open ? 'ok' : r.state === 'working' || r.state === 'off' ? '' : 'warn');
+  st.className = 'hint ' + (open && r.checked ? 'ok' : open && r.checked === null ? '' : r.state === 'working' || r.state === 'off' ? '' : 'warn');
   st.textContent = r.state === 'off' ? `Only players on your network can join. To play over the internet, tick the box below (or forward port ${n.port} on your router by hand).`
-    : open ? `${r.message}. Players outside your network connect to this address.` + (table.passcode ? '' : ' Anyone who has it can try to join, so set a table passcode above.')
+    : open ? r.message + (wan && !table.passcode ? ' Anyone who has the address can try to join, so set a table passcode above.' : '')
     : r.state === 'working' ? r.message || 'Asking your router…'
     : `${r.message || 'Your router didn\'t open the port.'} Players on your network can still join. To play online, turn on UPnP in your router's settings, or forward port ${n.port} (TCP) to ${r.local || 'this PC'} by hand.`;
   $('tpUpnp').checked = n.upnp;

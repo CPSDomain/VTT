@@ -2,6 +2,13 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.6.2] - 2026-11-09
+
+### Fixed
+- **Playing over the internet: the internet address now shows even when the router doesn't say it.** Some routers open the port but don't answer when asked for their address; Tabletop DM now looks it up from a public "what's my IP" service (ipify, or Amazon's checkip) and shows it under **Connection** and at the top right.
+- **It checks the address works:** Tabletop DM tries to reach the table at that address. When it can, it says players outside can reach it; when the router doesn't allow checking from inside the network, it says so (**🌐 Online?**) and how to test it once (canyouseeme.org, or a phone on mobile data).
+- **Two routers in a row** (a provider's box in front of your own router, or an address shared by your provider) are now spotted by comparing the router's address with the one the internet sees, with an explanation of what to do.
+
 ## [1.6.1] - 2026-11-09
 
 ### Fixed

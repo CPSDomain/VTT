@@ -25,10 +25,11 @@ The first time you start Tabletop DM, click **Allow** on the Windows firewall pr
 | On your Wi-Fi or network | The one shown top right, e.g. `192.168.1.20:3000` |
 | Somewhere else (over the internet) | Your internet address, shown by **🌐 Online**, e.g. `41.10.20.30:3000` |
 
-**Playing over the internet.** Tabletop DM asks your router to open its port for it (UPnP), keeps it open while the table runs and closes it again when you quit. Nobody has to set up the router. When it has worked, **🌐 Online** at the top right shows your internet address. Set a **table passcode** (below) as well: anyone who has that address can try to join.
+**Playing over the internet.** Tabletop DM asks your router to open its port for it (UPnP), keeps it open while the table runs and closes it again when you quit. Nobody has to set up the router. When it has worked, **🌐 Online** at the top right shows your internet address. (If the router doesn't say what it is, Tabletop asks a public "what's my IP" service.) Tabletop then tries to reach the table at that address: **🌐 Online?** means it couldn't check from inside your network, which many routers don't allow, so test it once: with Tabletop DM running, enter the port at canyouseeme.org, or connect from a phone on mobile data. Set a **table passcode** (below) as well: anyone who has that address can try to join.
 
 If it shows **🌐 Not reachable online** instead, click it to see why. The usual reasons:
 - **UPnP is off in your router.** Turn it on in the router's settings and click **Try again**, or forward the port (TCP) to your PC by hand: the panel shows the port and your PC's address.
+- **There's a second router in front of yours** (for example the internet provider's box): forward the port on that one too, or set it to bridge mode.
 - **Your internet provider shares one address between customers** (carrier-grade NAT, common on mobile and some fibre connections). Port forwarding can't work then; ask your provider for a public IP address.
 
 **Choosing the port.** The table uses port 3000 unless you change it: click the players count at the top right and, under **Connection**, type another port (1024 to 65535) and click **Change**. The table moves there straight away (players reconnect with the new address), the router is updated, and the port is remembered. Untick **Open the port on my router automatically** to play on your network only.
