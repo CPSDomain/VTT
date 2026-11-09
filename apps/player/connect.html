@@ -80,7 +80,7 @@
       location.href = origin + '/?name=' + encodeURIComponent(name) + (code ? '#code=' + encodeURIComponent(code) : '');
     } catch (err) {
       $('err').textContent = err.name === 'AbortError' || err instanceof TypeError
-        ? 'Couldn\'t reach the table. Check the address, that the DM has Tabletop DM open, and that you\'re on the same network (or Tailscale).'
+        ? 'Couldn\'t reach the table. Check the address, that the DM has Tabletop DM open, and, from outside the DM\'s network, that you have their internet address.'
         : 'Something answered at that address, but it isn\'t a Tabletop server.';
       $('go').disabled = false; $('go').textContent = 'Connect';
     } finally { clearTimeout(t); }

@@ -4,17 +4,17 @@
 
 1. Run `Tabletop-Player-Setup-<version>.exe` (no admin rights needed), choose where to install it and click **Install**, or unzip `Tabletop-Player-<version>-Windows.zip` anywhere and run **Tabletop Player.exe**.
    The first time, Windows says "Windows protected your PC": click **More info → Run anyway**.
-2. Type the **server address** your DM gives you (e.g. `192.168.1.20:3000`) and **your name**, then click **Connect**.
+2. Type the **server address** your DM gives you and **your name**, then click **Connect**. On the DM's network that looks like `192.168.1.20:3000`; from somewhere else it's the DM's internet address, like `41.10.20.30:3000`.
 3. If the table has a passcode, the app asks for it: your DM can tell you it. The app remembers it for next time.
 4. Use the **same name every session**. Your DM gives your token to that name, and your quick rolls are saved under it.
 
 ![Connect screen](images/player-connect.jpg)
 
-The app remembers the address and your name, and tells you when there's a new version (**Help → Check for updates…**). **Table → Disconnect** (Ctrl+D) goes back to this screen.
+The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) goes back to this screen.
 
-No app? Open `http://<the address>` in Chrome or Edge instead.
+**Updates:** when there's a new version the app says so; click **Update now** and it downloads and installs itself (or use **Help → Check for updates…**). New features of the table itself come from the DM's PC, so you get those as soon as your DM updates.
 
-**"Couldn't reach the table"** means one of these: the address is wrong, the DM hasn't started Tabletop DM, the DM's firewall is blocking it, or you're not on the same network. For online games, everyone joins the DM's [Tailscale](https://tailscale.com) network and uses the DM's Tailscale address.
+**"Couldn't reach the table"** means one of these: the address is wrong, the DM hasn't started Tabletop DM, the DM's firewall is blocking it, or, if you're on the DM's network, the DM's address has changed. From somewhere else, check you have the DM's internet address (they see it at the top right as **🌐 Online**).
 
 ## Play
 
@@ -52,9 +52,9 @@ When the DM turns vision on, you see only what your character can see: walls and
 
 ## Sound
 
-The DM can play music and ambience (rain, a crackling fire, a tavern band) for the whole table. Click **🔊** at the top right to see what's playing and to set your own volume: everything, music and ambience separately, or **Mute**. If you joined in a web browser, click once on the page to let it play sound.
+The DM can play music and ambience (rain, a crackling fire, a tavern band) for the whole table. Click **🔊** at the top right to see what's playing and to set your own volume: everything, music and ambience separately, or **Mute**.
 
-When the DM sets the weather (rain, snow, fog…) you'll see it over the map. If the moving weather bothers you, untick **Show moving weather** under **🔊**.
+When the DM sets the weather (rain, snow, fog…) you'll see it over the map. If the moving weather bothers you, untick **Show moving weather** under **🔊**. If the map runs slowly on your PC, set **Map look** there to **Lit, nothing moving**, or **Classic**.
 
 ## Handouts
 

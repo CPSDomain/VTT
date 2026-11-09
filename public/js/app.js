@@ -5,6 +5,7 @@ import { readMapTool, layout as mapToolLayout, inArea as inMapToolArea } from '.
 import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
 import { createSound } from './audio.js';
 import { createWeather, TINT, MATCH } from './weather.js';
+import { createLighting } from './lighting.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -90,6 +91,7 @@ function onMessage(msg) {
     case 'handoutRemove': handouts = handouts.filter((h) => h.id !== msg.id); renderHandouts(); if (viewing === msg.id) $('handoutView').hidden = true; break;
     case 'presence': players = msg.players; renderPlayers(); renderTablePanel(); renderChatTargets(); break;
     case 'table': table = msg.table; renderTablePanel(); renderPlayers(); break;
+    case 'network': netInfo = msg.network; if (!$('netChip')) fetch('/api/info?key=' + encodeURIComponent(dmKey)).then((r) => r.json()).then(showConn).catch(() => {}); else renderNet(); break;
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
     case 'token': if (s) { s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
@@ -160,8 +162,10 @@ function onMessage(msg) {
   draw();
 }
 
+let netInfo = null, lanAddr = '';
 function showConn(info) {
-  const addr = (info.ips[0] || 'localhost') + ':' + info.port;
+  const addr = lanAddr = (info.ips[0] || 'localhost') + ':' + info.port;
+  if (info.network) netInfo = info.network;
   $('conn').innerHTML = '';
   const label = document.createElement('span'); label.textContent = 'Players connect to';
   const b = document.createElement('b'); b.textContent = addr;
@@ -169,11 +173,55 @@ function showConn(info) {
   const copy = document.createElement('button'); copy.textContent = 'Copy'; copy.style.padding = '3px 8px';
   copy.onclick = () => { navigator.clipboard.writeText(addr).then(() => toast('Address copied: ' + addr)); };
   $('conn').append(label, b, copy);
+  if (netInfo) { const chip = document.createElement('span'); chip.id = 'netChip'; chip.onclick = () => { $('tablePop').hidden = false; $('soundPop').hidden = true; renderTablePanel(); }; $('conn').append(chip); }
+  renderNet();
 }
+// the internet side: is the port open on the router, and what address to give players outside
+function renderNet() {
+  const n = netInfo; if (!n) return;
+  const r = n.router || {}, open = r.state === 'open', chip = $('netChip');
+  const wan = open && r.external ? r.external : '';
+  if (chip) {
+    chip.className = open ? 'open' : r.state === 'working' ? '' : 'warn';
+    chip.textContent = open ? '🌐 Online' : r.state === 'working' ? '🌐 Opening port…' : r.state === 'off' ? '🌐 Same network only' : '🌐 Not reachable online';
+    if (open && wan) { const ad = document.createElement('span'); ad.className = 'addr'; ad.textContent = ': ' + wan; chip.append(ad); }
+    chip.title = open ? 'Players outside your network connect to ' + (wan || 'your internet address') + '. Click for connection settings.' : (r.message || 'Click for connection settings');
+  }
+  if ($('tablePop').hidden) return;
+  $('tpNet').hidden = false;
+  $('tpLan').textContent = lanAddr;
+  $('tpWan').textContent = wan || (r.state === 'working' ? 'checking…' : '—');
+  $('tpWanCopy').disabled = !wan;
+  const st = $('tpWanState');
+  st.className = 'hint ' + (open ? 'ok' : r.state === 'working' || r.state === 'off' ? '' : 'warn');
+  st.textContent = r.state === 'off' ? `Only players on your network can join. To play over the internet, tick the box below (or forward port ${n.port} on your router by hand).`
+    : open ? `${r.message}. Players outside your network connect to this address.` + (table.passcode ? '' : ' Anyone who has it can try to join, so set a table passcode above.')
+    : r.state === 'working' ? r.message || 'Asking your router…'
+    : `${r.message || 'Your router didn\'t open the port.'} Players on your network can still join. To play online, turn on UPnP in your router's settings, or forward port ${n.port} (TCP) to ${r.local || 'this PC'} by hand.`;
+  $('tpUpnp').checked = n.upnp;
+  if (document.activeElement !== $('tpPort')) $('tpPort').value = n.port;
+  $('tpRetry').hidden = !(n.upnp && (r.state === 'failed' || r.state === 'shared'));
+  $('tpNote').textContent = n.note || '';
+}
+async function setNetwork(m) {
+  try {
+    const res = await fetch('/api/network', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-DM-Key': dmKey }, body: JSON.stringify(m) });
+    const out = await res.json();
+    if (!out.ok) return toast(out.message || 'That didn\'t work', 5000);
+    if (out.restarting) toast(`Moving the table to port ${out.port}… Players reconnect with the new address.`, 6000);
+  } catch (e) { toast('That didn\'t work: ' + e.message, 5000); }
+}
+$('tpUpnp').onchange = () => setNetwork({ upnp: $('tpUpnp').checked });
+$('tpRetry').onclick = () => setNetwork({ retry: true });
+$('tpPortSave').onclick = () => { const p = Number($('tpPort').value); if (netInfo && p === netInfo.port) return toast('The table is already on port ' + p); setNetwork({ port: p }); };
+$('tpPort').onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') $('tpPortSave').click(); };
+$('tpLanCopy').onclick = () => navigator.clipboard.writeText(lanAddr).then(() => toast('Address copied: ' + lanAddr));
+$('tpWanCopy').onclick = () => { const a = $('tpWan').textContent; navigator.clipboard.writeText(a).then(() => toast('Internet address copied: ' + a)); };
 // ----- who may join: passcode, removing and blocking players (DM) -----
 let table = { passcode: '', blocked: [] };
 function renderTablePanel() {
   if (!me.isDM || $('tablePop').hidden) return;
+  renderNet();
   if (document.activeElement !== $('tpCode')) $('tpCode').value = table.passcode || '';
   $('tpCodeState').textContent = table.passcode ? 'Players need this passcode to join.' : 'No passcode: anyone who can reach your address can join.';
   const list = $('tpPlayers'); list.innerHTML = '';
@@ -362,77 +410,107 @@ const toWorld = (e) => { const r = canvas.getBoundingClientRect(); return { x: (
 const toCell = (p) => ({ x: Math.floor(p.x / CELL), y: Math.floor(p.y / CELL) });
 
 // ---------- rendering ----------
-let frame = 0;
-function draw() { if (!frame) frame = requestAnimationFrame(render); }
+let frame = 0, mapRev = 0, staticKey = '', animTimer = 0;
+const staticLayer = document.createElement('canvas');
+// draw(): something changed, draw it all again. tick(): only the moving things (fire, water…) changed.
+function draw() { mapRev++; if (!frame) frame = requestAnimationFrame(render); }
+function tick() { animTimer = 0; if (!frame) frame = requestAnimationFrame(render); }
+const lighting = createLighting({ CELL, VIS: window.TabletopVision });
+const fxMode = () => (prefs.fx === 'still' || prefs.fx === 'off' ? prefs.fx : 'full');
+// the parts of the map that don't move, for the current view: drawn again only after a change
+function renderStatic(s, x0, y0, x1, y1, lit) {
+  if (staticLayer.width !== canvas.width || staticLayer.height !== canvas.height) { staticLayer.width = canvas.width; staticLayer.height = canvas.height; }
+  const g = staticLayer.getContext('2d'), dpr = devicePixelRatio, W = s.cols * CELL, Hh = s.rows * CELL;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, staticLayer.width, staticLayer.height);
+  g.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
+  g.fillStyle = '#1a1a1a'; g.fillRect(0, 0, W, Hh);
+  if (s.bg) { const img = loadImg(s.bg.url); if (img.complete && img.naturalWidth) g.drawImage(img, 0, 0, W, Hh); }
+
+  // floors
+  g.imageSmoothingEnabled = view.zoom < 1.3;
+  const walls = [];
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const t = s.tiles[x + ',' + y];
+    if (!t) continue;
+    if (t === 'wall') { walls.push([x, y]); continue; }
+    g.drawImage(texture(t, x, y), x * CELL, y * CELL, CELL + 0.6, CELL + 0.6);
+  }
+  // soft shadows inside pits, along any non-pit neighbour
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    if (s.tiles[x + ',' + y] !== 'pit') continue;
+    const n = (dx, dy) => s.tiles[(x + dx) + ',' + (y + dy)] !== 'pit';
+    g.fillStyle = 'rgba(80,70,60,.35)';
+    if (n(0, -1)) g.fillRect(x * CELL, y * CELL, CELL, 6);
+    if (n(-1, 0)) g.fillRect(x * CELL, y * CELL, 4, CELL);
+  }
+  if (lit) lighting.drawAO(g, s); // soft shading where floors meet walls
+  // walls: cast shadow, then the block, then lit and shaded edges
+  g.fillStyle = 'rgba(0,0,0,.45)';
+  for (const [x, y] of walls) g.fillRect(x * CELL + 6, y * CELL + 7, CELL, CELL);
+  for (const [x, y] of walls) g.drawImage(texture('wall', x, y), x * CELL, y * CELL, CELL + 0.6, CELL + 0.6);
+  for (const [x, y] of walls) {
+    const open = (dx, dy) => s.tiles[(x + dx) + ',' + (y + dy)] !== 'wall';
+    const X = x * CELL, Y = y * CELL;
+    g.fillStyle = 'rgba(255,255,255,.13)';
+    if (open(0, -1)) g.fillRect(X, Y, CELL, 3);
+    if (open(-1, 0)) g.fillRect(X, Y, 3, CELL);
+    g.fillStyle = 'rgba(0,0,0,.55)';
+    if (open(0, 1)) g.fillRect(X, Y + CELL - 4, CELL, 4);
+    if (open(1, 0)) g.fillRect(X + CELL - 4, Y, 4, CELL);
+  }
+  g.imageSmoothingEnabled = true;
+
+  // props (torch light first so it sits under everything else)
+  const props = Object.values(s.props).filter((p) => p.x >= x0 - 1 && p.x <= x1 + 1 && p.y >= y0 - 1 && p.y <= y1 + 1)
+    .sort((a, b) => (a.kind === 'torch' ? -1 : 0) - (b.kind === 'torch' ? -1 : 0) || a.y - b.y);
+  for (const p of props) drawProp(g, p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? { ...p, kind: 'dooropen' } : p, { lit });
+
+  // grid
+  if (s.showGrid !== false) {
+    g.strokeStyle = s.bg || Object.keys(s.tiles).length ? 'rgba(0,0,0,.32)' : '#2a2a2a';
+    g.lineWidth = 1 / view.zoom; g.beginPath();
+    for (let x = x0; x <= x1 + 1; x++) { g.moveTo(x * CELL, y0 * CELL); g.lineTo(x * CELL, (y1 + 1) * CELL); }
+    for (let y = y0; y <= y1 + 1; y++) { g.moveTo(x0 * CELL, y * CELL); g.lineTo((x1 + 1) * CELL, y * CELL); }
+    g.stroke();
+  }
+  g.strokeStyle = '#3a3a3a'; g.lineWidth = 2 / view.zoom; g.strokeRect(0, 0, W, Hh);
+}
 function render() {
   frame = 0;
   const dpr = devicePixelRatio, s = sc();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#121212'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (!s) return;
-  ctx.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
   const W = s.cols * CELL, Hh = s.rows * CELL;
 
   // visible cell range
   const r = canvas.getBoundingClientRect();
   const x0 = Math.max(0, Math.floor(-view.x / view.zoom / CELL)), y0 = Math.max(0, Math.floor(-view.y / view.zoom / CELL));
   const x1 = Math.min(s.cols - 1, Math.ceil((r.width - view.x) / view.zoom / CELL)), y1 = Math.min(s.rows - 1, Math.ceil((r.height - view.y) / view.zoom / CELL));
+  const fx = fxMode(), lit = fx !== 'off', moving = fx === 'full' && !document.hidden, t = performance.now() / 1000, cells = [x0, y0, x1, y1];
 
-  ctx.fillStyle = '#1a1a1a'; ctx.fillRect(0, 0, W, Hh);
-  if (s.bg) { const img = loadImg(s.bg.url); if (img.complete && img.naturalWidth) ctx.drawImage(img, 0, 0, W, Hh); }
+  const key = [mapRev, view.x, view.y, view.zoom, canvas.width, canvas.height, editing, fx].join('|');
+  if (key !== staticKey) { renderStatic(s, x0, y0, x1, y1, lit); staticKey = key; }
+  ctx.drawImage(staticLayer, 0, 0);
+  ctx.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
 
-  // floors
-  ctx.imageSmoothingEnabled = view.zoom < 1.3;
-  const walls = [];
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    const t = s.tiles[x + ',' + y];
-    if (!t) continue;
-    if (t === 'wall') { walls.push([x, y]); continue; }
-    ctx.drawImage(texture(t, x, y), x * CELL, y * CELL, CELL + 0.6, CELL + 0.6);
+  let amb = null;
+  if (lit) { // the new look: light and darkness, fire, water (see lighting.js); vision rules are untouched by it
+    amb = me.isDM && mode === 'build' ? [255, 255, 255] : lighting.ambient(s); // building happens in daylight
+    if (me.isDM) amb = amb.map((v) => Math.max(v, 66)); // the DM still makes out the layout in the dark
+    lighting.prepare(s);
+    lighting.step(s, t, cells, moving, amb, view.zoom);
+    lighting.drawWater(ctx, s, t, cells, moving);
+    lighting.drawLitParticles(ctx);
+    if (!lighting.isDay(amb)) lighting.applyLight(ctx, s, t, view, dpr, canvas.width, canvas.height, me.isDM ? null : sightNow(s), moving, amb);
+    ctx.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
+    lighting.drawEmissive(ctx, s, t, cells, moving, amb, view.zoom);
+  } else {
+    // the classic look: time of day colours the map, lights drawn as pools
+    const tint = s.atmo && TINT[s.atmo.time];
+    if (tint) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, Hh); ctx.restore(); drawLightPools(s, s.atmo.time); }
+    drawTokenLights(s);
   }
-  // soft shadows inside pits, along any non-pit neighbour
-  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-    if (s.tiles[x + ',' + y] !== 'pit') continue;
-    const n = (dx, dy) => s.tiles[(x + dx) + ',' + (y + dy)] !== 'pit';
-    ctx.fillStyle = 'rgba(80,70,60,.35)';
-    if (n(0, -1)) ctx.fillRect(x * CELL, y * CELL, CELL, 6);
-    if (n(-1, 0)) ctx.fillRect(x * CELL, y * CELL, 4, CELL);
-  }
-  // walls: cast shadow, then the block, then lit and shaded edges
-  ctx.fillStyle = 'rgba(0,0,0,.45)';
-  for (const [x, y] of walls) ctx.fillRect(x * CELL + 6, y * CELL + 7, CELL, CELL);
-  for (const [x, y] of walls) ctx.drawImage(texture('wall', x, y), x * CELL, y * CELL, CELL + 0.6, CELL + 0.6);
-  for (const [x, y] of walls) {
-    const open = (dx, dy) => s.tiles[(x + dx) + ',' + (y + dy)] !== 'wall';
-    const X = x * CELL, Y = y * CELL;
-    ctx.fillStyle = 'rgba(255,255,255,.13)';
-    if (open(0, -1)) ctx.fillRect(X, Y, CELL, 3);
-    if (open(-1, 0)) ctx.fillRect(X, Y, 3, CELL);
-    ctx.fillStyle = 'rgba(0,0,0,.55)';
-    if (open(0, 1)) ctx.fillRect(X, Y + CELL - 4, CELL, 4);
-    if (open(1, 0)) ctx.fillRect(X + CELL - 4, Y, 4, CELL);
-  }
-  ctx.imageSmoothingEnabled = true;
-
-  // props (torch light first so it sits under everything else)
-  const props = Object.values(s.props).filter((p) => p.x >= x0 - 1 && p.x <= x1 + 1 && p.y >= y0 - 1 && p.y <= y1 + 1)
-    .sort((a, b) => (a.kind === 'torch' ? -1 : 0) - (b.kind === 'torch' ? -1 : 0) || a.y - b.y);
-  for (const p of props) drawProp(ctx, p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? { ...p, kind: 'dooropen' } : p);
-
-  // grid
-  if (s.showGrid !== false) {
-    ctx.strokeStyle = s.bg || Object.keys(s.tiles).length ? 'rgba(0,0,0,.32)' : '#2a2a2a';
-    ctx.lineWidth = 1 / view.zoom; ctx.beginPath();
-    for (let x = x0; x <= x1 + 1; x++) { ctx.moveTo(x * CELL, y0 * CELL); ctx.lineTo(x * CELL, (y1 + 1) * CELL); }
-    for (let y = y0; y <= y1 + 1; y++) { ctx.moveTo(x0 * CELL, y * CELL); ctx.lineTo((x1 + 1) * CELL, y * CELL); }
-    ctx.stroke();
-  }
-  ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(0, 0, W, Hh);
-  // time of day: dawn, dusk or night colours the map (lights drawn after still glow)
-  const tint = s.atmo && TINT[s.atmo.time];
-  if (tint) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, Hh); ctx.restore(); drawLightPools(s, s.atmo.time); }
-
-  drawTokenLights(s);
   drawVision(s);
   drawFog(s);
   drawTemplates(s);
@@ -449,7 +527,17 @@ function render() {
     }
     const unseen = previewSight && !(t.owner && t.owner !== '') && !tokenSeen(s, t, previewSight);
     ctx.globalAlpha = t.hidden || unseen ? (unseen ? 0.3 : 0.5) : 1;
+    const tl = lit ? lighting.tokenLight(s, cx, cy, amb) : null;
+    if (tl) { // a soft shadow cast away from the light it stands in
+      const k = tl.shadow.k, sx = cx + tl.shadow.dx * k, sy = cy + tl.shadow.dy * k, sg = ctx.createRadialGradient(sx, sy, rad * 0.35, sx, sy, rad * 1.15);
+      sg.addColorStop(0, 'rgba(0,0,0,.5)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, rad * 1.15, 0, Math.PI * 2); ctx.fill();
+    }
     drawTokenArt(ctx, t, cx, cy, rad - 4, draw);
+    if (tl && tl.tint) { // shaded by that light, but never so dark it can't be made out
+      const m = (v) => Math.round(255 * Math.min(1, 0.42 + 0.58 * v));
+      ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${m(tl.tint[0])},${m(tl.tint[1])},${m(tl.tint[2])})`;
+      ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
     const pct = hpFraction(t);
     if (pct === 0) { // down: darken and cross out
       ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill();
@@ -487,6 +575,8 @@ function render() {
   drawOverlays(s);
   drawToolPreview(s);
   weather.update();
+  // fire flickers and water moves: keep drawing, about 30 times a second, while there's some in view
+  if (moving && !animTimer && lighting.animating(s, cells)) animTimer = setTimeout(tick, 33);
 }
 
 function drawSelection(s) {
@@ -2662,7 +2752,7 @@ function renderSound() {
   $('soundBtn').classList.toggle('playing', !!(soundNow.music || soundNow.amb.length));
   $('soundBtn').classList.toggle('open', !$('soundPop').hidden);
   for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
-  $('vMute').checked = !!prefs.mute; $('vWx').checked = prefs.wx !== false;
+  $('vMute').checked = !!prefs.mute; $('vWx').checked = prefs.wx !== false; $('vFx').value = fxMode();
   if ($('soundPop').hidden) return;
   // playing now
   const now = $('sdNow'); now.innerHTML = '';
@@ -2759,6 +2849,7 @@ $('sdAuto').onchange = () => setAtmo({ auto: $('sdAuto').checked });
 for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
 $('vMute').onchange = () => { prefs.mute = $('vMute').checked; savePrefs(); };
 $('vWx').onchange = () => { prefs.wx = $('vWx').checked; savePrefs(); draw(); };
+$('vFx').onchange = () => { prefs.fx = $('vFx').value; savePrefs(); draw(); };
 $('soundBlocked').onclick = () => snd.resume();
 // browsers keep sound off until the first click or key press on the page
 addEventListener('pointerdown', () => { if (snd.blocked()) snd.resume(); }, true);
@@ -2805,7 +2896,7 @@ function start(name) {
 }
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
-window.tabletop = { view, sound: snd, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
+window.tabletop = { view, sound: snd, renderTime: () => { mapRev++; const t0 = performance.now(); render(); return performance.now() - t0; }, frameTime: () => { const t0 = performance.now(); render(); return performance.now() - t0; }, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
 const preset = params.get('name') || (dmKey ? 'DM' : '');
 if (preset) start(preset);
 else {

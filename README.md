@@ -16,7 +16,7 @@
 
 ---
 
-**Tabletop** is a virtual tabletop for your own D&D group. The DM runs **Tabletop DM** on their PC: it hosts the game, builds maps and runs the session. Players connect with **Tabletop Player** (or any web browser) over the local network or Tailscale. No accounts, no subscriptions, no cloud: the table lives on the DM's PC.
+**Tabletop** is a virtual tabletop for your own D&D group. The DM runs **Tabletop DM** on their PC: it hosts the game, builds maps and runs the session. Players connect to it with **Tabletop Player**, on the same network or over the internet: Tabletop DM opens its port on your router by itself. No accounts, no subscriptions, no cloud: the table lives on the DM's PC.
 
 D&D Beyond stays the character manager; maps, tokens and dice live in Tabletop.
 
@@ -32,7 +32,7 @@ Get the latest version from the **[Releases page](https://github.com/CPSDomain/V
 | `Tabletop-Player-Setup-<version>.exe` | Each player: Windows installer |
 | `…-Windows.zip` | Windows without installing: unzip anywhere and run the .exe |
 
-The installers need no admin rights and add Start menu and desktop shortcuts. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect. The apps tell you when there's a new version; installing it over the old one keeps your maps and tokens.
+The installers need no admin rights and add Start menu and desktop shortcuts. The first time, Windows SmartScreen says "Windows protected your PC" because the apps aren't code-signed: click **More info → Run anyway**. The DM must also click **Allow** on the firewall prompt so players can connect. The apps tell you when there's a new version and install it in one click (**Update now**), keeping your maps and tokens.
 
 What changed in each version: **[CHANGELOG.md](CHANGELOG.md)**. What's coming: **[Roadmap](docs/ROADMAP.md)**.
 
@@ -40,7 +40,7 @@ What changed in each version: **[CHANGELOG.md](CHANGELOG.md)**. What's coming: *
 
 1. **DM:** start Tabletop DM. The address players need (e.g. `192.168.1.20:3000`) is at the top right, with a Copy button.
 2. **Players:** start Tabletop Player, type that address and your name, and click Connect. Use the same name every session: the DM gives tokens to names.
-3. **Playing online?** Everyone installs [Tailscale](https://tailscale.com) (free) and joins the DM's network; players then use the DM's Tailscale address.
+3. **Players somewhere else?** Tabletop DM asks your router to open its port (UPnP). When it has, **🌐 Online** at the top right shows your internet address: give that to players outside your home, and set a table passcode.
 
 Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLAYER-GUIDE.md)**
 
@@ -121,6 +121,13 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
 
+**The look of the map**
+- Light and darkness: torches, braziers, campfires, lamps and lit tokens throw flickering light, with soft shadows from walls, pillars and trees; dark dungeons and night-time maps are really dark around the light
+- Living fire with sparks and smoke, water that ripples, lava that glows and lights the room, dust in the torchlight, fireflies at night
+- Purely for looks: what characters can see still follows the vision rules. Slower PCs can keep the light without the movement, or use the classic look
+
+![The new look: a torch-lit crypt with shadows from the pillars, glowing lava and rippling water](docs/images/lighting.jpg)
+
 **Atmosphere**
 - Music and ambience the DM plays for everyone, in step on every screen: 4 music tracks and 8 ambiences built in (tavern, battle, dungeon, rain, thunderstorm, campfire, cave, ocean…), or upload your own
 - Layer up to 5 ambiences under the music, each with its own volume; every player sets their own volume too
@@ -130,8 +137,9 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 ![Atmosphere: a stormy night at the inn, the DM's sound panel with music and ambience](docs/images/atmosphere.jpg)
 
 **Running the table**
+- Play over the internet without setting up your router: Tabletop DM opens its port by itself (UPnP) and shows the address to give players. Choose the port in the app
 - Optional table passcode; players can protect their name with a PIN; remove or block a player
-- The apps tell you when a new version is out
+- One-click updates for the DM and Player apps
 
 **Dice**
 - Rolled on the DM's PC so nobody can fudge them: `1d20+5`, `2d6+1d4-1`, `4d6kh3`, `1d20adv`, `d100`

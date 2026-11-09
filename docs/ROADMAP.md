@@ -23,6 +23,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.3 | MapTool import part 2: revealed fog, vision blocking as walls, lights, sight, Day/Night vision, drawings |
 | 1.4 | Encounter builder with the SRD monsters and 2024 difficulty, stat blocks with clickable rolls, buildings with floors and stairs |
 | 1.5 | Atmosphere: music and ambience the DM plays for everyone (12 built in, plus your own files), each map's own sound, weather and time of day on the map |
+| 1.6 | New look: light and darkness with flickering fire and soft shadows, living fire, water and lava; playing over the internet with automatic port opening (UPnP) and a port of your choice; one-click updates |
 
 ## Next
 

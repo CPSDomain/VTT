@@ -2,6 +2,33 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.6.0] - 2026-11-09
+
+### Added
+- **A new look for maps:** light and darkness.
+  - **Light:** torches, braziers, campfires, fireplaces, candles, lamp posts, crystals, lit tokens and imported maps' lights throw flickering light that fades with distance, using the rules' ranges.
+  - **Shadows:** walls, closed doors and imported walls block the light. Pillars, statues, trees and tents cast soft shadows.
+  - **Movement:** flames move and throw sparks, braziers and campfires smoke, water ripples, lava glows and lights the room, dust floats in the torchlight, and fireflies come out at dusk and night.
+  - **Tokens:** they cast a shadow away from the nearest light and are shaded by the light they stand in.
+  - **How dark it gets:** from the map's light setting (bright, dim, dark) and the time of day. Daytime maps look as before, with live fires.
+  - **It's only the look:** what characters can see still follows vision exactly as before, and a player's screen shows light only where their character can see.
+  - **Each screen chooses its look** (**🔊 → Map look**): lit and moving, lit with nothing moving (for slower PCs), or classic.
+- **Playing over the internet:**
+  - Tabletop DM asks the router to open its port (UPnP), keeps it open while the table runs and closes it on exit.
+  - **🌐 Online** at the top right shows the internet address to give players.
+  - When the router won't open the port, the app says why: UPnP off, a port already taken, or an address shared by the internet provider. It also says what to do about it.
+- **Choose the port:** players count → **Connection**. The table moves there straight away and the port is remembered. Opening the port on the router can be switched off there too.
+- **One-click updates:** **Update now** downloads the new installer for that app (DM or Player), closes the app and runs it. Copies run from the unzipped folder still open the download page.
+
+### Changed
+- Maps draw faster: the parts that don't move are kept between frames.
+- Imported maps' lights now reach players' screens (only where their character can see) so the light looks the same for everyone.
+
+### Fixed
+- Quitting with **File → Exit** now saves the table and closes it properly, like closing the window.
+- A port that's already in use no longer pops up an error box when Tabletop DM starts or changes port.
+- "Players connect to" at the top right had no space before the address.
+
 ## [1.5.0] - 2026-11-09
 
 ### Added
@@ -11,7 +38,6 @@ All notable changes to Tabletop. Newest first. Each version's section is used as
   - **Your own sounds:** **＋ Add your own…** uploads MP3, OGG, WAV, M4A or FLAC files from your PC. Long tracks stream, so a full album is fine. You can rename them, move them between music and ambience, or remove them.
   - **A map's own sound:** **Save what's playing** remembers it for the map, and with **Play it when I show this map to players**, it starts when you show the map.
   - **Everyone sets their own volume:** everything, music and ambience separately, or mute.
-  - In a web browser, sound starts after the first click on the page. A **Click to hear the table's sound** button appears until then. The apps play sound straight away.
 - **Weather and time of day** (**🌦 Weather** in the bar above the map): rain, storm with lightning, snow, fog or embers, light, medium or heavy, over the map on everyone's screen.
   - Dawn, dusk and night colour the map, and torches, fires, lamps and lit tokens throw warm pools of light.
   - **Play matching sound** adds the ambience that goes with it.

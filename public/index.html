@@ -220,6 +220,15 @@
   body.dm #tablePop[hidden] { display:none !important; }
   #tablePop .tphead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   #tablePop .tphead button { padding:2px 8px; }
+  #tablePop { max-height:calc(100vh - 64px); overflow-y:auto; width:330px; }
+  .netrow { display:grid; grid-template-columns:96px 1fr auto; gap:6px; align-items:center; margin-top:6px; font-size:12px; color:var(--dim); }
+  .netrow b { color:var(--text); font-weight:600; user-select:text; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .netrow button { padding:2px 8px; font-size:12px; }
+  #tpWanState.ok { color:#86efac; } #tpWanState.warn { color:#fcd34d; }
+  body.dm #conn { display:flex !important; }
+  @media (max-width:1450px) { #conn > span:first-child, #netChip .addr { display:none; } }
+  #netChip { font-size:11px; font-weight:600; padding:3px 8px; border-radius:20px; cursor:pointer; border:1px solid var(--line); background:var(--panel2); color:var(--dim); }
+  #netChip.open { color:#86efac; border-color:#166534; } #netChip.warn { color:#fcd34d; border-color:#854d0e; }
   .tprow { display:flex; align-items:center; gap:6px; margin-top:6px; }
   .tprow span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tprow button { padding:3px 9px; font-size:12px; }
@@ -377,6 +386,15 @@
     <label class="hpl" for="tpCode">Table passcode</label>
     <div class="row"><input id="tpCode" maxlength="40" placeholder="None" spellcheck="false" autocomplete="off"><button id="tpSave" class="fixed primary">Save</button></div>
     <div class="hint" id="tpCodeState"></div>
+    <div id="tpNet" hidden>
+      <div class="hpl" style="margin-top:12px">Connection</div>
+      <div class="netrow"><span>Same network</span><b id="tpLan"></b><button id="tpLanCopy" title="Copy this address">Copy</button></div>
+      <div class="netrow"><span>Internet</span><b id="tpWan">…</b><button id="tpWanCopy" title="Copy this address">Copy</button></div>
+      <div class="hint" id="tpWanState"></div>
+      <label class="check"><input type="checkbox" id="tpUpnp"> Open the port on my router automatically (UPnP)</label>
+      <div class="row"><span class="fixed hint" style="margin:0">Port</span><input id="tpPort" type="number" min="1024" max="65535"><button id="tpPortSave" class="fixed">Change</button><button id="tpRetry" class="fixed" title="Ask the router again">Try again</button></div>
+      <div class="hint" id="tpNote"></div>
+    </div>
     <div class="hpl" style="margin-top:12px">Players connected</div>
     <div id="tpPlayers"></div>
     <div id="tpPinSec"><div class="hpl" style="margin-top:12px">Names protected by a PIN</div><div id="tpPins"></div></div>
@@ -406,6 +424,7 @@
     <div class="vrow"><span>Ambience</span><input type="range" id="vAmb" min="0" max="100"><b id="vAmbN"></b></div>
     <label class="check"><input type="checkbox" id="vMute"> Mute</label>
     <label class="check"><input type="checkbox" id="vWx"> Show moving weather (rain, snow…)</label>
+    <div class="vrow" style="grid-template-columns:72px 1fr"><span>Map look</span><select id="vFx" title="How the map is drawn on this screen"><option value="full">Lit and moving (fire, water, light)</option><option value="still">Lit, nothing moving (slower PCs)</option><option value="off">Classic (no lighting effects)</option></select></div>
   </div>
   <div id="me" title="Your name at this table: click to protect it with a PIN"></div>
   <div id="mePop" class="pop" hidden>

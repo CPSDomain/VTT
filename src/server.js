@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -92,7 +92,8 @@ function loadState(file) {
   return state;
 }
 
-function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
+// network (from the DM app, optional): { info() → port, router status…, configure(changes) → result }
+function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = null } = {}) {
   dataDir = dataDir || path.join(process.cwd(), 'data');
   dmKey = dmKey || crypto.randomBytes(6).toString('hex');
   const uploads = path.join(dataDir, 'uploads');
@@ -209,7 +210,19 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       const ips = Object.values(os.networkInterfaces()).flat()
         .filter((i) => i && i.family === 'IPv4' && !i.internal).map((i) => i.address);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      return res.end(JSON.stringify({ ips, port: server.address().port, version: VERSION }));
+      return res.end(JSON.stringify({ ips, port: server.address().port, version: VERSION, network: network ? network.info() : null }));
+    }
+
+    if (p === '/api/network' && req.method === 'POST') { // DM only: the port, and opening it on the router (the DM app does this)
+      if (req.headers['x-dm-key'] !== dmKey) { res.writeHead(403); return res.end('DM only'); }
+      if (!network) { res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end(JSON.stringify({ ok: false, message: 'Network settings are part of the Tabletop DM app' })); }
+      let body = ''; req.on('data', (c) => { body += c; if (body.length > 10000) req.destroy(); });
+      req.on('end', async () => {
+        let m = {}; try { m = JSON.parse(body || '{}'); } catch { /* empty */ }
+        let out; try { out = await network.configure(m); } catch (e) { out = { ok: false, message: e.message }; }
+        res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(out));
+      });
+      return;
     }
 
     if (p === '/api/export') { // DM only: one map, with its images, as a single file to share or keep
@@ -321,6 +334,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
   // ---------- WebSocket ----------
   const wss = new WebSocketServer({ server, maxPayload: 4 * 1024 * 1024 });
+  wss.on('error', () => {}); // a port already in use comes through here too: startServer's promise reports it
   const send = (ws, msg) => ws.readyState === 1 && ws.send(JSON.stringify(msg));
   const clients = () => [...wss.clients].filter((c) => c.user && c.user.joined);
   const toDMs = (msg) => clients().forEach((c) => c.user.isDM && send(c, msg));
@@ -417,8 +431,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     for (const [k, t] of Object.entries(sc.tokens)) if (tokVisible(sc, t, u)) tokens[k] = tokenFor(t, u);
     const labels = {};
     for (const [k, l] of Object.entries(sc.labels || {})) if (labelVisible(sc, l)) labels[k] = l;
-    // walls, doors and lights from imported maps are only for the DM's tools (they'd give away the layout)
-    const { walls, doors, lights, ...rest } = sc;
+    // walls and doors from imported maps are only for the DM's tools (they'd give away the layout). Imported lights
+    // go to players for the look of the map: their screen shows light only where their character can see.
+    const { walls, doors, ...rest } = sc;
     return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u), sight: sightData(sc, u),
       floors: floorsOf(sc).map((f) => ({ id: f.id, level: f.level || 0, floor: f.floor || '' })) };
   }
@@ -1265,11 +1280,12 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   }
 
   return new Promise((resolve, reject) => {
-    server.once('error', reject);
+    server.once('error', (e) => { wss.close(); reject(e); });
     server.listen(port, host, () => {
       server.off('error', reject);
       resolve({
         port: server.address().port, dmKey, dataDir, version: VERSION,
+        notifyNetwork: () => network && toDMs({ type: 'network', network: network.info() }),
         players: () => clients().filter((c) => !c.user.isDM).map((c) => c.user.name),
         close: () => new Promise((r) => { saveNow(); wss.clients.forEach((c) => c.terminate()); server.close(() => r()); })
       });

@@ -150,11 +150,14 @@ function noShadow(g) { g.shadowColor = 'transparent'; g.shadowBlur = 0; g.shadow
 function rr(g, x, y, w, h, rad) { g.beginPath(); g.roundRect(x, y, w, h, rad); }
 function circle(g, x, y, rad, fill) { g.beginPath(); g.arc(x, y, rad, 0, 7); if (fill) { g.fillStyle = fill; g.fill(); } }
 function grad(g, x0, y0, x1, y1, a, b) { const k = g.createLinearGradient(x0, y0, x1, y1); k.addColorStop(0, a); k.addColorStop(1, b); return k; }
+let lit = false; // the new lighting draws glows and flames itself (see lighting.js)
 function glow(g, rad, inner = 'rgba(255,190,90,.45)') {
+  if (lit) return;
   const k = g.createRadialGradient(0, 0, 0, 0, 0, rad); k.addColorStop(0, inner); k.addColorStop(1, 'rgba(255,140,40,0)');
   g.fillStyle = k; g.beginPath(); g.arc(0, 0, rad, 0, 7); g.fill();
 }
 function flame(g, x, y, s) {
+  if (lit) return;
   circle(g, x, y, 5 * s, '#ff8a1f'); circle(g, x, y, 3 * s, '#ffd166'); circle(g, x, y, 1.5 * s, '#fff6d5');
 }
 function frame(g) { g.fillStyle = '#2a2420'; g.fillRect(-H, -7, 6, 14); g.fillRect(H - 6, -7, 6, 14); }
@@ -496,13 +499,15 @@ const P = {
   }
 };
 
-export function drawProp(g, p) {
+export function drawProp(g, p, opts) {
   const fn = P[p.kind]; if (!fn) return;
+  lit = !!(opts && opts.lit);
   g.save();
   g.translate(p.x * CELL + H, p.y * CELL + H);
   g.rotate((p.rot || 0) * Math.PI / 2);
   fn(g, rng(cellHash(p.x, p.y) + 7));
   g.restore();
+  lit = false;
 }
 
 // Small preview icons for the palettes.

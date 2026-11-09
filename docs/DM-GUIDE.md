@@ -16,12 +16,22 @@ Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabl
 
 ## Get players connected
 
-Each player unzips `Tabletop-Player-<version>-Windows.zip`, runs **Tabletop Player.exe**, types your address and their name, and clicks Connect. Players can also skip the app and open `http://your-address` in Chrome or Edge. See the [Player guide](PLAYER-GUIDE.md).
+Each player installs **Tabletop Player** (or unzips `Tabletop-Player-<version>-Windows.zip` and runs **Tabletop Player.exe**), types your address and their name, and clicks Connect. See the [Player guide](PLAYER-GUIDE.md).
 
-| Players are | Address to give them | Setup |
-| --- | --- | --- |
-| On your Wi-Fi or network | The one shown top right, e.g. `192.168.1.20:3000` | Allow the firewall prompt |
-| Elsewhere (online game) | Your Tailscale address, e.g. `100.x.x.x:3000` | Everyone installs [Tailscale](https://tailscale.com) (free) and joins your network once |
+The first time you start Tabletop DM, click **Allow** on the Windows firewall prompt. Then give players the address for where they are:
+
+| Players are | Address to give them |
+| --- | --- |
+| On your Wi-Fi or network | The one shown top right, e.g. `192.168.1.20:3000` |
+| Somewhere else (over the internet) | Your internet address, shown by **🌐 Online**, e.g. `41.10.20.30:3000` |
+
+**Playing over the internet.** Tabletop DM asks your router to open its port for it (UPnP), keeps it open while the table runs and closes it again when you quit. Nobody has to set up the router. When it has worked, **🌐 Online** at the top right shows your internet address. Set a **table passcode** (below) as well: anyone who has that address can try to join.
+
+If it shows **🌐 Not reachable online** instead, click it to see why. The usual reasons:
+- **UPnP is off in your router.** Turn it on in the router's settings and click **Try again**, or forward the port (TCP) to your PC by hand: the panel shows the port and your PC's address.
+- **Your internet provider shares one address between customers** (carrier-grade NAT, common on mobile and some fibre connections). Port forwarding can't work then; ask your provider for a public IP address.
+
+**Choosing the port.** The table uses port 3000 unless you change it: click the players count at the top right and, under **Connection**, type another port (1024 to 65535) and click **Change**. The table moves there straight away (players reconnect with the new address), the router is updated, and the port is remembered. Untick **Open the port on my router automatically** to play on your network only.
 
 To test alone, run Tabletop Player on the same PC and connect to `localhost:3000`.
 
@@ -29,7 +39,7 @@ To test alone, run Tabletop Player on the same PC and connect to `localhost:3000
 
 Click the players count at the top right (e.g. **2 players**) for **Who can join**:
 
-- **Table passcode:** type one and click Save. Players then need it to join; the Player app and the browser ask for it. Clear it and Save to remove it. A 🔒 by the players count shows one is set. Players already at the table stay connected.
+- **Table passcode:** type one and click Save. Players then need it to join; the Player app asks for it. Clear it and Save to remove it. A 🔒 by the players count shows one is set. Players already at the table stay connected.
 - **Remove** disconnects a player. They can join again (with the passcode, if there is one).
 - **Block** disconnects them and stops anyone joining under that name until you **Unblock** it in the same panel.
 - **Names protected by a PIN:** players can protect their name with a PIN (they click **Playing as …** on their screen). Nobody else can then join as them. If someone forgets their PIN, click **Reset PIN** here; they can set a new one.
@@ -238,6 +248,16 @@ Everyone rolls in the right-hand panel: the die buttons, or type any roll such a
 
 Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bonuses from D&D Beyond once. Shift-click rolls with advantage, Alt-click with disadvantage. Natural 20s show green, natural 1s red.
 
+## The look of the map
+
+Maps are drawn with light and darkness. Torches, braziers, campfires, fireplaces, candles, lamp posts, glowing crystals, lights on tokens and the lights that come with imported maps all give flickering light that fades with distance, using the same ranges as the rules (a torch is bright to 20 ft, dim to 40 ft). Walls, closed doors and imported walls block the light; pillars, statues, trees and tents cast soft shadows. Flames move and throw sparks, braziers and campfires smoke, water ripples, lava glows and lights the room around it, dust floats in the torchlight, and fireflies come out at dusk and night. Tokens cast a shadow away from the nearest light and are shaded by the light they stand in.
+
+How dark the map is comes from two settings: **Light on this map** under **👁 Vision** (bright, dim or dark) and the time of day under **🌦 Weather** (dawn, dusk or night). A bright map in daylight looks as it always has, with the fires alive.
+
+- **It's only the look.** What characters can see is still decided by vision, exactly as before: the shadows from pillars or trees never hide anything. On a player's screen, light shows only where their character can see.
+- **You see the dark a little lifted**, so you can still make out the layout and every token. **Build mode** is always in daylight.
+- **Slower PCs:** under **🔊 → On my screen → Map look**, choose **Lit, nothing moving** (the light and shadows without the movement) or **Classic** (the look before 1.6). Each player can choose for their own screen.
+
 ## Music and ambience
 
 Click **🔊** at the top right. Everything you play here plays on every player's screen too, at the same moment of the track.
@@ -250,13 +270,23 @@ Click **🔊** at the top right. Everything you play here plays on every player'
 - **This map's sound:** set up what should play on a map, then **Save what's playing**. **▶ Play it** brings it back any time. Tick **Play it when I show this map to players** and it starts by itself when you click **Show to players**: the tavern music when the party walks in, cave drips in the dungeon.
 - **On my screen** sets your own volume (everything, music, ambience) without changing it for anyone else. Players have the same sliders.
 
-Players using a web browser need to click once on the page before it can play sound; they get a **Click to hear the table's sound** button. The Player app plays sound straight away.
+The Player app plays the sound straight away; players don't need to do anything.
 
 ## Weather and time of day
 
 Click **🌦 Weather** in the bar above the map. Pick **Rain**, **Storm** (rain with lightning), **Snow**, **Fog** or **Embers** (a burning town, a volcano), and **Light**, **Medium** or **Heavy**. Pick **Dawn**, **Dusk** or **Night** to colour the map. At those times, torches, braziers, fires, lamps and tokens with a light glow warmly in the dark. **▶ Play matching sound** adds the ambience that goes with it, such as rain for rain or crickets at night.
 
 It's set per map and players see it straight away. It's only a look: for a real night, where characters see only what's lit, also set the light to **Dark** under **👁 Vision**. Weather is hidden while you're in Build mode, and players can turn the moving weather off on their own screen under **🔊**.
+
+## Updates
+
+When a new version is out, Tabletop DM says so a few seconds after it starts (and at most once a day), with what's new. **Help → Check for updates…** asks straight away.
+
+- **Update now** downloads the new installer, closes Tabletop DM and runs it. The installer goes over your current one in the same folder: click through it and the new version starts. Your maps, tokens, sounds and settings stay. Players are disconnected while it installs and reconnect by themselves when the table is back.
+- **Later** asks again next time; **Skip this version** stays quiet until the one after.
+- If you run Tabletop DM from the unzipped folder rather than the installer, the button says **Download** and opens the release page instead.
+
+**For players:** the table they see (the map, tools, sound, everything) comes from your PC. So when you update, your players get the new features the next time they connect, whatever version of the Player app they have. The Player app gets the same **Update now** prompt for its own updates: those are rare and only change the connect screen and the app around the table.
 
 ## Not in this version yet
 
