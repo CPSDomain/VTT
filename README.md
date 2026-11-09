@@ -56,6 +56,7 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - **Export a map** as one file to share with another DM
 - Upload your own battle maps (or drag them on) and line the grid up with them
 - Build maps privately, then **Show to players** when ready
+- Buildings with floors: stairs take characters up and down, and each player sees their own floor
 
 | Describe it | Get it |
 | --- | --- |
@@ -96,6 +97,12 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 **Handouts**
 - Letters, pictures and clues popped up on everyone's screen or just one player's, kept to read again
+
+**Encounters**
+- Encounter builder with the 334 SRD monsters: pick a fight for your party's level and see how hard it is, then place it on the map
+- Stat blocks with clickable attacks and damage rolls
+
+![Encounter builder: goblins and a bugbear for four level-3 characters, rated Low](docs/images/encounter-builder.jpg)
 
 **Combat**
 - Initiative tracker: start combat in one click, roll for all monsters at once, players roll their own; turn order, rounds, and whose turn glows on the map
@@ -155,3 +162,5 @@ The DM app makes a new secret key each time it starts and gives it only to its o
 ## Credits
 
 Built-in token artwork is from [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). See [public/CREDITS.txt](public/CREDITS.txt). Map textures and props are drawn in code by Tabletop.
+
+The encounter builder's monsters and stat blocks include material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC, available at <https://dnd.wizards.com/resources/systems-reference-document>, licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/legalcode). The data was prepared by the [5e-database](https://github.com/5e-bits/5e-database) project (MIT). Encounter difficulty uses the XP budget per character from the D&D 2024 rules.

@@ -47,6 +47,8 @@ function onMessage(msg) {
       const st = msg.state;
       if (st.table) table = st.table;
       handouts = st.handouts || []; renderHandouts();
+      encounters = st.encounters || [];
+      if (me.isDM) loadMonsters().then(() => renderEditor()).catch(() => {});
       setTimeout(renderChatTargets, 0);
       if (!me.isDM && passcode) trySet('tt-code', passcode);
       $('gate').hidden = true;
@@ -68,9 +70,11 @@ function onMessage(msg) {
       break;
     }
     case 'sight': if (s) { s.sight = msg.data; } break;
+    case 'floors': { const cur = scenes[editing]; if (cur) cur.floors = msg.floors; break; }
     case 'doors': if (s) { s.doors = msg.doors; } break;
     case 'doorFlash': pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.open ? 'Door opened' : 'Door closed', dm: false, t0: performance.now() }); break;
     case 'handouts': handouts = msg.handouts; renderHandouts(); break;
+    case 'encounters': encounters = msg.encounters; renderEncLoad(); break;
     case 'handout': {
       const i = handouts.findIndex((h) => h.id === msg.handout.id);
       if (i >= 0) handouts[i] = msg.handout; else handouts.push(msg.handout);
@@ -252,6 +256,48 @@ function sceneChanged(refit) {
   if (refit) fitView();
   draw();
 }
+// ---------- floors ----------
+// Floors of a building are maps in one group, each with a level. The DM switches between them with the
+// floor buttons; characters move between them by the stairs (or the Floor box on the token).
+const STAIRS = new Set(['stairs', 'ladder', 'trapdoor']);
+function floorList(s) {
+  if (!s) return [];
+  if (me.isDM) return s.group ? order.map((id) => scenes[id]).filter((x) => x && x.group === s.group).sort((a, b) => (b.level || 0) - (a.level || 0)).map((f) => ({ id: f.id, level: f.level || 0, floor: f.floor || f.name })) : [];
+  return s.floors || [];
+}
+function renderFloorBar() {
+  const s = sc(), bar = $('floorBar'); if (!me.isDM || !s) return;
+  bar.innerHTML = '';
+  const floors = floorList(s);
+  bar.classList.add('on');
+  for (const f of floors) {
+    const b = document.createElement('button'); b.textContent = f.floor; b.title = `Go to ${f.floor}`;
+    b.classList.toggle('on', f.id === editing); b.classList.toggle('live', f.id === active);
+    b.onclick = () => { editing = f.id; sceneChanged(true); };
+    bar.appendChild(b);
+  }
+  const add = (dir, text, title) => { const b = document.createElement('button'); b.className = 'add'; b.textContent = text; b.title = title; b.onclick = () => { pendingNewScene = true; sendMsg({ type: 'floorAdd', sceneId: editing, dir }); }; bar.appendChild(b); };
+  add(1, floors.length ? '＋▲' : '＋ Floor above', floors.length ? 'Add a floor on top' : 'Add a floor above this map (it becomes a building with floors)');
+  add(-1, floors.length ? '＋▼' : '＋ Cellar', floors.length ? 'Add a floor underneath' : 'Add a floor below this map');
+}
+// a token dropped on stairs, a ladder or a trapdoor: offer the floors above and below
+function offerStairs(s, t) {
+  const floors = floorList(s); if (floors.length < 2) return;
+  let onStairs = false;
+  for (const p of Object.values(s.props)) if (STAIRS.has(p.kind) && p.x >= t.x && p.x < t.x + t.size && p.y >= t.y && p.y < t.y + t.size) onStairs = true;
+  if (!onStairs) return;
+  const here = floors.find((f) => f.id === editing); if (!here) return;
+  const near = floors.filter((f) => Math.abs(f.level - here.level) === 1).sort((a, b) => b.level - a.level);
+  if (!near.length) return;
+  const pop = $('floorPop'), btns = $('fpBtns'); btns.innerHTML = '';
+  $('fpText').textContent = `${t.label}: take the stairs?`;
+  for (const f of near) { const b = document.createElement('button'); b.className = 'primary'; b.textContent = `${f.level > here.level ? '▲ Up to' : '▼ Down to'} ${f.floor}`; b.onclick = () => { pop.hidden = true; sendMsg({ type: 'tokenFloor', sceneId: editing, id: t.id, to: f.id }); }; btns.appendChild(b); }
+  const stay = document.createElement('button'); stay.textContent = 'Stay'; stay.onclick = () => { pop.hidden = true; }; btns.appendChild(stay);
+  const [x, y] = window.tabletop.cellToScreen(t.x + t.size, t.y), r = canvas.getBoundingClientRect();
+  pop.style.left = Math.min(r.width - 260, x - r.left + 10) + 'px'; pop.style.top = Math.max(10, y - r.top - 10) + 'px';
+  pop.hidden = false;
+  clearTimeout(offerStairs.t); offerStairs.t = setTimeout(() => { pop.hidden = true; }, 8000);
+}
 function renderSceneBar() {
   const sel = $('sceneSel'); sel.innerHTML = '';
   for (const id of order) {
@@ -259,12 +305,14 @@ function renderSceneBar() {
     o.textContent = (id === active ? '● ' : '') + scenes[id].name; sel.appendChild(o);
   }
   sel.value = editing;
-  const live = editing === active;
-  $('liveBadge').textContent = live ? 'PLAYERS SEE THIS' : 'PRIVATE PREP';
-  $('liveBadge').className = 'badge dm-only ' + (live ? 'live' : 'prep');
-  $('liveBadge').title = live ? 'Changes you make here appear on players\' screens straight away' : 'Players can\'t see this map. Build in peace.';
+  const live = editing === active, cur = scenes[editing], act = scenes[active];
+  const floorInPlay = !live && cur && act && cur.group && cur.group === act.group; // another floor of the building on the table
+  $('liveBadge').textContent = live ? 'PLAYERS SEE THIS' : floorInPlay ? 'IN PLAY' : 'PRIVATE PREP';
+  $('liveBadge').className = 'badge dm-only ' + (live || floorInPlay ? 'live' : 'prep');
+  $('liveBadge').title = live ? 'Changes you make here appear on players\' screens straight away' : floorInPlay ? 'Another floor of the building on the table: players whose characters are on this floor see it, live' : 'Players can\'t see this map. Build in peace.';
   $('showPlayers').style.visibility = live ? 'hidden' : 'visible';
   $('delMap').disabled = order.length <= 1;
+  renderFloorBar();
 }
 function fillMapSettings() {
   const s = sc();
@@ -723,6 +771,183 @@ $('vAmbient').onchange = () => setVision({ ambient: $('vAmbient').value });
 $('vShared').onchange = () => setVision({ shared: $('vShared').checked });
 $('vExplore').onchange = () => setVision({ explore: $('vExplore').checked });
 $('vPreview').onchange = () => { previewKey = ''; draw(); };
+
+// ---------- encounter builder and stat blocks ----------
+// SRD 5.1 monsters (public/monsters.json); difficulty from the D&D 2024 XP budget per character.
+const XP_BUDGET = [null, [50, 75, 100], [100, 150, 200], [150, 225, 400], [250, 375, 500], [500, 750, 1100], [600, 1000, 1400], [750, 1300, 1700], [1000, 1700, 2100], [1300, 2000, 2600], [1600, 2300, 3100],
+  [1900, 2900, 4100], [2200, 3700, 4700], [2600, 4200, 5400], [2900, 4900, 6200], [3300, 5400, 7800], [3800, 6100, 9800], [4500, 7200, 11700], [5000, 8700, 14200], [5500, 10700, 17200], [6400, 13200, 22000]];
+const CRS = [0, 0.125, 0.25, 0.5, ...Array.from({ length: 30 }, (_, i) => i + 1)];
+const crText = (c) => (c === 0.125 ? '1/8' : c === 0.25 ? '1/4' : c === 0.5 ? '1/2' : String(c));
+let monsters = null, monsterById = new Map(), encounters = [], enc = { id: null, picked: [] };
+async function loadMonsters() {
+  if (monsters) return monsters;
+  const r = await fetch('monsters.json'); const j = await r.json();
+  monsters = j.monsters; monsterById = new Map(monsters.map((m) => [m.id, m]));
+  return monsters;
+}
+// a token's monster: its own link, or the SRD monster with the same name (Goblin 3 → Goblin)
+function monsterOf(t) {
+  if (!monsters || !t) return null;
+  if (t.srd && monsterById.get(t.srd)) return monsterById.get(t.srd);
+  const base = String(t.label || '').replace(/\s+\d+$/, '').toLowerCase();
+  return monsters.find((m) => m.name.toLowerCase() === base) || null;
+}
+async function openEncounters() {
+  await loadMonsters();
+  if (!$('encType').options.length || $('encType').options.length === 1) {
+    [...new Set(monsters.map((m) => m.type.split(' (')[0]))].sort().forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t[0].toUpperCase() + t.slice(1); $('encType').appendChild(o); });
+    for (const sel of [$('encCrMin'), $('encCrMax')]) CRS.forEach((c) => { const o = document.createElement('option'); o.value = c; o.textContent = crText(c); sel.appendChild(o); });
+    $('encCrMin').value = '0'; $('encCrMax').value = '30';
+  }
+  // the party: players with tokens on this map, and the level used last time
+  const owners = new Set(Object.values(sc().tokens).map((t) => t.owner).filter((o) => o && o !== '*'));
+  if (owners.size) $('encSize').value = owners.size;
+  $('encLevel').value = tryGet('tt-partyLevel') || $('encLevel').value;
+  renderEncList(); renderEncPicked(); renderEncLoad();
+  $('encModal').hidden = false; setTimeout(() => $('encSearch').focus(), 0);
+}
+function renderEncList() {
+  const q = $('encSearch').value.trim().toLowerCase(), type = $('encType').value, lo = Number($('encCrMin').value), hi = Number($('encCrMax').value);
+  const list = monsters.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q)) && (!type || m.type.startsWith(type)) && m.cr >= lo && m.cr <= hi);
+  if (q) { const rank = (m) => (m.name.toLowerCase().startsWith(q) ? 0 : m.name.toLowerCase().includes(q) ? 1 : 2); list.sort((x, y) => rank(x) - rank(y)); } // name matches first
+  $('encCount').textContent = `${list.length} monsters`;
+  const box = $('encList'); box.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (const m of list.slice(0, 400)) {
+    const row = document.createElement('div'); row.className = 'mrow';
+    const n = document.createElement('span'); n.className = 'mn'; n.textContent = m.name; n.title = 'Show the stat block';
+    const sm = document.createElement('small'); sm.textContent = m.type.split(' (')[0]; n.appendChild(sm); n.onclick = () => showStatBlock(m);
+    const cr = document.createElement('span'); cr.className = 'cr'; cr.textContent = `CR ${crText(m.cr)}`;
+    const xp = document.createElement('span'); xp.className = 'cr'; xp.textContent = `${m.xp.toLocaleString()} XP`;
+    const add = document.createElement('button'); add.textContent = '+'; add.title = 'Add to the encounter'; add.onclick = () => { pick(m.id, 1); };
+    row.append(n, cr, xp, add); frag.appendChild(row);
+  }
+  box.appendChild(frag);
+}
+function pick(id, d) {
+  const p = enc.picked.find((x) => x.id === id);
+  if (p) { p.n += d; if (p.n <= 0) enc.picked = enc.picked.filter((x) => x !== p); } else if (d > 0) enc.picked.push({ id, n: d });
+  renderEncPicked();
+}
+function encXp() { return enc.picked.reduce((a, p) => a + (monsterById.get(p.id)?.xp || 0) * p.n, 0); }
+function renderEncPicked() {
+  const box = $('encPicked'); box.innerHTML = '';
+  if (!enc.picked.length) box.innerHTML = '<div class="hint" style="padding:8px">Click + next to a monster to add it.</div>';
+  for (const p of enc.picked) {
+    const m = monsterById.get(p.id); if (!m) continue;
+    const row = document.createElement('div'); row.className = 'prow';
+    const cv = document.createElement('canvas'); thumb({ icon: m.token.icon, color: m.token.color, label: m.name }, 22, cv);
+    const n = document.createElement('span'); n.className = 'mn'; n.textContent = m.name; n.onclick = () => showStatBlock(m);
+    const cnt = document.createElement('span'); cnt.className = 'cnt';
+    const minus = document.createElement('button'); minus.textContent = '−'; minus.onclick = () => pick(p.id, -1);
+    const num = document.createElement('b'); num.textContent = '×' + p.n;
+    const plus = document.createElement('button'); plus.textContent = '+'; plus.onclick = () => pick(p.id, 1);
+    cnt.append(minus, num, plus);
+    const xp = document.createElement('span'); xp.className = 'xp'; xp.textContent = `${(m.xp * p.n).toLocaleString()} XP`;
+    row.append(cv, n, cnt, xp); box.appendChild(row);
+  }
+  // the difficulty meter
+  const size = Math.max(1, Math.min(12, Number($('encSize').value) || 4)), lvl = Math.max(1, Math.min(20, Number($('encLevel').value) || 1));
+  const [low, mod, high] = XP_BUDGET[lvl].map((v) => v * size), xp = encXp(), max = high * 1.5;
+  $('encMeter').querySelector('.fill').style.width = Math.min(100, (xp / max) * 100) + '%';
+  $('encMeter').querySelector('.marks').innerHTML = [low, mod, high].map((v) => `<span style="left:${(v / max) * 100}%">▲</span>`).join('')
+    + `<div class="legend">Low up to ${low.toLocaleString()} · Moderate up to ${mod.toLocaleString()} · High up to ${high.toLocaleString()} XP</div>`;
+  const verdict = !xp ? '' : xp <= low ? `Low · ${xp.toLocaleString()} XP: an easy fight` : xp <= mod ? `Moderate · ${xp.toLocaleString()} XP: a real fight, a slim chance someone dies`
+    : xp <= high ? `High · ${xp.toLocaleString()} XP: could be deadly` : `Beyond High · ${xp.toLocaleString()} XP: very likely deadly for ${size} level-${lvl} characters`;
+  $('encVerdict').textContent = verdict; $('encVerdict').style.color = !xp ? '' : xp <= low ? '#4ade80' : xp <= mod ? '#facc15' : xp <= high ? '#fb923c' : '#f87171';
+  $('encDel').style.display = enc.id ? '' : 'none';
+}
+function renderEncLoad() {
+  const sel = $('encLoad'); sel.innerHTML = '<option value="">Saved encounters…</option>';
+  for (const e of encounters) { const o = document.createElement('option'); o.value = e.id; o.textContent = e.name; sel.appendChild(o); }
+}
+const rollHp = (expr) => { const m = String(expr).replace(/\s/g, '').match(/^(\d+)d(\d+)([+-]\d+)?$/); if (!m) return null; let t = Number(m[3] || 0); for (let i = 0; i < +m[1]; i++) t += 1 + Math.floor(Math.random() * +m[2]); return Math.max(1, t); };
+// put the encounter on the map: near the middle of the DM's view, on free floor, numbered like the library does
+function placeEncounter() {
+  const s = sc(); if (!s || !enc.picked.length) return toast('Add some monsters first');
+  const r = canvas.getBoundingClientRect(), cx = Math.floor((r.width / 2 - view.x) / view.zoom / CELL), cy = Math.floor((r.height / 2 - view.y) / view.zoom / CELL);
+  const taken = new Set();
+  for (const t of Object.values(s.tokens)) for (let y = t.y; y < t.y + t.size; y++) for (let x = t.x; x < t.x + t.size; x++) taken.add(x + ',' + y);
+  const free = (x, y, n) => { for (let j = y; j < y + n; j++) for (let i = x; i < x + n; i++) if (!inside(s, i, j) || taken.has(i + ',' + j) || s.tiles[i + ',' + j] === 'wall') return false; return true; };
+  const spots = []; for (let d = 0; d < 30; d++) for (let y = cy - d; y <= cy + d; y++) for (let x = cx - d; x <= cx + d; x++) if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) === d) spots.push([x, y]);
+  let placed = 0;
+  const used = new Set(Object.values(s.tokens).map((t) => t.label));
+  const nameFor = (m, many) => { // Goblin 1, Goblin 2… (a lone monster keeps its plain name if it's free)
+    if (!many && !used.has(m.name) && !used.has(m.name + ' 1')) { used.add(m.name); return m.name; }
+    let n = 1; while (used.has(`${m.name} ${n}`)) n++; used.add(`${m.name} ${n}`); return `${m.name} ${n}`;
+  };
+  for (const p of enc.picked) {
+    const m = monsterById.get(p.id);
+    for (let k = 0; k < p.n; k++) {
+      const sz = m.token.size, at = spots.find(([x, y]) => free(x, y, sz));
+      if (!at) { toast('No room left near the middle of your view'); break; }
+      for (let y = at[1]; y < at[1] + sz; y++) for (let x = at[0]; x < at[0] + sz; x++) taken.add(x + ',' + y);
+      const hp = $('encHp').value === 'roll' ? rollHp(m.hd) || m.hp : m.hp;
+      sendMsg({ type: 'addToken', sceneId: editing, label: nameFor(m, p.n > 1), icon: m.token.icon, color: m.token.color, size: sz, owner: '', x: at[0], y: at[1],
+        hidden: $('encHidden').checked, hp, maxHp: hp, initBonus: m.token.init, srd: m.id });
+      placed++;
+    }
+  }
+  if (placed) { $('encModal').hidden = true; toast(`Placed ${placed} monster${placed === 1 ? '' : 's'}${$('encHidden').checked ? ', hidden from players' : ''}. Select one for its stat block.`, 5000); }
+}
+// a stat block, with its attacks, damage and ability checks clickable to roll
+function showStatBlock(m) {
+  const b = $('sbBody'); b.innerHTML = '';
+  $('sbName').textContent = m.name;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; b.appendChild(e); return e; };
+  const line = (label, value) => { if (!value) return; const p = el('p'); const s = document.createElement('b'); s.textContent = label + ' '; p.append(s, value); };
+  const roll = (expr, label) => rollWithPrivacy(expr, `${m.name}: ${label}`);
+  el('div', 'sub', `${m.size} ${m.type}, ${m.align}`);
+  el('hr');
+  line('Armor Class', `${m.ac}${m.acType ? ` (${m.acType})` : ''}`);
+  const hp = el('p'); hp.innerHTML = '<b>Hit Points</b> '; hp.append(`${m.hp} (`); hp.appendChild(rollBtn(m.hd, () => roll(m.hd, 'hit points'))); hp.append(')');
+  line('Speed', m.speed);
+  el('hr');
+  const abl = el('div', 'abl');
+  ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].forEach((n, i) => { const v = m.abl[i], md = Math.floor((v - 10) / 2), bt = document.createElement('button'); bt.title = `Roll a ${n} check`; bt.innerHTML = `<b>${n}</b>${v} (${md >= 0 ? '+' : ''}${md})`; bt.onclick = () => roll(`1d20${md ? (md > 0 ? '+' : '') + md : ''}`, `${n} check`); abl.appendChild(bt); });
+  el('hr');
+  line('Saving Throws', m.saves); line('Skills', m.skills); line('Damage Vulnerabilities', m.vuln); line('Damage Resistances', m.resist);
+  line('Damage Immunities', m.immune); line('Condition Immunities', m.cimmune); line('Senses', m.senses); line('Languages', m.lang);
+  line('Challenge', `${crText(m.cr)} (${m.xp.toLocaleString()} XP)`);
+  el('hr');
+  const section = (title, items) => { if (!items || !items.length) return; if (title) el('h3', null, title); for (const it of items) { const p = el('p'); const s = document.createElement('b'); s.textContent = it.n + '. '; s.style.fontStyle = 'italic'; p.appendChild(s); richText(p, it.d, (expr, what) => roll(expr, `${it.n}${what ? ' ' + what : ''}`)); } };
+  section(null, m.traits); section('Actions', m.actions); section('Reactions', m.reactions); section('Legendary Actions', m.legendary);
+  const c = el('p', 'hint'); c.textContent = 'From the SRD 5.1 by Wizards of the Coast, CC BY 4.0.';
+  $('statModal').hidden = false;
+}
+function rollBtn(text, onclick) { const bt = document.createElement('button'); bt.className = 'roll'; bt.textContent = text; bt.title = 'Roll ' + text; bt.onclick = onclick; return bt; }
+// "+5 to hit" and "(2d6 + 3)" become buttons that roll
+function richText(p, text, roll) {
+  const re = /([+-]\d+) to hit|\((\d+d\d+(?:\s*[+-]\s*\d+)?)\)/g; let last = 0, m;
+  while ((m = re.exec(text))) {
+    p.append(text.slice(last, m.index));
+    if (m[1]) { const expr = '1d20' + m[1]; p.appendChild(rollBtn(`${m[1]} to hit`, () => roll(expr, 'attack'))); }
+    else { const expr = m[2].replace(/\s/g, ''); p.append('('); p.appendChild(rollBtn(m[2], () => roll(expr, 'damage'))); p.append(')'); }
+    last = re.lastIndex;
+  }
+  p.append(text.slice(last));
+}
+const rollWithPrivacy = (expr, label) => sendMsg({ type: 'roll', expr, label: label.slice(0, 30), private: $('sbPrivate').checked });
+
+$('openEnc').onclick = () => openEncounters().catch((e) => toast('Couldn\'t load the monsters: ' + e.message));
+$('encSearch').oninput = () => renderEncList();
+$('encType').onchange = $('encCrMin').onchange = $('encCrMax').onchange = () => renderEncList();
+$('encSize').oninput = () => renderEncPicked();
+$('encLevel').oninput = () => { trySet('tt-partyLevel', $('encLevel').value); renderEncPicked(); };
+$('encPlace').onclick = placeEncounter;
+$('encSave').onclick = () => {
+  if (!enc.picked.length) return toast('Add some monsters first');
+  const id = enc.id || uid(); enc.id = id;
+  sendMsg({ type: 'encounterSave', encounter: { id, name: $('encName').value.trim() || 'Encounter', monsters: enc.picked, party: { size: $('encSize').value, level: $('encLevel').value } } });
+  toast('Encounter saved');
+};
+$('encDel').onclick = () => { if (!enc.id) return; sendMsg({ type: 'encounterDelete', id: enc.id }); enc = { id: null, picked: [] }; $('encName').value = ''; renderEncPicked(); };
+$('encLoad').onchange = () => {
+  const e = encounters.find((x) => x.id === $('encLoad').value); $('encLoad').value = ''; if (!e) return;
+  enc = { id: e.id, picked: e.monsters.map((m) => ({ ...m })) }; $('encName').value = e.name;
+  $('encSize').value = e.party.size; $('encLevel').value = e.party.level; renderEncPicked();
+};
+$('eStat').onclick = async () => { await loadMonsters(); const m = monsterOf(selected && sc().tokens[selected]); if (m) showStatBlock(m); else toast('No SRD stat block for this token'); };
 
 // ---------- chat ----------
 // Table talk in the log. Whispers go to one person (and the DM sees them); the DM can speak as an NPC.
@@ -1328,6 +1553,14 @@ function renderEditor() {
   if (keep !== $('eLight')) { $('eLight').value = lv; if ($('eLight').value !== lv) { const o = document.createElement('option'); o.value = lv; o.textContent = `${t.light[0]} / ${t.light[1]} ft`; $('eLight').appendChild(o); $('eLight').value = lv; } }
   setv('eDark', String(t.darkvision || 0)); setv('eDdb', t.ddb || '');
   $('eDdbOpen').disabled = !t.ddb;
+  $('eStatRow').classList.toggle('off', !(me.isDM && monsterOf(t)));
+  const floors = floorList(sc());
+  $('eFloorRow').classList.toggle('off', !(me.isDM && floors.length > 1));
+  if (me.isDM && floors.length > 1 && keep !== $('eFloor')) {
+    $('eFloor').innerHTML = floors.map((f) => `<option value="${f.id}"></option>`).join('');
+    [...$('eFloor').options].forEach((o, i) => { o.textContent = floors[i].floor; });
+    $('eFloor').value = editing;
+  }
   const on = new Set(t.conditions || []);
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
 }
@@ -1349,6 +1582,7 @@ $('eHp').onchange = () => updateSelected({ hp: numOrNull($('eHp').value) });
 $('eMaxHp').onchange = () => { const t = sc().tokens[selected]; const max = numOrNull($('eMaxHp').value); updateSelected(t && t.hp == null && max != null ? { maxHp: max, hp: max } : { maxHp: max }); };
 $('eTemp').onchange = () => updateSelected({ tempHp: Number($('eTemp').value) || 0 });
 $('eInit').onchange = () => updateSelected({ initBonus: Number($('eInit').value) || 0 });
+$('eFloor').onchange = () => { const to = $('eFloor').value; if (selected && to !== editing) { sendMsg({ type: 'tokenFloor', sceneId: editing, id: selected, to }); toast('Moved to ' + $('eFloor').selectedOptions[0].textContent); select(null); } };
 $('eLight').onchange = () => { const v = $('eLight').value.split(',').map(Number); updateSelected({ light: v[1] > 0 ? [v[0], v[1]] : null }); };
 $('eDark').onchange = () => updateSelected({ darkvision: Number($('eDark').value) || 0 });
 const DDB_LINK = /^https:\/\/(www\.)?(dndbeyond\.com\/(profile\/[^/]+\/)?characters\/\d+[\w\-/]*|ddb\.ac\/characters\/\d+[\w\-/]*)$/i;
@@ -1644,6 +1878,7 @@ canvas.addEventListener('pointerup', () => {
     const x = Math.round(drag.pos.x / CELL), y = Math.round(drag.pos.y / CELL);
     if (t) { t.x = Math.max(0, Math.min(s.cols - t.size, x)); t.y = Math.max(0, Math.min(s.rows - t.size, y)); }
     sendMsg({ type: 'move', sceneId: editing, id: drag.id, x, y });
+    if (t) setTimeout(() => offerStairs(s, t), 50);
   }
   if (stroke) { commit(stroke); stroke = null; }
   if (rectDrag && s) { fillRect(s, rectDrag.a, rectDrag.b, tool === 'room'); rectDrag = null; }

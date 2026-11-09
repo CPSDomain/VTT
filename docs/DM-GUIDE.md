@@ -42,6 +42,14 @@ The dropdown at the top picks which map **you** are looking at.
 - A grey **PRIVATE PREP** badge means only you see this map. Build in peace.
 - When a map is ready, click **Show to players**.
 
+## Buildings with floors
+
+A tower, a manor, a dungeon with levels: click **＋ Floor above** or **＋ Cellar** next to the map list at the top. The map becomes a building: the new floor is a blank map of the same size (build it, generate it or import a map image for it) with its own walls, fog and lights. The floor buttons switch between floors; **＋▲** and **＋▼** add more.
+
+- **Stairs:** put stairs, a ladder or a trapdoor on both floors. When a character is dropped on one, they're offered "Up to …" or "Down to …".
+- **Moving any token:** select it and pick another floor in the **Floor** box.
+- **What players see:** each player sees the floor their character is on, so the party can split up. Players without a character in the building see the floor you showed with **Show to players**. Other floors of that building are marked **IN PLAY**: changes there show to players on them straight away.
+
 ## Fog of war
 
 The bar at the top of the map controls fog for the map you're on.
@@ -172,6 +180,19 @@ Click **Token library…** in the right-hand panel: 215 ready-made tokens in cat
 - **Click any token** to edit it in the Selected token panel: name, art, colour, owner and size. **Duplicate** copies it with the next number. Delete removes it.
 - **Hidden from players:** a hidden token shows faded with a dashed ring on your screen only. Untick to reveal it. Tick **Add hidden** before adding to place an ambush.
 
+## Encounters
+
+Click **⚔ Encounter builder…** under Add tokens.
+
+1. Find monsters on the left: search by name or kind (goblin, dragon, undead) and set the challenge ratings. Click a name for its stat block; click **+** to add it.
+2. Set the party on the right: how many characters, and their level. The meter shows how hard the fight is, using the D&D 2024 XP budget: **Low** (no one should die), **Moderate** (a slim chance someone dies), **High** (could be deadly) or beyond.
+3. **Place on the map** puts the monsters near the middle of your view, on free squares, numbered (Goblin 1, Goblin 2…), with average or rolled hit points and their initiative bonus. **Add hidden** keeps them out of sight until you reveal them.
+4. **Save** keeps the encounter (give it a name) to place again later from **Saved encounters…**.
+
+**Stat blocks:** select a monster on the map and click **📖 Stat block**. Attack bonuses, damage, hit dice and ability scores are buttons that roll; **Roll privately** keeps the result to you. Library tokens named like an SRD monster ("Goblin 3") have one too.
+
+The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under the Creative Commons Attribution 4.0 licence.
+
 ## Combat
 
 ![Combat](images/combat.jpg)
@@ -219,4 +240,4 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Not in this version yet
 
-The encounter builder, multi-level maps, music and weather are still to come: see the [roadmap](ROADMAP.md).
+Music and ambience, and weather and time-of-day overlays, are still to come: see the [roadmap](ROADMAP.md).

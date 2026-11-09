@@ -2,6 +2,20 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.4.0] - 2026-11-09
+
+### Added
+- **Encounter builder** (**⚔ Encounter builder…** under Add tokens): the 334 monsters of the SRD 5.1, searchable by name or kind and filtered by challenge rating. Add monsters with **+**, set the party (how many characters, what level), and a meter shows the difficulty from the D&D 2024 XP budget: Low, Moderate, High or beyond. **Place on the map** drops them near the middle of your view on free squares, numbered, with average or rolled HP, their initiative bonus, and hidden if you like. **Save** keeps an encounter to use again.
+- **Stat blocks:** click a monster's name in the builder, or select a monster on the map and click **📖 Stat block**. Attacks (**+4 to hit**), damage (**1d6 + 2**), hit dice and ability checks are buttons that roll (privately, unless you untick it). Works for library tokens with an SRD name too (a "Goblin 3" finds the Goblin).
+- **Floors:** with the **＋ Floor above** / **＋ Cellar** buttons at the top, a map becomes a building with floors (same size, its own walls, fog and lights). Switch between floors with the floor buttons.
+  - **Stairs:** a character dropped on stairs, a ladder or a trapdoor is offered the floor above or below. The DM can move any token with the **Floor** box in the token panel.
+  - **Each player sees the floor their character is on**, so the party can split up; anyone without a character there sees the floor you showed. Other floors of the building you've shown are marked **IN PLAY**.
+
+### Changed
+- The GitHub build retries when a download times out, keeps its downloads between runs, and uses current versions of GitHub's actions.
+
+Monster data from the SRD 5.1 by Wizards of the Coast, licensed under CC BY 4.0, prepared by the 5e-database project.
+
 ## [1.3.0] - 2026-11-08
 
 ### Added

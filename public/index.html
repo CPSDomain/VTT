@@ -117,7 +117,7 @@
   #hWho label.check { margin-top:2px; }
   #hvImg { max-width:100%; max-height:62vh; object-fit:contain; border-radius:6px; align-self:center; }
   #hvImg:not([src]), #hvImg[src=""] { display:none; }
-  #hvTitle { text-transform:none; letter-spacing:0; font-size:18px; color:var(--text); }
+  #hvTitle, #sbName { text-transform:none; letter-spacing:0; font-size:18px; color:var(--text); }
   #hvText { white-space:pre-wrap; line-height:1.55; font-size:15px; }
   .hitem { display:flex; align-items:center; gap:6px; margin-top:5px; }
   .hitem .ht { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer; }
@@ -143,6 +143,50 @@
   #mePop .tphead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
   #mePop .tphead button { padding:2px 8px; }
   .irow .sheet { padding:0 3px; border:0; background:transparent; font-size:12px; }
+  #eStatRow.off, #eFloorRow.off { display:none !important; }
+  #floorBar { display:none; gap:3px; align-items:center; }
+  body.dm #floorBar.on { display:flex !important; }
+  #floorBar button { padding:4px 9px; font-size:12px; }
+  #floorBar button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #floorBar button.live::before { content:'● '; color:#f87171; }
+  #floorBar button.on.live::before { color:#fff; }
+  #floorBar .add { color:var(--dim); }
+  #floorPop { width:auto; min-width:220px; }
+  #fpBtns > button { flex:0 0 auto; white-space:nowrap; }
+  .encbody { display:grid; grid-template-columns:1.25fr 1fr; gap:16px; padding:0 16px 16px; min-height:0; flex:1; }
+  .enccol { display:flex; flex-direction:column; min-height:0; gap:6px; }
+  #encList { flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:6px; }
+  .mrow { display:grid; grid-template-columns:1fr auto auto auto; gap:8px; align-items:center; padding:5px 8px; border-bottom:1px solid #262626; font-size:13px; }
+  .mrow:hover { background:#232323; }
+  .mrow .mn { cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .mrow .mn small { color:var(--dim); margin-left:6px; }
+  .mrow .mn:hover { color:var(--accent2); }
+  .mrow .cr { color:var(--dim); font-variant-numeric:tabular-nums; min-width:62px; text-align:right; }
+  .mrow button { padding:2px 9px; }
+  #encMeter { margin-top:10px; }
+  #encMeter .bar { height:14px; border-radius:7px; background:#262626; overflow:hidden; }
+  #encMeter .fill { height:100%; width:0; background:linear-gradient(90deg,#16a34a,#eab308 60%,#dc2626); transition:width .2s; }
+  #encMeter .marks { position:relative; height:18px; font-size:11px; color:var(--dim); }
+  #encMeter .marks { height:auto; }
+  #encMeter .marks span { position:absolute; top:-2px; transform:translateX(-50%); }
+  #encMeter .legend { padding-top:14px; }
+  #encVerdict { font-size:15px; font-weight:600; min-height:22px; }
+  #encPicked { flex:1; overflow-y:auto; border:1px solid var(--line); border-radius:8px; min-height:120px; }
+  .prow { display:grid; grid-template-columns:auto 1fr auto auto; gap:8px; align-items:center; padding:5px 8px; border-bottom:1px solid #262626; font-size:13px; }
+  .prow .cnt { display:flex; gap:3px; align-items:center; }
+  .prow .cnt button { padding:1px 7px; }
+  .prow .xp { color:var(--dim); font-variant-numeric:tabular-nums; }
+  .prow .mn { cursor:pointer; } .prow .mn:hover { color:var(--accent2); }
+  #sbBody { font-size:14px; line-height:1.45; }
+  #sbBody .sub { color:var(--dim); font-style:italic; margin-top:-6px; }
+  #sbBody hr { border:0; border-top:2px solid #7c2d12; margin:4px 0; }
+  #sbBody .abl { display:grid; grid-template-columns:repeat(6,1fr); text-align:center; gap:4px; }
+  #sbBody .abl button { display:flex; flex-direction:column; align-items:center; padding:4px 0; font-size:12px; }
+  #sbBody .abl b { color:var(--accent2); }
+  #sbBody h3 { margin:8px 0 2px; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent2); border-bottom:1px solid #3a2a20; }
+  #sbBody p { margin:3px 0; }
+  #sbBody .roll { padding:0 6px; font-size:12.5px; border-color:#7c2d12; background:#2a1b14; color:#fdba74; border-radius:5px; }
+  #sbBody .roll:hover { background:#7c2d12; color:#fff; }
   #cellInfo:empty { display:none; }
   #cellInfo { position:absolute; left:10px; bottom:10px; background:rgba(0,0,0,.65); padding:4px 9px; border-radius:6px; font-size:11px; color:var(--dim); pointer-events:none; font-variant-numeric:tabular-nums; }
 
@@ -282,6 +326,7 @@
   <!-- DM view -->
   <select id="sceneSel" class="dm-only" title="Map you are looking at"></select>
   <span id="liveBadge" class="badge dm-only"></span>
+  <span id="floorBar" class="dm-only"></span>
   <button id="showPlayers" class="dm-only primary" title="Put this map on the players' screens">Show to players</button>
   <div class="sep dm-only"></div>
   <div class="seg dm-only"><button id="modePlay" class="on">Play</button><button id="modeBuild">Build map</button></div>
@@ -422,6 +467,7 @@
         <label class="check" style="margin:0" title="DM notes show only on your screen"><input type="checkbox" id="lblNote"> DM note (only I see it)</label></div>
       <div class="row"><button id="lblSave" class="primary">Save</button><button id="lblDel" class="danger">Delete</button><button id="lblCancel">Cancel</button></div>
     </div>
+    <div id="floorPop" class="pop" hidden><div class="hint" style="margin:0 0 6px" id="fpText">Take the stairs?</div><div id="fpBtns" class="row" style="margin:0;flex-wrap:wrap"></div></div>
     <div id="cellInfo"></div>
     <div id="zoomCtl"><button id="zoomOut" title="Zoom out">−</button><button id="zoomFit" title="Fit map to screen (Home)">⤢</button><button id="zoomIn" title="Zoom in">+</button></div>
   </div>
@@ -477,6 +523,8 @@
             <select id="eHpShow" style="flex:1;min-width:0" title="How much of this token's health players can see. Default: numbers for player characters, a bar for everyone else."><option value="">Default (PCs: numbers, others: bar)</option><option value="numbers">HP numbers</option><option value="bar">Health bar only</option><option value="none">Nothing</option></select>
           </div>
         </div>
+        <div class="hprow dm-only" id="eFloorRow"><span class="hpl">Floor</span><select id="eFloor" style="flex:1;min-width:0" title="Move this token to another floor"></select></div>
+        <div class="row dm-only" id="eStatRow"><button id="eStat" title="This monster's stat block, with clickable attacks and damage">📖 Stat block</button></div>
         <div class="row"><input id="eDdb" placeholder="D&amp;D Beyond character link" title="Paste the character's link from D&amp;D Beyond, e.g. https://www.dndbeyond.com/characters/12345678"><button id="eDdbOpen" class="fixed" title="Open the character sheet">📜 Sheet</button></div>
         <div class="hpl" style="margin:10px 0 6px">Conditions</div>
         <div id="eConds" class="conds"></div>
@@ -513,6 +561,7 @@
         <div class="row"><input id="tOwner" placeholder="Owner: player name, * = anyone" title="Who can move it. Leave empty for DM only."><select id="tSize" class="fixed"><option value="1">Medium</option><option value="2">Large</option><option value="3">Huge</option><option value="4">Garg.</option></select></div>
         <label class="check"><input type="checkbox" id="tHidden"> Add hidden (reveal later)</label>
         <div class="row"><button id="addToken" class="primary">Add to map</button></div>
+        <div class="row"><button id="openEnc" title="Build a fight from the SRD monsters, sized for the party">⚔ Encounter builder…</button></div>
         <div class="hint">Or pick the Token tool in Build mode and click to place. Drop image files on the map to make tokens from them.</div>
       </section>
     </div>
@@ -524,6 +573,36 @@
   </aside>
 </main>
 
+<div class="modal" id="encModal" hidden>
+  <div class="dialog wide">
+    <div class="dhead"><h2 style="margin:0">Encounter builder</h2><div class="spacer"></div>
+      <select id="encLoad" title="Encounters you've saved"><option value="">Saved encounters…</option></select>
+      <button class="close" data-close>✕</button></div>
+    <div class="encbody">
+      <div class="enccol">
+        <div class="row" style="margin:0"><input id="encSearch" placeholder="Search monsters: goblin, dragon, undead…"><select id="encType" class="fixed"><option value="">Any kind</option></select></div>
+        <div class="row"><span class="fixed hint" style="margin:0">CR</span><select id="encCrMin"></select><span class="fixed hint" style="margin:0">to</span><select id="encCrMax"></select><span class="fixed hint" id="encCount" style="margin:0"></span></div>
+        <div id="encList"></div>
+      </div>
+      <div class="enccol">
+        <div class="row" style="margin:0"><span class="fixed hint" style="margin:0">Party:</span><input id="encSize" type="number" min="1" max="12" value="4" style="max-width:56px"><span class="fixed hint" style="margin:0">characters of level</span><input id="encLevel" type="number" min="1" max="20" value="3" style="max-width:56px"></div>
+        <div id="encMeter"><div class="bar"><div class="fill"></div></div><div class="marks"></div></div>
+        <div id="encVerdict"></div>
+        <div id="encPicked"></div>
+        <div class="row"><input id="encName" placeholder="Name, e.g. Goblin ambush" maxlength="60"><button id="encSave" class="fixed">Save</button><button id="encDel" class="fixed danger" title="Delete this saved encounter">✕</button></div>
+        <div class="row"><select id="encHp"><option value="avg">Average HP</option><option value="roll">Rolled HP</option></select><label class="check" style="margin:0"><input type="checkbox" id="encHidden" checked> Add hidden</label></div>
+        <div class="row"><button id="encPlace" class="primary">Place on the map</button></div>
+        <div class="hint">Difficulty from the XP budget per character (D&amp;D 2024 rules). Low: no one should die; Moderate: a slim chance; High: could be deadly. Monsters from the SRD 5.1 (CC BY 4.0).</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="statModal" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0" id="sbName"></h2><div class="spacer"></div><label class="check" style="margin:0" title="Rolls from the stat block go only to you"><input type="checkbox" id="sbPrivate" checked> Roll privately</label><button class="close" data-close>✕</button></div>
+    <div id="sbBody" class="hbody"></div>
+  </div>
+</div>
 <div class="modal" id="handoutModal" hidden>
   <div class="dialog">
     <div class="dhead"><h2 style="margin:0" id="hmTitle">New handout</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>

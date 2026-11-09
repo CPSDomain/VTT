@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -63,10 +63,11 @@ function loadState(file) {
     s.library = s.library || [];
     s.passcode = typeof s.passcode === 'string' ? s.passcode : ''; s.blocked = Array.isArray(s.blocked) ? s.blocked : [];
     s.pins = s.pins && typeof s.pins === 'object' ? s.pins : {};
+    s.encounters = Array.isArray(s.encounters) ? s.encounters : [];
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {} };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [] };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -165,7 +166,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       }
     }
     // the party's view counts as explored even when nobody's connected yet
-    if (visionOn(sc) && fogOn(sc) && sc.vision.explore !== false && sc.vision.shared !== false && sc.id === state.activeScene) {
+    if (visionOn(sc) && fogOn(sc) && sc.vision.explore !== false && sc.vision.shared !== false && inPlay(sc)) {
       const now = sightFor(sc, ''), a = fogArr(sc); for (let i = 0; i < now.length; i++) if (now[i] && !a[i]) explore.add(i);
     }
     // with fog of war on, what the party sees stays revealed (they've explored it)
@@ -301,8 +302,41 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   const clients = () => [...wss.clients].filter((c) => c.user && c.user.joined);
   const toDMs = (msg) => clients().forEach((c) => c.user.isDM && send(c, msg));
   // Send a scene change to every DM, and to players only if that scene is the one on the table.
-  const toScene = (sceneId, msg) => clients().forEach((c) => (c.user.isDM || sceneId === state.activeScene) && send(c, msg));
-  const toPlayersOnScene = (sceneId, msg) => clients().forEach((c) => !c.user.isDM && sceneId === state.activeScene && send(c, msg));
+  // ---------- floors ----------
+  // A map can have floors (maps in one group, each with a level). Players see the floor their
+  // character is on; anyone without a character on one sees the floor the DM showed.
+  const floorsOf = (sc) => (sc && sc.group ? state.order.map((id) => state.scenes[id]).filter((x) => x && x.group === sc.group).sort((a, b) => (b.level || 0) - (a.level || 0)) : []);
+  function viewOf(u) {
+    const act = state.scenes[state.activeScene];
+    if (u.isDM || !act || !act.group) return state.activeScene;
+    const mine = (x) => Object.values(x.tokens).some((t) => !t.hidden && t.owner && t.owner !== '*' && sameName(t.owner, u.name));
+    if (mine(act)) return act.id;
+    const f = floorsOf(act).find(mine);
+    return f ? f.id : act.id;
+  }
+  const seesScene = (c, sceneId) => c.user.isDM || viewOf(c.user) === sceneId;
+  const inPlay = (sc) => !!sc && (sc.id === state.activeScene || (!!sc.group && (state.scenes[state.activeScene] || {}).group === sc.group));
+  // after a character changes floor (or appears, or goes): players whose floor changed get the new one
+  function refreshViews() {
+    for (const c of clients()) {
+      if (c.user.isDM) continue;
+      const v = viewOf(c.user);
+      if (c.user.view === v) continue;
+      c.user.view = v;
+      const sc = state.scenes[v]; if (!sc) continue;
+      syncFog(sc);
+      send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
+      if (visionOn(sc)) scheduleVision(sc);
+    }
+  }
+  function refreshFloors(group) {
+    if (!group) return;
+    const list = state.order.map((id) => state.scenes[id]).filter((x) => x && x.group === group);
+    const floors = list.sort((a, b) => (b.level || 0) - (a.level || 0)).map((f) => ({ id: f.id, level: f.level || 0, floor: f.floor || '' }));
+    for (const c of clients()) if (!c.user.isDM && list.some((f) => f.id === viewOf(c.user))) send(c, { type: 'floors', floors });
+  }
+  const toScene = (sceneId, msg) => clients().forEach((c) => seesScene(c, sceneId) && send(c, msg));
+  const toPlayersOnScene = (sceneId, msg) => clients().forEach((c) => !c.user.isDM && seesScene(c, sceneId) && send(c, msg));
   // who may see a log entry: private rolls go to the roller and the DM; whispers to the sender, whoever
   // they're for and the DM ("DM" as a recipient means just the DM)
   const canSee = (u, e) => {
@@ -311,7 +345,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     return !e.private || u.name === e.who;
   };
 
-  const playersOnScene = (sceneId) => clients().filter((c) => !c.user.isDM && sceneId === state.activeScene);
+  const playersOnScene = (sceneId) => clients().filter((c) => !c.user.isDM && seesScene(c, sceneId));
 
   // How much of a token's health a player may see. Their own tokens: everything. Others: by the token's
   // "players see HP" setting (default: numbers for player characters, just a bar for everything else).
@@ -345,7 +379,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   function sendCombat(sc) {
     clients().forEach((c) => {
       if (c.user.isDM) send(c, { type: 'combat', sceneId: sc.id, combat: combatOf(sc) });
-      else if (sc.id === state.activeScene) send(c, { type: 'combat', sceneId: sc.id, combat: combatFor(sc, c.user) });
+      else if (seesScene(c, sc.id)) send(c, { type: 'combat', sceneId: sc.id, combat: combatFor(sc, c.user) });
     });
   }
 
@@ -362,14 +396,15 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     for (const [k, l] of Object.entries(sc.labels || {})) if (labelVisible(sc, l)) labels[k] = l;
     // walls, doors and lights from imported maps are only for the DM's tools (they'd give away the layout)
     const { walls, doors, lights, ...rest } = sc;
-    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u), sight: sightData(sc, u) };
+    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u), sight: sightData(sc, u),
+      floors: floorsOf(sc).map((f) => ({ id: f.id, level: f.level || 0, floor: f.floor || '' })) };
   }
   function sendSceneFull(sc) {
     syncFog(sc); sights.delete(sc.id);
     if (visionOn(sc)) scheduleVision(sc);
     clients().forEach((c) => {
       if (c.user.isDM) send(c, { type: 'sceneFull', scene: sc });
-      else if (sc.id === state.activeScene) send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
+      else if (seesScene(c, sc.id)) send(c, { type: 'sceneFull', scene: playerScene(sc, c.user), active: true });
     });
   }
   // Token changes: DMs always hear. Each player gets it if they can see it now, or loses it if they could before.
@@ -384,9 +419,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (sc.combat && sc.combat.active && sc.combat.entries.some((e) => e.id === tok.id) && (!before || tokVisible(sc, before, {}) !== tokVisible(sc, tok, {}) || before.x !== tok.x || before.y !== tok.y || before.hidden !== tok.hidden)) sendCombat(sc);
   }
   function viewFor(u) {
-    const base = { activeScene: state.activeScene, log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
-    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [] }; }
-    return { ...base, scene: playerScene(state.scenes[state.activeScene], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
+    const base = { activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [] }; }
+    u.view = viewOf(u);
+    return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
   }
 
   // Validated token fields shared by add, update and generated maps.
@@ -407,6 +443,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (m.initBonus !== undefined) t.initBonus = clamp(int(m.initBonus, 0), -10, 30);
     if (m.light !== undefined) t.light = Array.isArray(m.light) && int(m.light[1], 0) > 0 ? [clamp(int(m.light[0], 0), 0, 300), clamp(int(m.light[1], 0), 0, 600)] : null;
     if (m.darkvision !== undefined) t.darkvision = clamp(int(m.darkvision, 0), 0, 300);
+    if (m.srd !== undefined) t.srd = typeof m.srd === 'string' && /^[a-z0-9-]{1,60}$/.test(m.srd) ? m.srd : null;
     if (m.ddb !== undefined) t.ddb = typeof m.ddb === 'string' && DDB.test(m.ddb.trim()) ? m.ddb.trim() : null;
     if (m.conditions !== undefined) t.conditions = Array.isArray(m.conditions) ? [...new Set(m.conditions.filter((c) => CONDITIONS.has(c)))].slice(0, 24) : [];
     if (m.x != null) t.x = clamp(int(m.x, 0), 0, sc.cols - (t.size || 1));
@@ -573,14 +610,14 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         }
       }
       u.joined = true;
-      if (!u.isDM && visionOn(state.scenes[state.activeScene])) scheduleVision(state.scenes[state.activeScene]);
+      if (!u.isDM && visionOn(state.scenes[viewOf(u)])) scheduleVision(state.scenes[viewOf(u)]);
       send(ws, { type: 'welcome', isDM: u.isDM, name: u.name, version: VERSION, pinSet: !!state.pins[u.name.toLowerCase()], state: viewFor(u) });
       return presence();
     }
     if (!u.joined) return;
 
     // Scene targeted by the message: DMs may name any scene, players always act on the active one.
-    const sc = state.scenes[u.isDM && msg.sceneId ? msg.sceneId : state.activeScene];
+    const sc = state.scenes[u.isDM && msg.sceneId ? msg.sceneId : viewOf(u)];
     const tok = sc && msg.id ? sc.tokens[msg.id] : null;
     const inside = (x, y) => sc && x >= 0 && y >= 0 && x < sc.cols && y < sc.rows;
 
@@ -601,6 +638,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         sc.tokens[id] = { id, ...tokenFields({ label: '?', color: '#e8390e', owner: '', size: 1, x: 1, y: 1, ...msg }, sc) };
         tokenChanged(sc, sc.tokens[id], null); save();
         if (visionOn(sc)) scheduleVision(sc);
+        if (sc.group) refreshViews();
         break;
       }
       case 'tokenUpdate': {
@@ -613,6 +651,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
         tokenChanged(sc, tok, before);
         if (visionOn(sc)) scheduleVision(sc);
+        if (sc.group && (before.owner !== tok.owner || before.hidden !== tok.hidden)) refreshViews();
         if (sc.combat && sc.combat.active && 'initBonus' in m) { sortCombat(sc); sendCombat(sc); }
         save();
         break;
@@ -634,6 +673,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         delete sc.tokens[msg.id];
         toScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: msg.id });
         if (visionOn(sc)) scheduleVision(sc);
+        if (sc.group) refreshViews();
         if (sc.combat && sc.combat.entries.some((e) => e.id === msg.id)) { sortCombat(sc); sendCombat(sc); }
         save();
         break;
@@ -838,7 +878,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (Array.isArray(msg.points)) pts = msg.points.slice(0, 20).map((p) => [clamp(num(p && p[0], 0), 0, sc.cols), clamp(num(p && p[1], 0), 0, sc.rows)]);
         u.measuring = pts ? sc.id : null;
         const out = { type: 'measure', sceneId: sc.id, who: u.name, dm: u.isDM, points: pts, ft: pts ? clamp(int(msg.ft, 0), 0, 99999) : 0 };
-        clients().forEach((c) => c !== ws && (c.user.isDM || sc.id === state.activeScene) && send(c, out));
+        clients().forEach((c) => c !== ws && seesScene(c, sc.id) && send(c, out));
         break;
       }
 
@@ -941,6 +981,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         syncFog(sc);
         const s = JSON.parse(JSON.stringify(sc));
         s.id = uid(); s.name = str(sc.name + ' (copy)', 40);
+        delete s.group; delete s.level; delete s.floor; // a copy is its own map, not another floor
         state.scenes[s.id] = s; state.order.splice(state.order.indexOf(sc.id) + 1, 0, s.id);
         toDMs({ type: 'sceneAdded', scene: s, order: state.order }); save();
         break;
@@ -953,6 +994,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         if (msg.rows != null) patch.rows = clamp(int(msg.rows, sc.rows), 5, MAX_SIDE);
         if (msg.showGrid != null) patch.showGrid = !!msg.showGrid;
         if (msg.diag != null && DIAGONALS.includes(msg.diag)) patch.diag = msg.diag;
+        if (msg.floor != null && sc.group) patch.floor = str(msg.floor, 30).trim() || sc.floor;
         if (msg.vision && typeof msg.vision === 'object') {
           const v = { on: false, ambient: 'bright', shared: true, explore: true, ...(sc.vision || {}) };
           if ('on' in msg.vision) v.on = !!msg.vision.on;
@@ -981,6 +1023,41 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           sendSceneFull(sc);
         } else toScene(sc.id, { type: 'sceneMeta', sceneId: sc.id, patch });
         if (patch.vision) scheduleVision(sc);
+        if (patch.floor || patch.name) refreshFloors(sc.group);
+        save();
+        break;
+      }
+      case 'floorAdd': { // a new floor above or below this map (making it a building with floors)
+        if (!u.isDM || !sc || state.order.length >= 200) return;
+        const dir = msg.dir < 0 ? -1 : 1;
+        if (!sc.group) { sc.group = uid(); sc.level = 0; sc.floor = 'Ground floor'; toDMs({ type: 'sceneMeta', sceneId: sc.id, patch: { group: sc.group, level: 0, floor: sc.floor } }); }
+        const floors = floorsOf(sc), level = dir > 0 ? Math.max(...floors.map((f) => f.level || 0)) + 1 : Math.min(...floors.map((f) => f.level || 0)) - 1;
+        const floorName = str(msg.floor, 30).trim() || (level > 0 ? (level === 1 ? 'Upper floor' : `Floor ${level + 1}`) : level === -1 ? 'Cellar' : `Cellar ${-level}`);
+        const base = sc.name.replace(/\s+–\s+.*$/, '');
+        if (!/\s+–\s+/.test(sc.name)) { sc.name = str(`${base} – ${sc.floor}`, 40); toScene(sc.id, { type: 'sceneMeta', sceneId: sc.id, patch: { name: sc.name } }); }
+        const f = newScene(`${base} – ${floorName}`, sc.cols, sc.rows);
+        Object.assign(f, { group: sc.group, level, floor: floorName, showGrid: sc.showGrid, diag: sc.diag, vision: { ...(sc.vision || {}) } });
+        if (sc.fog) f.fog = { on: sc.fog.on, data: '' };
+        state.scenes[f.id] = f;
+        const last = Math.max(...floors.map((x) => state.order.indexOf(x.id)));
+        state.order.splice(last + 1, 0, f.id);
+        toDMs({ type: 'sceneAdded', scene: f, order: state.order });
+        refreshFloors(sc.group); save();
+        break;
+      }
+      case 'tokenFloor': { // take a token up or down to another floor of the same building
+        if (!sc || !tok) return;
+        if (!u.isDM && !(tok.owner && sameName(tok.owner, u.name))) return;
+        const to = state.scenes[msg.to];
+        if (!to || to === sc || !sc.group || to.group !== sc.group) return;
+        delete sc.tokens[tok.id];
+        toScene(sc.id, { type: 'removeToken', sceneId: sc.id, id: tok.id });
+        if (sc.combat && sc.combat.entries.some((e) => e.id === tok.id)) { sortCombat(sc); sendCombat(sc); }
+        tok.x = clamp(tok.x, 0, to.cols - tok.size); tok.y = clamp(tok.y, 0, to.rows - tok.size);
+        to.tokens[tok.id] = tok;
+        tokenChanged(to, tok, null);
+        refreshViews();
+        if (visionOn(sc)) scheduleVision(sc); if (visionOn(to)) scheduleVision(to);
         save();
         break;
       }
@@ -990,6 +1067,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         state.order = state.order.filter((id) => id !== sc.id);
         toDMs({ type: 'sceneRemoved', sceneId: sc.id, order: state.order });
         if (state.activeScene === sc.id) activate(state.order[0]);
+        else refreshViews();
+        if (sc.group) refreshFloors(sc.group);
         save();
         break;
       case 'sceneOrder':
@@ -1041,6 +1120,22 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         toDMs({ type: 'table', table: tableSettings() }); save();
         break;
       }
+      case 'encounterSave': { // the DM keeps encounters to use later
+        if (!u.isDM || !msg.encounter) return;
+        state.encounters = state.encounters || [];
+        const e = msg.encounter, monsters = Array.isArray(e.monsters) ? e.monsters.filter((m) => m && /^[a-z0-9-]{1,60}$/.test(m.id)).slice(0, 50).map((m) => ({ id: m.id, n: clamp(int(m.n, 1), 1, 50) })) : [];
+        if (!monsters.length) return;
+        const enc = { id: typeof e.id === 'string' && /^[a-z0-9]{4,16}$/.test(e.id) ? e.id : uid(), name: str(e.name, 60).trim() || 'Encounter', monsters, party: { size: clamp(int(e.party && e.party.size, 4), 1, 12), level: clamp(int(e.party && e.party.level, 1), 1, 20) } };
+        const i = state.encounters.findIndex((x) => x.id === enc.id);
+        if (i >= 0) state.encounters[i] = enc; else { if (state.encounters.length >= 200) state.encounters.shift(); state.encounters.push(enc); }
+        toDMs({ type: 'encounters', encounters: state.encounters }); save();
+        break;
+      }
+      case 'encounterDelete':
+        if (!u.isDM) return;
+        state.encounters = (state.encounters || []).filter((x) => x.id !== msg.id);
+        toDMs({ type: 'encounters', encounters: state.encounters }); save();
+        break;
       case 'resetPin': // the DM clears a player's PIN (they forgot it)
         if (!u.isDM) return;
         delete state.pins[String(msg.name || '').toLowerCase()];
@@ -1065,7 +1160,12 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
   function activate(id) {
     state.activeScene = id; sights.delete(id);
     if (visionOn(state.scenes[id])) scheduleVision(state.scenes[id]); // explored fog catches up with what the party can see
-    clients().forEach((c) => send(c, c.user.isDM ? { type: 'active', sceneId: id } : { type: 'sceneFull', scene: playerScene(state.scenes[id], c.user), active: true }));
+    clients().forEach((c) => {
+      if (c.user.isDM) return send(c, { type: 'active', sceneId: id });
+      c.user.view = viewOf(c.user);
+      const v = state.scenes[c.user.view]; syncFog(v);
+      send(c, { type: 'sceneFull', scene: playerScene(v, c.user), active: true });
+    });
   }
 
   return new Promise((resolve, reject) => {

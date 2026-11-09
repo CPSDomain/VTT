@@ -21,14 +21,11 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.1 | Lighting and vision (line of sight, lights, darkvision, doors, explore-to-reveal, DM preview), handouts; Windows only |
 | 1.2 | Chat and whispers with speech bubbles, the DM speaking as NPCs, D&D Beyond links on characters, player PINs |
 | 1.3 | MapTool import part 2: revealed fog, vision blocking as walls, lights, sight, Day/Night vision, drawings |
+| 1.4 | Encounter builder with the SRD monsters and 2024 difficulty, stat blocks with clickable rolls, buildings with floors and stairs |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
-
-### 1.4 — Encounters and levels 📋
-- **Encounter builder:** pick SRD monsters with their stat blocks, see the difficulty for the party's level, and drop the encounter on the map
-- **Multi-level maps:** floors of a building or dungeon linked by stairs, so tokens move between them
 
 ### 1.5 — Atmosphere 📋
 - **Music and ambience** the DM controls for everyone: tavern noise, rain, battle music
