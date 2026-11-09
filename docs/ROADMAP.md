@@ -22,14 +22,11 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.2 | Chat and whispers with speech bubbles, the DM speaking as NPCs, D&D Beyond links on characters, player PINs |
 | 1.3 | MapTool import part 2: revealed fog, vision blocking as walls, lights, sight, Day/Night vision, drawings |
 | 1.4 | Encounter builder with the SRD monsters and 2024 difficulty, stat blocks with clickable rolls, buildings with floors and stairs |
+| 1.5 | Atmosphere: music and ambience the DM plays for everyone (12 built in, plus your own files), each map's own sound, weather and time of day on the map |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
-
-### 1.5 — Atmosphere 📋
-- **Music and ambience** the DM controls for everyone: tavern noise, rain, battle music
-- **Weather and time of day:** rain, snow and fog overlays; dawn, dusk and night tinting
 
 ### Last — AI map generation 💬
 - Claude reads a free-text description and designs the map, on top of today's built-in description box. Needs internet and an Anthropic API key. **To discuss first:** how the DM would use it, what it would cost, and what it adds over the built-in generator.

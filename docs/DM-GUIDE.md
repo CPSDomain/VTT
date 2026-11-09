@@ -238,6 +238,26 @@ Everyone rolls in the right-hand panel: the die buttons, or type any roll such a
 
 Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bonuses from D&D Beyond once. Shift-click rolls with advantage, Alt-click with disadvantage. Natural 20s show green, natural 1s red.
 
+## Music and ambience
+
+Click **🔊** at the top right. Everything you play here plays on every player's screen too, at the same moment of the track.
+
+- **♫ Music:** click **▶** on a track to play it. Picking another fades across to it. **■** stops it.
+- **🌧 Ambience:** **▶** adds a layer (rain, campfire, a river…) under the music. You can have up to 5 at once.
+- **Playing for everyone** lists what's on, with a volume slider for each. **✕** fades one out, and **■ Stop all** fades out the lot.
+- **🎧** plays a sound on your screen only, so you can check it before the players hear it.
+- **＋ Add your own…** uploads sound files from your PC: MP3, OGG, WAV, M4A or FLAC, up to 100 MB each. They go in the list you're looking at (music or ambience); **→♫ / →〰** moves one across, **✎** renames it, **🗑** removes it. Long tracks stream, so whole albums are fine. A short loop made to repeat (like the built-in ones) loops without a gap.
+- **This map's sound:** set up what should play on a map, then **Save what's playing**. **▶ Play it** brings it back any time. Tick **Play it when I show this map to players** and it starts by itself when you click **Show to players**: the tavern music when the party walks in, cave drips in the dungeon.
+- **On my screen** sets your own volume (everything, music, ambience) without changing it for anyone else. Players have the same sliders.
+
+Players using a web browser need to click once on the page before it can play sound; they get a **Click to hear the table's sound** button. The Player app plays sound straight away.
+
+## Weather and time of day
+
+Click **🌦 Weather** in the bar above the map. Pick **Rain**, **Storm** (rain with lightning), **Snow**, **Fog** or **Embers** (a burning town, a volcano), and **Light**, **Medium** or **Heavy**. Pick **Dawn**, **Dusk** or **Night** to colour the map. At those times, torches, braziers, fires, lamps and tokens with a light glow warmly in the dark. **▶ Play matching sound** adds the ambience that goes with it, such as rain for rain or crickets at night.
+
+It's set per map and players see it straight away. It's only a look: for a real night, where characters see only what's lit, also set the light to **Dark** under **👁 Vision**. Weather is hidden while you're in Build mode, and players can turn the moving weather off on their own screen under **🔊**.
+
 ## Not in this version yet
 
-Music and ambience, and weather and time-of-day overlays, are still to come: see the [roadmap](ROADMAP.md).
+AI map generation (Claude designing a map from a description) is still to be discussed: see the [roadmap](ROADMAP.md).

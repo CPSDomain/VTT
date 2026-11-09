@@ -121,6 +121,14 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
 
+**Atmosphere**
+- Music and ambience the DM plays for everyone, in step on every screen: 4 music tracks and 8 ambiences built in (tavern, battle, dungeon, rain, thunderstorm, campfire, cave, ocean…), or upload your own
+- Layer up to 5 ambiences under the music, each with its own volume; every player sets their own volume too
+- Give a map its own sound, and it starts when you show the map
+- Weather on the map (rain, storm with lightning, snow, fog, embers) and dawn, dusk or night, with torches and fires glowing in the dark
+
+![Atmosphere: a stormy night at the inn, the DM's sound panel with music and ambience](docs/images/atmosphere.jpg)
+
 **Running the table**
 - Optional table passcode; players can protect their name with a PIN; remove or block a player
 - The apps tell you when a new version is out
@@ -164,3 +172,5 @@ The DM app makes a new secret key each time it starts and gives it only to its o
 Built-in token artwork is from [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). See [public/CREDITS.txt](public/CREDITS.txt). Map textures and props are drawn in code by Tabletop.
 
 The encounter builder's monsters and stat blocks include material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC, available at <https://dnd.wizards.com/resources/systems-reference-document>, licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/legalcode). The data was prepared by the [5e-database](https://github.com/5e-bits/5e-database) project (MIT). Encounter difficulty uses the XP budget per character from the D&D 2024 rules.
+
+The built-in music and ambiences were made for Tabletop (`build/make-audio.py`); the music is played on the FluidR3 GM soundfont by Frank Wen (MIT licence).

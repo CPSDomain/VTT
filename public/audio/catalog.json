@@ -1,0 +1,17 @@
+{
+  "sounds": [
+    { "id": "music-exploration", "name": "Exploration", "kind": "music", "url": "/audio/music-exploration.mp3", "tags": "travel road wilderness calm" },
+    { "id": "music-tavern", "name": "Tavern jig", "kind": "music", "url": "/audio/music-tavern.mp3", "tags": "inn town festival cheerful" },
+    { "id": "music-battle", "name": "Battle", "kind": "music", "url": "/audio/music-battle.mp3", "tags": "combat fight boss" },
+    { "id": "music-dungeon", "name": "Dungeon dread", "kind": "music", "url": "/audio/music-dungeon.mp3", "tags": "crypt horror tension" },
+    { "id": "rain", "name": "Rain", "kind": "ambience", "url": "/audio/rain.mp3", "tags": "weather" },
+    { "id": "thunderstorm", "name": "Thunderstorm", "kind": "ambience", "url": "/audio/thunderstorm.mp3", "tags": "weather storm" },
+    { "id": "wind", "name": "Wind", "kind": "ambience", "url": "/audio/wind.mp3", "tags": "weather moor mountain" },
+    { "id": "campfire", "name": "Campfire", "kind": "ambience", "url": "/audio/campfire.mp3", "tags": "camp fire hearth" },
+    { "id": "cave", "name": "Dripping cave", "kind": "ambience", "url": "/audio/cave.mp3", "tags": "dungeon underground" },
+    { "id": "ocean", "name": "Ocean shore", "kind": "ambience", "url": "/audio/ocean.mp3", "tags": "sea beach coast waves" },
+    { "id": "river", "name": "River", "kind": "ambience", "url": "/audio/river.mp3", "tags": "stream water forest" },
+    { "id": "night", "name": "Night (crickets)", "kind": "ambience", "url": "/audio/night.mp3", "tags": "camp forest evening" }
+  ],
+  "credit": "Built-in music and ambiences were made for Tabletop. The music is played on the FluidR3 GM soundfont by Frank Wen (MIT licence)."
+}

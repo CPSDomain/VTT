@@ -36,7 +36,7 @@ async function boot() {
     width: 1500, height: 920, minWidth: 1100, minHeight: 650,
     title: 'Tabletop DM', backgroundColor: '#121212', show: false,
     icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' }
   });
   win.once('ready-to-show', () => { win.maximize(); win.show(); setTimeout(() => checkForUpdates(win), 4000); });
   setTimeout(() => { if (win && !win.isDestroyed() && !win.isVisible()) { win.maximize(); win.show(); } }, 6000); // slow or odd graphics: show it anyway

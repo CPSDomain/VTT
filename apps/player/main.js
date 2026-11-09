@@ -14,7 +14,7 @@ function create() {
     width: 1400, height: 880, minWidth: 900, minHeight: 600,
     title: 'Tabletop', backgroundColor: '#121212', show: false,
     icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false }
+    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false, autoplayPolicy: 'no-user-gesture-required' }
   });
   win.once('ready-to-show', () => { win.show(); setTimeout(() => checkForUpdates(win), 4000); });
   setTimeout(() => { if (win && !win.isDestroyed() && !win.isVisible()) { win.show(); } }, 6000); // slow or odd graphics: show it anyway

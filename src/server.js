@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -21,12 +21,21 @@ const ICONS = new Set(Object.keys(TOKENS_JSON.icons));
 const CONDITIONS = new Set((TOKENS_JSON.conditions || []).map((c) => c.id));
 const HP_SHOW = ['numbers', 'bar', 'none'];
 const UPLOAD_URL = /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/;
+const AUDIO_URL = /^\/uploads\/[a-f0-9]{16}\.(mp3|ogg|wav|m4a|webm|flac)$/;
+const AUDIO_EXT = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/ogg': '.ogg', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/vnd.wave': '.wav',
+  'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/m4a': '.m4a', 'audio/aac': '.m4a', 'audio/webm': '.webm', 'audio/flac': '.flac', 'audio/x-flac': '.flac' };
+// built-in music and ambiences (public/audio); the DM can add their own
+const SOUNDS = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'audio', 'catalog.json'), 'utf8')).sounds;
+const WEATHER = ['none', 'rain', 'storm', 'snow', 'fog', 'embers'];
+const TIMES = ['day', 'dawn', 'dusk', 'night'];
+const MAX_AMB = 5;
 const MAX_SIDE = 200;
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8', '.txt': 'text/plain; charset=utf-8',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif',
-  '.svg': 'image/svg+xml', '.ico': 'image/x-icon'
+  '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.m4a': 'audio/mp4', '.webm': 'audio/webm', '.flac': 'audio/flac'
 };
 const IMAGE_EXT = { 'image/png': '.png', 'image/jpeg': '.jpg', 'image/webp': '.webp', 'image/gif': '.gif' };
 
@@ -64,10 +73,12 @@ function loadState(file) {
     s.passcode = typeof s.passcode === 'string' ? s.passcode : ''; s.blocked = Array.isArray(s.blocked) ? s.blocked : [];
     s.pins = s.pins && typeof s.pins === 'object' ? s.pins : {};
     s.encounters = Array.isArray(s.encounters) ? s.encounters : [];
+    s.audio = Array.isArray(s.audio) ? s.audio : [];
+    s.sound = s.sound && typeof s.sound === 'object' ? s.sound : { music: null, amb: [] };
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [] };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] } };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -215,7 +226,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         name: sc.name, cols: sc.cols, rows: sc.rows, showGrid: sc.showGrid !== false, diag: sc.diag || '5', bg: sc.bg,
         tiles: sc.tiles, props: Object.values(sc.props).map(strip), tokens: Object.values(sc.tokens).map(strip),
         labels: Object.values(sc.labels || {}).map(strip), walls: sc.walls || [], doors: sc.doors || [], lights: sc.lights || [],
-        fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }, vision: sc.vision || null
+        fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }, vision: sc.vision || null,
+        atmo: sc.atmo ? { ...sc.atmo, sound: builtinOnly(sc.atmo.sound) } : null // the DM's own sound files stay behind
       };
       const body = JSON.stringify({ app: 'tabletop', kind: 'map', version: VERSION, map, images });
       const file = (sc.name.replace(/[^\w\- ]+/g, '').trim() || 'map') + '.ttmap';
@@ -245,7 +257,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         const m = d.map, to = (u) => remap[u] || null;
         const sc = newScene(m.name, m.cols, m.rows);
         fillScene(sc, {
-          tiles: m.tiles, props: m.props, labels: m.labels, walls: m.walls, doors: m.doors, lights: m.lights, fog: m.fog,
+          tiles: m.tiles, props: m.props, labels: m.labels, walls: m.walls, doors: m.doors, lights: m.lights, fog: m.fog, atmo: m.atmo,
           bg: m.bg && to(m.bg.url) ? { url: to(m.bg.url) } : null,
           tokens: Array.isArray(m.tokens) ? m.tokens.map((t) => ({ ...t, img: t.img ? to(t.img) : null })) : []
         });
@@ -264,8 +276,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
     if (p === '/api/upload' && req.method === 'POST') {
       if (req.headers['x-dm-key'] !== dmKey) { res.writeHead(403); return res.end('DM only'); }
-      const ext = IMAGE_EXT[(req.headers['content-type'] || '').split(';')[0]];
-      if (!ext) { res.writeHead(415); return res.end('PNG, JPG, WebP or GIF only'); }
+      const type = (req.headers['content-type'] || '').split(';')[0].toLowerCase();
+      const ext = IMAGE_EXT[type] || AUDIO_EXT[type];
+      if (!ext) { res.writeHead(415); return res.end(type.startsWith('audio/') ? 'MP3, OGG, WAV, M4A, WebM or FLAC sound files only' : 'PNG, JPG, WebP or GIF only'); }
       const chunks = []; let size = 0, tooBig = false;
       req.on('data', (c) => { size += c.length; if (size > 100 * 1024 * 1024) { tooBig = true; req.destroy(); } else chunks.push(c); });
       req.on('end', () => {
@@ -278,7 +291,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           res.end(JSON.stringify({ url: '/uploads/' + name }));
         });
       });
-      req.on('close', () => { if (tooBig && !res.headersSent) { res.writeHead(413); res.end('Image too large (100 MB max)'); } });
+      req.on('close', () => { if (tooBig && !res.headersSent) { res.writeHead(413); res.end('File too large (100 MB max)'); } });
       return;
     }
 
@@ -286,13 +299,23 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     const rel = p.startsWith('/uploads/') ? p.slice('/uploads/'.length) : (p === '/' ? 'index.html' : p);
     const file = path.normalize(path.join(root, rel));
     if (!file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
-    fs.readFile(file, (err, data) => {
-      if (err) { res.writeHead(404); return res.end('Not found'); }
-      res.writeHead(200, {
+    fs.stat(file, (err, st) => {
+      if (err || !st.isFile()) { res.writeHead(404); return res.end('Not found'); }
+      const head = {
         'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
-        'Cache-Control': root === uploads ? 'public, max-age=31536000, immutable' : 'no-cache'
-      });
-      res.end(data);
+        'Cache-Control': root === uploads ? 'public, max-age=31536000, immutable' : 'no-cache', 'Accept-Ranges': 'bytes'
+      };
+      // part of a file (sound players ask for these to jump around in long tracks)
+      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+      if (m && (m[1] || m[2])) {
+        let a = m[1] ? Number(m[1]) : Math.max(0, st.size - Number(m[2])), b = m[1] && m[2] ? Math.min(Number(m[2]), st.size - 1) : st.size - 1;
+        if (a > b || a >= st.size) { res.writeHead(416, { 'Content-Range': `bytes */${st.size}` }); return res.end(); }
+        res.writeHead(206, { ...head, 'Content-Range': `bytes ${a}-${b}/${st.size}`, 'Content-Length': b - a + 1 });
+        return fs.createReadStream(file, { start: a, end: b }).pipe(res);
+      }
+      res.writeHead(200, { ...head, 'Content-Length': st.size });
+      if (req.method === 'HEAD') return res.end();
+      fs.createReadStream(file).pipe(res);
     });
   });
 
@@ -419,8 +442,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     if (sc.combat && sc.combat.active && sc.combat.entries.some((e) => e.id === tok.id) && (!before || tokVisible(sc, before, {}) !== tokVisible(sc, tok, {}) || before.x !== tok.x || before.y !== tok.y || before.hidden !== tok.hidden)) sendCombat(sc);
   }
   function viewFor(u) {
-    const base = { activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [] };
-    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [] }; }
+    const base = { activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
     u.view = viewOf(u);
     return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
   }
@@ -500,6 +523,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
     sc.doors = Array.isArray(m.doors) ? m.doors.slice(0, 1000).map(seg).filter(Boolean) : [];
     sc.lights = Array.isArray(m.lights) ? m.lights.slice(0, 500).filter((l) => Array.isArray(l) && l.length >= 3).map((l) => [clamp(num(l[0], 0), 0, sc.cols), clamp(num(l[1], 0), 0, sc.rows), clamp(num(l[2], 0), 0, 100), color(l[3], '#ffd27f')]) : [];
     if (m.vision && typeof m.vision === 'object') sc.vision = { on: !!m.vision.on, ambient: AMBIENT.includes(m.vision.ambient) ? m.vision.ambient : 'bright', shared: m.vision.shared !== false, explore: m.vision.explore !== false };
+    if (m.atmo && typeof m.atmo === 'object') sc.atmo = atmoFields(m.atmo); // a regenerated map keeps its weather and sound
     if (Array.isArray(m.labels)) for (const l of m.labels.slice(0, 300)) { const lb = labelFields(l, sc); if (lb) { lb.id = uid(); sc.labels[lb.id] = lb; } }
     // fog: { on, reveal: [[x0, y0, x1, y1], ...] } — e.g. a generated dungeon with only the entrance showing
     sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
@@ -566,6 +590,46 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
       else send(c, { type: 'handoutRemove', id: h.id });
     }
   }
+  // ---------- atmosphere: music and ambience (what's playing is the same for everyone), weather and time of day ----------
+  const soundById = (id) => SOUNDS.find((x) => x.id === id) || state.audio.find((x) => x.id === id) || null;
+  // { music: {id, vol} | null, amb: [{id, vol}] } → what to store, keeping the start time of anything already playing
+  // (everyone works out how far into a loop to be from its start time, so they all hear the same moment)
+  function cleanSound(m, old) {
+    old = old || { music: null, amb: [] };
+    const vol = (v, d) => Math.round(clamp(num(v, d), 0, 1) * 100) / 100, now = Date.now();
+    const music = m && m.music && soundById(m.music.id) ? { id: m.music.id, vol: vol(m.music.vol, 0.8), at: old.music && old.music.id === m.music.id ? old.music.at : now } : null;
+    const amb = [];
+    for (const a of m && Array.isArray(m.amb) ? m.amb : []) {
+      if (!a || !soundById(a.id) || amb.some((x) => x.id === a.id) || amb.length >= MAX_AMB) continue;
+      const o = (old.amb || []).find((x) => x.id === a.id);
+      amb.push({ id: a.id, vol: vol(a.vol, 0.7), at: o ? o.at : now });
+    }
+    return { music, amb };
+  }
+  const preset = (snd) => (snd && (snd.music || snd.amb.length) ? { music: snd.music ? { id: snd.music.id, vol: snd.music.vol } : null, amb: snd.amb.map((a) => ({ id: a.id, vol: a.vol })) } : null);
+  function builtinOnly(snd) {
+    if (!snd) return null;
+    const b = (x) => x && SOUNDS.some((y) => y.id === x.id);
+    return preset({ music: b(snd.music) ? snd.music : null, amb: (snd.amb || []).filter(b) });
+  }
+  const withInfo = (x) => { const d = soundById(x.id); return { ...x, name: d.name, url: d.url }; };
+  const soundOut = () => ({ music: state.sound.music && soundById(state.sound.music.id) ? withInfo(state.sound.music) : null, amb: (state.sound.amb || []).filter((a) => soundById(a.id)).map(withInfo) });
+  function setSound(m) {
+    state.sound = cleanSound(m, state.sound);
+    clients().forEach((c) => send(c, { type: 'sound', sound: soundOut(), now: Date.now() }));
+    save();
+  }
+  // a map's weather and time of day (only a look: lighting rules use the map's light setting), and its sound
+  function atmoFields(m, old) {
+    const a = { weather: 'none', level: 2, time: 'day', sound: null, auto: false, ...(old || {}) };
+    if (WEATHER.includes(m.weather)) a.weather = m.weather;
+    if (m.level != null) a.level = clamp(int(m.level, 2), 1, 3);
+    if (TIMES.includes(m.time)) a.time = m.time;
+    if ('sound' in m) a.sound = preset(cleanSound(m.sound));
+    if ('auto' in m) a.auto = !!m.auto;
+    return a;
+  }
+
   wss.on('connection', (ws, req) => {
     ws.addr = (req && req.socket && req.socket.remoteAddress) || '?';
     ws.user = { name: 'Guest', isDM: false, joined: false };
@@ -1003,6 +1067,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
           if ('explore' in msg.vision) v.explore = !!msg.vision.explore;
           patch.vision = v;
         }
+        if (msg.atmo && typeof msg.atmo === 'object') patch.atmo = atmoFields(msg.atmo, sc.atmo);
         if (msg.bg !== undefined) {
           patch.bg = msg.bg && typeof msg.bg.url === 'string' && /^(\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)|https?:\/\/.{3,500})$/.test(msg.bg.url)
             ? { url: msg.bg.url } : null;
@@ -1038,6 +1103,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         const f = newScene(`${base} – ${floorName}`, sc.cols, sc.rows);
         Object.assign(f, { group: sc.group, level, floor: floorName, showGrid: sc.showGrid, diag: sc.diag, vision: { ...(sc.vision || {}) } });
         if (sc.fog) f.fog = { on: sc.fog.on, data: '' };
+        if (sc.atmo) f.atmo = atmoFields({ time: sc.atmo.time }); // same time of day on every floor
         state.scenes[f.id] = f;
         const last = Math.max(...floors.map((x) => state.order.indexOf(x.id)));
         state.order.splice(last + 1, 0, f.id);
@@ -1136,6 +1202,34 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
         state.encounters = (state.encounters || []).filter((x) => x.id !== msg.id);
         toDMs({ type: 'encounters', encounters: state.encounters }); save();
         break;
+      // ----- sound (the DM plays it; everyone hears it) -----
+      case 'sound': // what's playing: { music: {id, vol} | null, amb: [{id, vol}] }
+        if (!u.isDM) return;
+        setSound(msg);
+        break;
+      case 'audioAdd': { // a sound file the DM uploaded
+        if (!u.isDM || typeof msg.url !== 'string' || !AUDIO_URL.test(msg.url)) return;
+        if (state.audio.length >= 300) return send(ws, { type: 'error', message: 'You have 300 sounds already. Delete some first.' });
+        if (!state.audio.some((a) => a.url === msg.url)) state.audio.push({ id: 'u' + uid(), name: str(msg.name, 60).trim() || 'My sound', kind: msg.kind === 'music' ? 'music' : 'ambience', url: msg.url });
+        toDMs({ type: 'audio', audio: state.audio }); save();
+        break;
+      }
+      case 'audioUpdate': {
+        const a = state.audio.find((x) => x.id === msg.id);
+        if (!u.isDM || !a) return;
+        if (msg.name != null) a.name = str(msg.name, 60).trim() || a.name;
+        if (msg.kind === 'music' || msg.kind === 'ambience') a.kind = msg.kind;
+        toDMs({ type: 'audio', audio: state.audio });
+        if ((state.sound.music && state.sound.music.id === a.id) || state.sound.amb.some((x) => x.id === a.id)) setSound(state.sound); else save();
+        break;
+      }
+      case 'audioRemove': {
+        if (!u.isDM) return;
+        state.audio = state.audio.filter((x) => x.id !== msg.id);
+        toDMs({ type: 'audio', audio: state.audio });
+        setSound(state.sound); // stops it if it was playing
+        break;
+      }
       case 'resetPin': // the DM clears a player's PIN (they forgot it)
         if (!u.isDM) return;
         delete state.pins[String(msg.name || '').toLowerCase()];
@@ -1159,6 +1253,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey } = {}) {
 
   function activate(id) {
     state.activeScene = id; sights.delete(id);
+    const atmo = state.scenes[id] && state.scenes[id].atmo;
+    if (atmo && atmo.auto && atmo.sound) setSound(atmo.sound); // this map's own sound
     if (visionOn(state.scenes[id])) scheduleVision(state.scenes[id]); // explored fog catches up with what the party can see
     clients().forEach((c) => {
       if (c.user.isDM) return send(c, { type: 'active', sceneId: id });

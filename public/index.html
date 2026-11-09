@@ -312,6 +312,44 @@
   .gentypes button { display:flex; flex-direction:column; gap:4px; text-align:left; white-space:normal; padding:12px; }
   .gentypes button span { color:var(--dim); font-size:11.5px; }
   .gentypes button.on { border-color:var(--accent); background:rgba(232,57,14,.12); }
+  /* sound and weather */
+  #soundBtn { padding:4px 9px; font-size:15px; background:transparent; border-color:transparent; }
+  #soundBtn:hover, #soundBtn.open { border-color:var(--line); background:var(--panel2); }
+  #soundBtn.playing::after { content:''; display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--ok); margin-left:4px; vertical-align:middle; }
+  #soundPop { position:fixed; top:52px; right:12px; width:360px; max-height:calc(100vh - 64px); overflow-y:auto; z-index:30; padding:12px; background:var(--panel); }
+  #soundPop .tphead { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  #soundPop .tphead button { padding:2px 8px; }
+  #soundPop .hpl { margin-top:12px; }
+  .snow { display:grid; grid-template-columns:18px 1fr 96px 26px; gap:6px; align-items:center; margin-top:5px; }
+  .snow .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .snow button { padding:1px 0; font-size:12px; }
+  .snow input[type=range], .vrow input[type=range] { width:100%; accent-color:var(--accent); padding:0; }
+  #sdTabs { margin-top:8px; }
+  #sdTabs button { flex:1; }
+  #sdList { max-height:240px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; margin-top:6px; }
+  .srow { display:flex; align-items:center; gap:6px; padding:4px 6px; border-bottom:1px solid #262626; }
+  .srow:last-child { border-bottom:0; }
+  .srow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .srow .nm small { color:var(--dim); margin-left:4px; }
+  .srow button { padding:2px 7px; font-size:12px; }
+  .srow button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .srow button.pv.on { background:#334155; border-color:#64748b; color:#fff; }
+  .vrow { display:grid; grid-template-columns:72px 1fr 34px; gap:8px; align-items:center; margin-top:6px; font-size:12px; color:var(--dim); }
+  .vrow b { font-weight:500; color:var(--text); text-align:right; }
+  canvas#wx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #soundBlocked { position:absolute; left:50%; bottom:58px; transform:translateX(-50%); z-index:6; padding:8px 16px; border-radius:20px; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,.45); }
+  #soundBlocked[hidden] { display:none; }
+  #wxPop { left:50%; top:56px; transform:translateX(-50%); width:400px; padding:12px; background:var(--panel); }
+  body.dm #wxPop[hidden] { display:none !important; }
+  #wxPop .tphead { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  #wxPop .tphead button { padding:2px 8px; }
+  .wxgrid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; margin-top:6px; }
+  .wxgrid button { display:flex; flex-direction:column; align-items:center; gap:2px; padding:6px 0 4px; font-size:11px; }
+  .wxgrid button span { font-size:18px; line-height:1.1; }
+  .wxgrid button.on, .wxseg button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .wxseg { display:flex; gap:4px; margin-top:6px; }
+  .wxseg button { flex:1; padding:5px 0; font-size:12px; }
+  #fogBar #wxBtn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
   ::-webkit-scrollbar { width:10px; } ::-webkit-scrollbar-thumb { background:#333; border-radius:5px; border:2px solid var(--panel); }
 </style>
 </head>
@@ -343,6 +381,31 @@
     <div id="tpPlayers"></div>
     <div id="tpPinSec"><div class="hpl" style="margin-top:12px">Names protected by a PIN</div><div id="tpPins"></div></div>
     <div id="tpBlockedSec"><div class="hpl" style="margin-top:12px">Blocked names</div><div id="tpBlocked"></div></div>
+  </div>
+  <button id="soundBtn" title="Sound: music and ambience">🔊</button>
+  <div id="soundPop" class="pop" hidden>
+    <div class="tphead"><b>Sound</b><button id="sdClose" title="Close">✕</button></div>
+    <div class="hpl" style="margin-top:0" id="sdNowHead">Playing for everyone</div>
+    <div id="sdNow"></div>
+    <div class="dm-only">
+      <div class="row"><button id="sdStopAll" class="danger" title="Fade everything out">■ Stop all</button></div>
+      <div id="sdTabs" class="seg"><button data-sdk="music" class="on">♫ Music</button><button data-sdk="ambience">🌧 Ambience</button></div>
+      <div class="row"><input id="sdSearch" placeholder="Search sounds" spellcheck="false"></div>
+      <div id="sdList"></div>
+      <div class="row"><button id="sdAdd" title="MP3, OGG, WAV, M4A or FLAC files from your PC">＋ Add your own…</button></div>
+      <input type="file" id="sdFiles" accept="audio/*,.mp3,.ogg,.wav,.m4a,.flac,.webm" multiple hidden>
+      <div class="hint">▶ plays it for everyone (fading across). 🎧 lets you listen on your own first. Ambiences layer: up to 5 at once.</div>
+      <div class="hpl">This map's sound <span id="sdMapName" style="color:var(--dim)"></span></div>
+      <div class="hint" id="sdMapInfo" style="margin-top:2px"></div>
+      <div class="row"><button id="sdSaveMap" title="Remember what's playing now as this map's sound">Save what's playing</button><button id="sdPlayMap" title="Play this map's sound now">▶ Play it</button><button id="sdClearMap" class="fixed danger" title="Forget this map's sound">✕</button></div>
+      <label class="check"><input type="checkbox" id="sdAuto"> Play it when I show this map to players</label>
+    </div>
+    <div class="hpl">On my screen</div>
+    <div class="vrow"><span>Everything</span><input type="range" id="vMaster" min="0" max="100"><b id="vMasterN"></b></div>
+    <div class="vrow"><span>Music</span><input type="range" id="vMusic" min="0" max="100"><b id="vMusicN"></b></div>
+    <div class="vrow"><span>Ambience</span><input type="range" id="vAmb" min="0" max="100"><b id="vAmbN"></b></div>
+    <label class="check"><input type="checkbox" id="vMute"> Mute</label>
+    <label class="check"><input type="checkbox" id="vWx"> Show moving weather (rain, snow…)</label>
   </div>
   <div id="me" title="Your name at this table: click to protect it with a PIN"></div>
   <div id="mePop" class="pop" hidden>
@@ -421,6 +484,8 @@
 
   <div id="board">
     <canvas id="c"></canvas>
+    <canvas id="wx"></canvas>
+    <button id="soundBlocked" hidden>🔊 Click to hear the table's sound</button>
     <div id="status">Connecting…</div>
     <div id="fogBar" class="dm-only">
       <label class="fogswitch" title="Fog of war for this map: players only see what you reveal"><input type="checkbox" id="fogOn"><span>Fog of war</span></label>
@@ -434,6 +499,16 @@
       <button id="fogCoverAll" class="fogbtn" title="Cover the whole map">Cover all</button>
       <span class="fogsep"></span>
       <button id="visionBtn" class="fogbtn" title="Lighting and vision: players see only what their characters can see">👁 Vision</button>
+      <button id="wxBtn" class="fogbtn" title="Weather and time of day on this map">🌦 Weather</button>
+    </div>
+    <div id="wxPop" class="pop dm-only" hidden>
+      <div class="tphead"><b>Weather and time of day</b><button id="wxClose" title="Close">✕</button></div>
+      <div class="wxgrid" id="wxKinds"><button data-wx="none"><span>☀️</span>Clear</button><button data-wx="rain"><span>🌧️</span>Rain</button><button data-wx="storm"><span>⛈️</span>Storm</button><button data-wx="snow"><span>❄️</span>Snow</button><button data-wx="fog"><span>🌫️</span>Fog</button><button data-wx="embers"><span>🔥</span>Embers</button></div>
+      <div class="wxseg" id="wxLevels"><button data-lv="1">Light</button><button data-lv="2">Medium</button><button data-lv="3">Heavy</button></div>
+      <div class="hpl" style="margin-top:10px">Time of day</div>
+      <div class="wxseg" id="wxTimes"><button data-tm="day">☀️ Day</button><button data-tm="dawn">🌅 Dawn</button><button data-tm="dusk">🌇 Dusk</button><button data-tm="night">🌙 Night</button></div>
+      <div class="row"><button id="wxSound" title="Add the matching ambience to what's playing">▶ Play matching sound</button></div>
+      <div class="hint">Players see this on this map. It's only a look: what characters can see still follows 👁 Vision (set the light to Dark for a real night).</div>
     </div>
     <div id="visionPop" class="pop dm-only" hidden>
       <div class="tphead"><b>Lighting and vision</b><button id="vClose" title="Close">✕</button></div>

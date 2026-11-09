@@ -2,6 +2,28 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.5.0] - 2026-11-09
+
+### Added
+- **Music and ambience** (**🔊** at the top right): the DM plays it and everyone's screen plays it, all at the same point in the loop. Changes fade smoothly.
+  - **Built in:** 4 music tracks (Exploration, Tavern jig, Battle, Dungeon dread) played on sampled instruments, and 8 ambiences (Rain, Thunderstorm, Wind, Campfire, Dripping cave, Ocean shore, River, Night crickets). All made for Tabletop, and each loops without a gap.
+  - **One music track plus up to 5 ambiences at once**, each with its own volume for everyone. **🎧** lets the DM listen to a sound on their own screen before playing it.
+  - **Your own sounds:** **＋ Add your own…** uploads MP3, OGG, WAV, M4A or FLAC files from your PC. Long tracks stream, so a full album is fine. You can rename them, move them between music and ambience, or remove them.
+  - **A map's own sound:** **Save what's playing** remembers it for the map, and with **Play it when I show this map to players**, it starts when you show the map.
+  - **Everyone sets their own volume:** everything, music and ambience separately, or mute.
+  - In a web browser, sound starts after the first click on the page. A **Click to hear the table's sound** button appears until then. The apps play sound straight away.
+- **Weather and time of day** (**🌦 Weather** in the bar above the map): rain, storm with lightning, snow, fog or embers, light, medium or heavy, over the map on everyone's screen.
+  - Dawn, dusk and night colour the map, and torches, fires, lamps and lit tokens throw warm pools of light.
+  - **Play matching sound** adds the ambience that goes with it.
+  - Players can turn the moving weather off on their own screen.
+  - It's a look only: what characters can see still follows **👁 Vision**.
+- Exported maps keep their weather, time of day and built-in sounds.
+
+### Changed
+- The server now streams files, so it can jump around in long sound tracks.
+
+The music is played on the FluidR3 GM soundfont by Frank Wen (MIT licence).
+
 ## [1.4.0] - 2026-11-09
 
 ### Added

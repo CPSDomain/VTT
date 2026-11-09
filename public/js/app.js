@@ -3,6 +3,8 @@ import { generate, SCHEMA, defaults } from './generate.js';
 import { interpret, EXAMPLES } from './prompt.js';
 import { readMapTool, layout as mapToolLayout, inArea as inMapToolArea } from './maptool.js';
 import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
+import { createSound } from './audio.js';
+import { createWeather, TINT, MATCH } from './weather.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -47,6 +49,7 @@ function onMessage(msg) {
       const st = msg.state;
       if (st.table) table = st.table;
       handouts = st.handouts || []; renderHandouts();
+      audioLib = st.audio || []; soundNow = st.sound || { music: null, amb: [] }; snd.apply(soundNow, st.now); renderSound();
       encounters = st.encounters || [];
       if (me.isDM) loadMonsters().then(() => renderEditor()).catch(() => {});
       setTimeout(renderChatTargets, 0);
@@ -74,6 +77,8 @@ function onMessage(msg) {
     case 'doors': if (s) { s.doors = msg.doors; } break;
     case 'doorFlash': pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.open ? 'Door opened' : 'Door closed', dm: false, t0: performance.now() }); break;
     case 'handouts': handouts = msg.handouts; renderHandouts(); break;
+    case 'sound': soundNow = msg.sound; snd.apply(msg.sound, msg.now); renderSound(); break;
+    case 'audio': audioLib = msg.audio; renderSound(); break;
     case 'encounters': encounters = msg.encounters; renderEncLoad(); break;
     case 'handout': {
       const i = handouts.findIndex((h) => h.id === msg.handout.id);
@@ -200,7 +205,7 @@ function renderTablePanel() {
     row.append(n, ub); bl.appendChild(row);
   }
 }
-$('players').onclick = () => { $('tablePop').hidden = !$('tablePop').hidden; renderTablePanel(); };
+$('players').onclick = () => { $('tablePop').hidden = !$('tablePop').hidden; $('soundPop').hidden = true; renderTablePanel(); renderSound(); };
 $('tpClose').onclick = () => { $('tablePop').hidden = true; };
 $('tpSave').onclick = () => { sendMsg({ type: 'setPasscode', passcode: $('tpCode').value }); toast($('tpCode').value.trim() ? 'Passcode set. Players already at the table stay connected.' : 'Passcode removed'); };
 $('tpCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('tpSave').click(); });
@@ -250,7 +255,7 @@ function sceneChanged(refit) {
   if (refit) { selTpl = null; tplDraft = null; ruler = null; if (labelEdit) closeLabelEditor(); }
   renderChatTargets();
   renderInit(); renderEditor();
-  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); renderVisionPop(); if (refit) clearMapSelection(); }
+  if (me.isDM) { trySet('tt-editing', editing); renderSceneBar(); fillMapSettings(); renderFogBar(); renderVisionPop(); renderWxPop(); renderSound(); if (refit) clearMapSelection(); }
   else $('playerScene').textContent = s.name;
   if (s.bg) loadImg(s.bg.url);
   if (refit) fitView();
@@ -423,6 +428,9 @@ function render() {
     ctx.stroke();
   }
   ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 2 / view.zoom; ctx.strokeRect(0, 0, W, Hh);
+  // time of day: dawn, dusk or night colours the map (lights drawn after still glow)
+  const tint = s.atmo && TINT[s.atmo.time];
+  if (tint) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, Hh); ctx.restore(); drawLightPools(s, s.atmo.time); }
 
   drawTokenLights(s);
   drawVision(s);
@@ -478,6 +486,7 @@ function render() {
 
   drawOverlays(s);
   drawToolPreview(s);
+  weather.update();
 }
 
 function drawSelection(s) {
@@ -741,6 +750,21 @@ function drawVision(s) {
   ctx.restore();
 }
 // light from tokens carrying it: a soft warm glow everyone sees
+// at dawn, dusk and night: torches, fires and lamps (and lit tokens) throw warm pools of light on the darkened map
+function drawLightPools(s, time) {
+  const k = time === 'night' ? 1 : 0.55, pools = [];
+  for (const p of Object.values(s.props)) { const L = VIS.PROP_LIGHT[p.kind]; if (L && !p.off) pools.push([p.x + 0.5, p.y + 0.5, L[0] / 5, L[1] / 5]); }
+  for (const l of s.lights || []) if (l[2] > 0) pools.push([l[0], l[1], l[2] * 0.5, l[2]]);
+  for (const t of Object.values(s.tokens)) if (t.light && t.light[1] > 0) pools.push([t.x + t.size / 2, t.y + t.size / 2, t.light[0] / 5, t.light[1] / 5]);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, s.cols * CELL, s.rows * CELL); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
+  for (const [x, y, bright, dim] of pools.slice(0, 400)) {
+    const cx = x * CELL, cy = y * CELL, r = Math.max(0.5, dim) * CELL;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(150,95,40,${0.55 * k})`); g.addColorStop(Math.min(0.95, (bright / dim) || 0.5), `rgba(110,68,28,${0.3 * k})`); g.addColorStop(1, 'rgba(90,55,20,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  ctx.restore();
+}
 function drawTokenLights(s) {
   for (const t of Object.values(s.tokens)) {
     if (!t.light || !(t.light[1] > 0)) continue;
@@ -764,7 +788,7 @@ function renderVisionPop() {
   sel.disabled = !v.on;
 }
 const setVision = (patch) => { const s = sc(); s.vision = { on: false, ambient: 'bright', shared: true, explore: true, ...(s.vision || {}), ...patch }; sendMsg({ type: 'sceneUpdate', sceneId: editing, vision: patch }); renderVisionPop(); draw(); };
-$('visionBtn').onclick = () => { $('visionPop').hidden = !$('visionPop').hidden; renderVisionPop(); };
+$('visionBtn').onclick = () => { $('visionPop').hidden = !$('visionPop').hidden; $('wxPop').hidden = true; renderVisionPop(); };
 $('vClose').onclick = () => { $('visionPop').hidden = true; };
 $('vOn').onchange = () => { setVision({ on: $('vOn').checked }); toast($('vOn').checked ? 'Vision on: players see only what their characters can see. Players see through tokens they own.' : 'Vision off: players see the whole map (apart from fog)', 5000); };
 $('vAmbient').onchange = () => setVision({ ambient: $('vAmbient').value });
@@ -1025,7 +1049,7 @@ function renderMePop() {
   $('mpState').textContent = pinSet ? 'Your name is protected by a PIN: nobody else can join as you. Type a new one to change it.' : 'Anyone who knows the table\'s address can join as you. Set a PIN so only you can.';
   $('mpRemove').style.display = pinSet ? '' : 'none';
 }
-$('me').onclick = () => { if (me.isDM) return; $('mePop').hidden = !$('mePop').hidden; renderMePop(); if (!$('mePop').hidden) setTimeout(() => $('mpPin').focus(), 0); };
+$('me').onclick = () => { if (me.isDM) return; $('mePop').hidden = !$('mePop').hidden; $('soundPop').hidden = true; renderSound(); renderMePop(); if (!$('mePop').hidden) setTimeout(() => $('mpPin').focus(), 0); };
 $('mpClose').onclick = () => { $('mePop').hidden = true; };
 $('mpSave').onclick = () => {
   const v = $('mpPin').value.trim();
@@ -2605,6 +2629,169 @@ $('macroForm').onsubmit = (e) => {
   $('mLabel').value = ''; $('mExpr').value = ''; $('mLabel').focus();
 };
 
+// ---------- sound: music and ambience ----------
+// The DM picks what plays; everyone's screen plays it (see audio.js). Each person sets their own volume.
+let audioLib = [], soundNow = { music: null, amb: [] }, builtinSounds = [], sdKind = 'music', sdRename = null, sdDelete = null;
+const prefs = { master: 1, music: 1, amb: 1, mute: false, wx: true };
+try { Object.assign(prefs, JSON.parse(tryGet('tt-sound') || '{}')); } catch { /* defaults */ }
+const snd = createSound({ onState: (st) => { $('soundBlocked').hidden = !st.blocked; $('soundBtn').classList.toggle('playing', st.playing); } });
+snd.setLevels(prefs);
+fetch('/audio/catalog.json').then((r) => r.json()).then((c) => { builtinSounds = c.sounds || []; renderSound(); }).catch(() => {});
+const allSounds = () => [...builtinSounds.map((x) => ({ ...x, builtin: true })), ...audioLib];
+const soundName = (id) => (allSounds().find((x) => x.id === id) || {}).name || 'Unknown sound';
+const savePrefs = () => { trySet('tt-sound', JSON.stringify(prefs)); snd.setLevels(prefs); renderSound(); };
+const cleanNow = (n) => ({ music: n.music ? { id: n.music.id, vol: n.music.vol } : null, amb: (n.amb || []).map((a) => ({ id: a.id, vol: a.vol })) });
+function sendSound(next) { sendMsg({ type: 'sound', ...cleanNow(next) }); }
+function toggleSound(item) {
+  const n = cleanNow(soundNow);
+  if (item.kind === 'music') n.music = n.music && n.music.id === item.id ? null : { id: item.id, vol: n.music ? n.music.vol : 0.7 };
+  else if (n.amb.some((a) => a.id === item.id)) n.amb = n.amb.filter((a) => a.id !== item.id);
+  else { if (n.amb.length >= 5) return toast('Five ambiences are playing already: stop one first'); n.amb.push({ id: item.id, vol: 0.7 }); }
+  sendSound(n);
+}
+let volTimer = 0;
+function setLayerVol(which, id, vol) { // while dragging, send a few times a second
+  const n = cleanNow(soundNow);
+  if (which === 'music' && n.music) n.music.vol = vol; else { const a = n.amb.find((x) => x.id === id); if (a) a.vol = vol; }
+  soundNow = { ...soundNow, music: soundNow.music && which === 'music' ? { ...soundNow.music, vol } : soundNow.music, amb: soundNow.amb.map((a) => (a.id === id && which === 'amb' ? { ...a, vol } : a)) };
+  clearTimeout(volTimer); volTimer = setTimeout(() => sendSound(n), 120);
+}
+const describeSound = (x) => (x && (x.music || (x.amb && x.amb.length)) ? [x.music ? '♫ ' + soundName(x.music.id) : null, ...(x.amb || []).map((a) => soundName(a.id))].filter(Boolean).join(' + ') : '');
+function renderSound() {
+  $('soundBtn').textContent = prefs.mute ? '🔇' : '🔊';
+  $('soundBtn').classList.toggle('playing', !!(soundNow.music || soundNow.amb.length));
+  $('soundBtn').classList.toggle('open', !$('soundPop').hidden);
+  for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
+  $('vMute').checked = !!prefs.mute; $('vWx').checked = prefs.wx !== false;
+  if ($('soundPop').hidden) return;
+  // playing now
+  const now = $('sdNow'); now.innerHTML = '';
+  const layer = (which, x) => {
+    const r = document.createElement('div'); r.className = 'snow';
+    const ic = document.createElement('span'); ic.textContent = which === 'music' ? '♫' : '〰'; ic.style.color = 'var(--accent2)';
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = x.name || soundName(x.id); nm.title = nm.textContent;
+    r.append(ic, nm);
+    if (me.isDM) {
+      const v = document.createElement('input'); v.type = 'range'; v.min = 0; v.max = 100; v.value = Math.round(x.vol * 100); v.title = 'Volume for everyone';
+      v.oninput = () => setLayerVol(which, x.id, v.value / 100);
+      const st = document.createElement('button'); st.textContent = '✕'; st.title = 'Stop (fades out)';
+      st.onclick = () => { const n = cleanNow(soundNow); if (which === 'music') n.music = null; else n.amb = n.amb.filter((a) => a.id !== x.id); sendSound(n); };
+      r.append(v, st);
+    } else r.style.gridTemplateColumns = '18px 1fr';
+    now.append(r);
+  };
+  if (soundNow.music) layer('music', soundNow.music);
+  soundNow.amb.forEach((a) => layer('amb', a));
+  if (!soundNow.music && !soundNow.amb.length) { const h = document.createElement('div'); h.className = 'hint'; h.style.marginTop = '2px'; h.textContent = me.isDM ? 'Nothing. Pick music or an ambience below.' : 'Nothing at the moment.'; now.append(h); }
+  if (!me.isDM) return;
+  $('sdStopAll').disabled = !(soundNow.music || soundNow.amb.length);
+  document.querySelectorAll('#sdTabs button').forEach((b) => b.classList.toggle('on', b.dataset.sdk === sdKind));
+  // the library
+  const q = $('sdSearch').value.trim().toLowerCase(), list = $('sdList'); list.innerHTML = '';
+  const items = allSounds().filter((x) => x.kind === sdKind && (!q || (x.name + ' ' + (x.tags || '')).toLowerCase().includes(q)));
+  for (const x of items) {
+    const r = document.createElement('div'); r.className = 'srow';
+    const on = sdKind === 'music' ? soundNow.music && soundNow.music.id === x.id : soundNow.amb.some((a) => a.id === x.id);
+    const play = document.createElement('button'); play.textContent = on ? '■' : '▶'; play.classList.toggle('on', !!on);
+    play.title = on ? 'Stop it for everyone' : sdKind === 'music' ? 'Play for everyone (fades from what\'s playing)' : 'Add this layer for everyone';
+    play.onclick = () => toggleSound(x);
+    const pv = document.createElement('button'); pv.className = 'pv'; pv.textContent = '🎧'; pv.title = 'Listen on your own screen only';
+    pv.classList.toggle('on', snd.previewing() === x.url);
+    pv.onclick = () => { snd.preview(snd.previewing() === x.url ? null : x.url); setTimeout(renderSound, 0); };
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.title = x.name;
+    if (sdRename === x.id) {
+      const inp = document.createElement('input'); inp.value = x.name; inp.maxLength = 60; inp.style.padding = '2px 6px';
+      const done = (save) => { sdRename = null; if (save && inp.value.trim() && inp.value.trim() !== x.name) sendMsg({ type: 'audioUpdate', id: x.id, name: inp.value.trim() }); renderSound(); };
+      inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') done(true); if (e.key === 'Escape') done(false); };
+      inp.onblur = () => done(true);
+      nm.append(inp); setTimeout(() => { inp.focus(); inp.select(); }, 0);
+    } else { nm.textContent = x.name; if (!x.builtin) { const sm = document.createElement('small'); sm.textContent = 'yours'; nm.append(sm); } }
+    r.append(play, pv, nm);
+    if (!x.builtin) {
+      const mv = document.createElement('button'); mv.textContent = sdKind === 'music' ? '→〰' : '→♫'; mv.title = sdKind === 'music' ? 'Move to ambiences' : 'Move to music';
+      mv.onclick = () => sendMsg({ type: 'audioUpdate', id: x.id, kind: sdKind === 'music' ? 'ambience' : 'music' });
+      const ed = document.createElement('button'); ed.textContent = '✎'; ed.title = 'Rename'; ed.onclick = () => { sdRename = x.id; renderSound(); };
+      const del = document.createElement('button'); del.className = 'danger';
+      del.textContent = sdDelete === x.id ? 'Delete?' : '🗑'; del.title = 'Remove it from your sounds';
+      del.onclick = () => { if (sdDelete !== x.id) { sdDelete = x.id; renderSound(); setTimeout(() => { if (sdDelete === x.id) { sdDelete = null; renderSound(); } }, 3000); return; } sdDelete = null; sendMsg({ type: 'audioRemove', id: x.id }); };
+      r.append(mv, ed, del);
+    }
+    list.append(r);
+  }
+  if (!items.length) { const h = document.createElement('div'); h.className = 'hint'; h.style.padding = '8px'; h.textContent = q ? 'No sounds match.' : 'None yet.'; list.append(h); }
+  // this map's sound
+  const s = sc(), a = (s && s.atmo) || {};
+  $('sdMapName').textContent = s ? '· ' + s.name : '';
+  $('sdMapInfo').textContent = a.sound ? describeSound(a.sound) : 'None saved. Start what should play here, then Save.';
+  $('sdSaveMap').disabled = !(soundNow.music || soundNow.amb.length);
+  $('sdPlayMap').disabled = $('sdClearMap').disabled = !a.sound;
+  $('sdAuto').checked = !!a.auto; $('sdAuto').disabled = !a.sound;
+}
+$('soundBtn').onclick = () => { $('soundPop').hidden = !$('soundPop').hidden; $('tablePop').hidden = $('mePop').hidden = true; if ($('soundPop').hidden) { snd.preview(null); sdRename = null; } renderSound(); };
+$('sdClose').onclick = () => { $('soundPop').hidden = true; snd.preview(null); renderSound(); };
+document.querySelectorAll('#sdTabs button').forEach((b) => b.onclick = () => { sdKind = b.dataset.sdk; renderSound(); });
+$('sdSearch').oninput = renderSound;
+$('sdSearch').onkeydown = (e) => e.stopPropagation();
+$('sdStopAll').onclick = () => sendSound({ music: null, amb: [] });
+$('sdAdd').onclick = () => $('sdFiles').click();
+const AUDIO_TYPES = { mp3: 'audio/mpeg', ogg: 'audio/ogg', wav: 'audio/wav', m4a: 'audio/mp4', flac: 'audio/flac', webm: 'audio/webm' };
+$('sdFiles').onchange = async () => {
+  const files = [...$('sdFiles').files]; $('sdFiles').value = '';
+  for (const f of files) {
+    const ext = (f.name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase(), type = AUDIO_TYPES[ext] || (f.type.startsWith('audio/') ? f.type : '');
+    if (!type) { toast(`${f.name}: not a sound file Tabletop can play`); continue; }
+    toast(`Adding ${f.name}…`, 20000);
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', headers: { 'Content-Type': type, 'X-DM-Key': dmKey }, body: f });
+      if (!res.ok) throw new Error(await res.text());
+      const { url } = await res.json();
+      sendMsg({ type: 'audioAdd', url, kind: sdKind, name: f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim().slice(0, 60) });
+      toast(`Added ${f.name} to ${sdKind === 'music' ? 'music' : 'ambiences'}`);
+    } catch (e) { toast(`${f.name}: ${e.message}`, 5000); }
+  }
+};
+const atmoOf = (s) => ({ weather: 'none', level: 2, time: 'day', sound: null, auto: false, ...((s && s.atmo) || {}) });
+function setAtmo(patch) { const s = sc(); if (!s) return; s.atmo = { ...atmoOf(s), ...patch }; updateScene({ atmo: patch }); renderWxPop(); renderSound(); draw(); }
+$('sdSaveMap').onclick = () => { setAtmo({ sound: cleanNow(soundNow) }); toast('Saved as this map\'s sound'); };
+$('sdPlayMap').onclick = () => { const a = atmoOf(sc()); if (a.sound) sendSound(a.sound); };
+$('sdClearMap').onclick = () => setAtmo({ sound: null, auto: false });
+$('sdAuto').onchange = () => setAtmo({ auto: $('sdAuto').checked });
+for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
+$('vMute').onchange = () => { prefs.mute = $('vMute').checked; savePrefs(); };
+$('vWx').onchange = () => { prefs.wx = $('vWx').checked; savePrefs(); draw(); };
+$('soundBlocked').onclick = () => snd.resume();
+// browsers keep sound off until the first click or key press on the page
+addEventListener('pointerdown', () => { if (snd.blocked()) snd.resume(); }, true);
+addEventListener('keydown', () => { if (snd.blocked()) snd.resume(); }, true);
+
+// ---------- weather and time of day ----------
+const weather = createWeather($('wx'), () => {
+  const s = sc(); if (!s || !s.atmo || !s.atmo.weather || s.atmo.weather === 'none' || prefs.wx === false || mode === 'build') return null;
+  return { weather: s.atmo.weather, level: s.atmo.level || 2, rect: { x: view.x, y: view.y, w: s.cols * CELL * view.zoom, h: s.rows * CELL * view.zoom } };
+});
+function renderWxPop() {
+  const a = atmoOf(sc());
+  $('wxBtn').classList.toggle('on', a.weather !== 'none' || a.time !== 'day');
+  if ($('wxPop').hidden) return;
+  document.querySelectorAll('#wxKinds button').forEach((b) => b.classList.toggle('on', b.dataset.wx === a.weather));
+  document.querySelectorAll('#wxLevels button').forEach((b) => { b.classList.toggle('on', +b.dataset.lv === a.level); b.disabled = a.weather === 'none'; });
+  document.querySelectorAll('#wxTimes button').forEach((b) => b.classList.toggle('on', b.dataset.tm === a.time));
+  const m = MATCH[a.weather] || MATCH[a.time];
+  $('wxSound').disabled = !m || soundNow.amb.some((x) => x.id === m);
+  $('wxSound').textContent = m ? `▶ Play matching sound: ${soundName(m)}` : '▶ Play matching sound';
+}
+$('wxBtn').onclick = () => { $('wxPop').hidden = !$('wxPop').hidden; $('visionPop').hidden = true; renderWxPop(); };
+$('wxClose').onclick = () => { $('wxPop').hidden = true; };
+document.querySelectorAll('#wxKinds button').forEach((b) => b.onclick = () => setAtmo({ weather: b.dataset.wx }));
+document.querySelectorAll('#wxLevels button').forEach((b) => b.onclick = () => setAtmo({ level: +b.dataset.lv }));
+document.querySelectorAll('#wxTimes button').forEach((b) => b.onclick = () => setAtmo({ time: b.dataset.tm }));
+$('wxSound').onclick = () => {
+  const a = atmoOf(sc()), m = MATCH[a.weather] || MATCH[a.time]; if (!m) return;
+  const n = cleanNow(soundNow); if (n.amb.some((x) => x.id === m)) return;
+  if (n.amb.length >= 5) return toast('Five ambiences are playing already: stop one first');
+  n.amb.push({ id: m, vol: 0.7 }); sendSound(n);
+};
+
 // ---------- start ----------
 function tryGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function trySet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
@@ -2618,7 +2805,7 @@ function start(name) {
 }
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
-window.tabletop = { view, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
+window.tabletop = { view, sound: snd, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
 const preset = params.get('name') || (dmKey ? 'DM' : '');
 if (preset) start(preset);
 else {

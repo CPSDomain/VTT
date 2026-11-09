@@ -50,6 +50,12 @@ Click **Playing as …** at the top right and set a PIN (4 to 8 digits). Then no
 
 When the DM turns vision on, you see only what your character can see: walls and closed doors block your view, and in a dark dungeon you see only what's lit. Click your token to set its **Light** (light a torch!) and **Darkvision** (if your character has it; it's on your D&D Beyond sheet). Open doors with the Door tool to see through them.
 
+## Sound
+
+The DM can play music and ambience (rain, a crackling fire, a tavern band) for the whole table. Click **🔊** at the top right to see what's playing and to set your own volume: everything, music and ambience separately, or **Mute**. If you joined in a web browser, click once on the page to let it play sound.
+
+When the DM sets the weather (rain, snow, fog…) you'll see it over the map. If the moving weather bothers you, untick **Show moving weather** under **🔊**.
+
 ## Handouts
 
 When the DM shows you a handout (a letter, a picture, a clue), it pops up on your screen. It stays under **Handouts** on the right; click it to read it again.
