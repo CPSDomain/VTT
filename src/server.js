@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.6.2';
+const VERSION = '1.7.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -28,6 +28,7 @@ const AUDIO_EXT = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/ogg': '.og
 const SOUNDS = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'audio', 'catalog.json'), 'utf8')).sounds;
 const WEATHER = ['none', 'rain', 'storm', 'snow', 'fog', 'embers'];
 const TIMES = ['day', 'dawn', 'dusk', 'night'];
+const WALL_STYLES = ['built', 'rock'];
 const MAX_AMB = 5;
 const MAX_SIDE = 200;
 const MIME = {
@@ -240,7 +241,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         tiles: sc.tiles, props: Object.values(sc.props).map(strip), tokens: Object.values(sc.tokens).map(strip),
         labels: Object.values(sc.labels || {}).map(strip), walls: sc.walls || [], doors: sc.doors || [], lights: sc.lights || [],
         fog: { on: fogOn(sc), data: sc.fog ? sc.fog.data : '' }, vision: sc.vision || null,
-        atmo: sc.atmo ? { ...sc.atmo, sound: builtinOnly(sc.atmo.sound) } : null // the DM's own sound files stay behind
+        atmo: sc.atmo ? { ...sc.atmo, sound: builtinOnly(sc.atmo.sound) } : null, // the DM's own sound files stay behind
+        wallStyle: sc.wallStyle || 'built'
       };
       const body = JSON.stringify({ app: 'tabletop', kind: 'map', version: VERSION, map, images });
       const file = (sc.name.replace(/[^\w\- ]+/g, '').trim() || 'map') + '.ttmap';
@@ -270,7 +272,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const m = d.map, to = (u) => remap[u] || null;
         const sc = newScene(m.name, m.cols, m.rows);
         fillScene(sc, {
-          tiles: m.tiles, props: m.props, labels: m.labels, walls: m.walls, doors: m.doors, lights: m.lights, fog: m.fog, atmo: m.atmo,
+          tiles: m.tiles, props: m.props, labels: m.labels, walls: m.walls, doors: m.doors, lights: m.lights, fog: m.fog, atmo: m.atmo, wallStyle: m.wallStyle,
           bg: m.bg && to(m.bg.url) ? { url: to(m.bg.url) } : null,
           tokens: Array.isArray(m.tokens) ? m.tokens.map((t) => ({ ...t, img: t.img ? to(t.img) : null })) : []
         });
@@ -539,6 +541,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     sc.lights = Array.isArray(m.lights) ? m.lights.slice(0, 500).filter((l) => Array.isArray(l) && l.length >= 3).map((l) => [clamp(num(l[0], 0), 0, sc.cols), clamp(num(l[1], 0), 0, sc.rows), clamp(num(l[2], 0), 0, 100), color(l[3], '#ffd27f')]) : [];
     if (m.vision && typeof m.vision === 'object') sc.vision = { on: !!m.vision.on, ambient: AMBIENT.includes(m.vision.ambient) ? m.vision.ambient : 'bright', shared: m.vision.shared !== false, explore: m.vision.explore !== false };
     if (m.atmo && typeof m.atmo === 'object') sc.atmo = atmoFields(m.atmo); // a regenerated map keeps its weather and sound
+    if (WALL_STYLES.includes(m.wallStyle)) sc.wallStyle = m.wallStyle; // how walls are drawn: built stone, or natural rock (caves)
     if (Array.isArray(m.labels)) for (const l of m.labels.slice(0, 300)) { const lb = labelFields(l, sc); if (lb) { lb.id = uid(); sc.labels[lb.id] = lb; } }
     // fog: { on, reveal: [[x0, y0, x1, y1], ...] } — e.g. a generated dungeon with only the entrance showing
     sc.fog = { on: !!(m.fog && m.fog.on), data: '' };
@@ -1073,6 +1076,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (msg.rows != null) patch.rows = clamp(int(msg.rows, sc.rows), 5, MAX_SIDE);
         if (msg.showGrid != null) patch.showGrid = !!msg.showGrid;
         if (msg.diag != null && DIAGONALS.includes(msg.diag)) patch.diag = msg.diag;
+        if (WALL_STYLES.includes(msg.wallStyle)) patch.wallStyle = msg.wallStyle;
         if (msg.floor != null && sc.group) patch.floor = str(msg.floor, 30).trim() || sc.floor;
         if (msg.vision && typeof msg.vision === 'object') {
           const v = { on: false, ambient: 'bright', shared: true, explore: true, ...(sc.vision || {}) };

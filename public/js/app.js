@@ -6,6 +6,7 @@ import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCo
 import { createSound } from './audio.js';
 import { createWeather, TINT, MATCH } from './weather.js';
 import { createLighting } from './lighting.js';
+import { buildChunk, drawTokenRing } from './art2.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -371,7 +372,7 @@ function renderSceneBar() {
 function fillMapSettings() {
   const s = sc();
   if (document.activeElement !== $('mapName')) $('mapName').value = s.name;
-  $('mapCols').value = s.cols; $('mapRows').value = s.rows; $('showGrid').checked = s.showGrid !== false; $('mapDiag').value = s.diag || '5';
+  $('mapCols').value = s.cols; $('mapRows').value = s.rows; $('showGrid').checked = s.showGrid !== false; $('mapDiag').value = s.diag || '5'; $('mapWalls').value = s.wallStyle === 'rock' ? 'rock' : 'built';
   const pv = $('bgPreview');
   if (s.bg) { pv.style.backgroundImage = `url("${s.bg.url}")`; pv.textContent = ''; }
   else { pv.style.backgroundImage = ''; pv.textContent = 'No image. Upload a battle map, or drag one onto the map.'; }
@@ -419,6 +420,114 @@ function tick() { animTimer = 0; if (!frame) frame = requestAnimationFrame(rende
 const lighting = createLighting({ CELL, VIS: window.TabletopVision });
 const fxMode = () => (prefs.fx === 'still' || prefs.fx === 'off' ? prefs.fx : 'full');
 // the parts of the map that don't move, for the current view: drawn again only after a change
+// ---------- the 1.7 map art, in blocks of 16×16 squares (see art2.js) ----------
+// Blocks on screen are built at the sharpness the zoom needs, a few at a time between frames; until one is ready,
+// that part shows the classic drawing. A block is built again only when something in it (or next to it) changes.
+const CH = 16, chunks = new Map();
+let chunkPx = 0, chunkWant = [], chunkTimer = 0;
+const chunkRes = () => { const want = view.zoom * devicePixelRatio * CELL; return want <= 20 ? 16 : want <= 40 ? 32 : want <= 64 ? 64 : 96; }; // 96 is sharp enough close up and builds about twice as fast as 128
+function chunkSigs(s, list) { // what's in each block and the two squares round it
+  const props = new Map();
+  for (const id in s.props) {
+    const p = s.props[id], h = (p.kind.length * 131 + p.kind.charCodeAt(0) * 7 + p.x * 977 + p.y * 31 + (p.rot || 0) * 3 + (p.open ? 1 : 0) + (p.off ? 2 : 0)) | 0;
+    for (let cy = Math.floor((p.y - 3) / CH); cy <= Math.floor((p.y + 3) / CH); cy++) for (let cx = Math.floor((p.x - 3) / CH); cx <= Math.floor((p.x + 3) / CH); cx++) { const k = cx + ',' + cy; props.set(k, ((props.get(k) || 0) * 31 + h) | 0); }
+  }
+  return list.map(([cx, cy]) => {
+    let h = 0;
+    for (let y = cy * CH - 2; y < cy * CH + CH + 2; y++) for (let x = cx * CH - 2; x < cx * CH + CH + 2; x++) { const t = s.tiles[x + ',' + y]; if (t) h = (h * 31 + t.charCodeAt(0) * 7 + t.length + x * 13 + y * 17) | 0; }
+    return [h, props.get(cx + ',' + cy) || 0, s.wallStyle || '', s.showGrid !== false ? 1 : 0, s.cols, s.rows].join(':');
+  });
+}
+// Blocks are built by background workers when the app can make them (it always can in Electron 33); otherwise here, a few at a time.
+const chunkJobs = new Map(); let chunkJobId = 0, chunkWorkers = null;
+function workers() {
+  if (chunkWorkers) return chunkWorkers;
+  chunkWorkers = [];
+  try {
+    if (typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined') return chunkWorkers;
+    const n = Math.max(1, Math.min(3, (navigator.hardwareConcurrency || 2) - 1));
+    for (let i = 0; i < n; i++) {
+      const w = new Worker('/js/chunkworker.js'); w.busy = false;
+      w.onmessage = (e) => chunkDone(w, e.data);
+      w.onerror = (e) => { console.warn('block worker failed, building here instead', e.message); for (const x of chunkWorkers) x.terminate(); chunkWorkers.length = 0; chunkJobs.clear(); chunkWant = []; draw(); };
+      chunkWorkers.push(w);
+    }
+  } catch (e) { console.warn('no block workers', e); chunkWorkers = []; }
+  return chunkWorkers;
+}
+function chunkDone(w, d) {
+  w.busy = false;
+  const job = chunkJobs.get(d.id); chunkJobs.delete(d.id);
+  if (job && d.bm) {
+    const old = chunks.get(job.key); if (old) { chunkPx -= old.c.width * old.c.height; chunks.delete(job.key); }
+    chunks.set(job.key, { sig: job.sig, c: d.bm, R: job.R, scene: job.scene, cx: job.cx, cy: job.cy }); chunkPx += d.bm.width * d.bm.height;
+    while (chunkPx > 32e6 && chunks.size > 1) { const [k, v] = chunks.entries().next().value; chunkPx -= v.c.width * v.c.height; if (v.c.close) v.c.close(); chunks.delete(k); }
+    chunkDraw();
+  } else if (d.err) { // something the worker can't do: build here from now on
+    console.warn('block worker failed, building here instead', d.err);
+    for (const x of chunkWorkers) x.terminate(); chunkWorkers.length = 0; chunkJobs.clear(); chunkWant = []; draw(); return;
+  }
+  scheduleChunks();
+}
+let chunkDrawT = 0; // show finished blocks a few times a second, not after every one
+function chunkDraw() { if (chunkDrawT) return; chunkDrawT = setTimeout(() => { chunkDrawT = 0; draw(); }, chunkJobs.size || chunkWant.length ? 120 : 0); }
+function chunkRegion(s, x0, y0, n) { // just the squares and props a block needs (and the two rows round it)
+  const tiles = {}, props = {};
+  for (let y = y0 - 2; y < y0 + n + 2; y++) for (let x = x0 - 2; x < x0 + n + 2; x++) { const t = s.tiles[x + ',' + y]; if (t) tiles[x + ',' + y] = t; }
+  for (const id in s.props) { const p = s.props[id]; if (p.x >= x0 - 3 && p.x <= x0 + n + 2 && p.y >= y0 - 3 && p.y <= y0 + n + 2) props[id] = { ...p }; }
+  return { cols: s.cols, rows: s.rows, tiles, props, showGrid: s.showGrid };
+}
+function scheduleChunks() {
+  const ws = workers();
+  if (!ws.length) { if (chunkWant.length && !chunkTimer) chunkTimer = setTimeout(buildChunks, 0); return; }
+  const s = sc(), busy = new Set([...chunkJobs.values()].map((j) => j.key));
+  for (const w of ws) {
+    if (w.busy) continue;
+    let job = null;
+    while (chunkWant.length) { const c = chunkWant.shift(); if (s && c.scene === s.id && !(chunks.has(c.key) && chunks.get(c.key).sig === c.sig) && !busy.has(c.key)) { job = c; break; } }
+    if (!job) break;
+    const id = ++chunkJobId; chunkJobs.set(id, job); busy.add(job.key); w.busy = true;
+    w.postMessage({ id, sc: chunkRegion(s, job.cx * CH, job.cy * CH, CH), R: job.R, opts: { blend: true, detail: true, height: true, cave: s.wallStyle === 'rock', props: true }, x0: job.cx * CH, y0: job.cy * CH, n: CH });
+  }
+}
+function buildChunks() { // a few blocks, then show them (only when there are no workers)
+  chunkTimer = 0;
+  const s = sc(), t0 = performance.now(); let built = 0;
+  while (chunkWant.length && performance.now() - t0 < 14) {
+    const w = chunkWant.shift(); if (!s || w.scene !== s.id || (chunks.has(w.key) && chunks.get(w.key).sig === w.sig)) continue;
+    const c = buildChunk(s, w.R, { blend: true, detail: true, height: true, cave: s.wallStyle === 'rock', props: true }, w.cx * CH, w.cy * CH, CH);
+    const old = chunks.get(w.key); if (old) { chunkPx -= old.c.width * old.c.height; chunks.delete(w.key); }
+    chunks.set(w.key, { sig: w.sig, c, R: w.R, scene: s.id, cx: w.cx, cy: w.cy }); chunkPx += c.width * c.height; built++;
+    while (chunkPx > 32e6 && chunks.size > 1) { const [k, v] = chunks.entries().next().value; chunkPx -= v.c.width * v.c.height; chunks.delete(k); }
+  }
+  if (built) draw();
+  if (chunkWant.length) chunkTimer = setTimeout(buildChunks, 0);
+}
+// which blocks are on screen, and which are ready (or have a copy at another sharpness to stand in)
+function planChunks(s, x0, y0, x1, y1) {
+  const R = chunkRes(), list = [];
+  for (let cy = Math.floor(y0 / CH); cy <= Math.floor(y1 / CH); cy++) for (let cx = Math.floor(x0 / CH); cx <= Math.floor(x1 / CH); cx++) list.push([cx, cy]);
+  const sigs = chunkSigs(s, list), want = [], ready = [], missing = [];
+  let all = true;
+  list.forEach(([cx, cy], i) => {
+    const key = s.id + ':' + cx + ',' + cy + ':' + R; let v = chunks.get(key);
+    if (v && v.sig !== sigs[i]) { // changed (painting, a door opening): the old block stays up until the new one is ready
+      want.push({ key, scene: s.id, cx, cy, R, sig: sigs[i], d: -1 }); ready.push([cx, cy, v]); return;
+    }
+    if (!v) { // a sharper or blurrier copy of the same block will do meanwhile
+      for (const r of [64, 96, 32, 16]) { const o = chunks.get(s.id + ':' + cx + ',' + cy + ':' + r); if (o && o.sig === sigs[i]) { v = o; break; } }
+      want.push({ key, scene: s.id, cx, cy, R, sig: sigs[i], d: Math.hypot(cx - (x0 + x1) / 2 / CH, cy - (y0 + y1) / 2 / CH) });
+      if (!v) { all = false; missing.push([cx, cy]); return; }
+    } else { chunks.delete(key); chunks.set(key, v); } // most recently used
+    ready.push([cx, cy, v]);
+  });
+  const building = new Set([...chunkJobs.values()].map((j) => j.key));
+  chunkWant = want.filter((w) => !building.has(w.key)).sort((a, b) => a.d - b.d);
+  if (chunkWant.length) scheduleChunks();
+  return { all, ready, missing, sig: sigs.join('|') };
+}
+function paintChunks(g, ready) { for (const [cx, cy, v] of ready) g.drawImage(v.c, cx * CH * CELL, cy * CH * CELL, v.c.width / v.R * CELL, v.c.height / v.R * CELL); }
+const classicLayer = document.createElement('canvas'); let classicKey = '';
 function renderStatic(s, x0, y0, x1, y1, lit) {
   if (staticLayer.width !== canvas.width || staticLayer.height !== canvas.height) { staticLayer.width = canvas.width; staticLayer.height = canvas.height; }
   const g = staticLayer.getContext('2d'), dpr = devicePixelRatio, W = s.cols * CELL, Hh = s.rows * CELL;
@@ -426,6 +535,27 @@ function renderStatic(s, x0, y0, x1, y1, lit) {
   g.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
   g.fillStyle = '#1a1a1a'; g.fillRect(0, 0, W, Hh);
   if (s.bg) { const img = loadImg(s.bg.url); if (img.complete && img.naturalWidth) g.drawImage(img, 0, 0, W, Hh); }
+  let painted = false; for (const k in s.tiles) { painted = true; break; } // a map with no squares painted (a picture map, a new map) has nothing for blocks to add
+  if (lit && painted) { // the 1.7 look: the blocks on screen, over the classic drawing while any aren't built yet
+    const plan = planChunks(s, x0, y0, x1, y1);
+    if (!plan.all) { // the classic drawing under blocks that aren't built yet; kept, so each finished block costs only a copy
+      const key = [s.id, plan.sig, view.x, view.y, view.zoom, staticLayer.width, staticLayer.height].join(':');
+      if (classicKey !== key) {
+        classicKey = key; classicLayer.width = staticLayer.width; classicLayer.height = staticLayer.height;
+        const cg = classicLayer.getContext('2d'); cg.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
+        classicStatic(cg, s, x0, y0, x1, y1, lit);
+      }
+      g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(classicLayer, 0, 0); g.restore();
+    }
+    paintChunks(g, plan.ready);
+    g.strokeStyle = '#3a3a3a'; g.lineWidth = 2 / view.zoom; g.strokeRect(0, 0, W, Hh);
+    return;
+  }
+  classicStatic(g, s, x0, y0, x1, y1, lit);
+}
+// the classic drawing (1.6 and before): square by square
+function classicStatic(g, s, x0, y0, x1, y1, lit) {
+  const W = s.cols * CELL, Hh = s.rows * CELL;
 
   // floors
   g.imageSmoothingEnabled = view.zoom < 1.3;
@@ -545,10 +675,15 @@ function render() {
       ctx.strokeStyle = 'rgba(220,38,38,.9)'; ctx.lineWidth = Math.max(3, rad * 0.12); const d = rad * 0.45;
       ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); ctx.stroke();
     }
-    ctx.lineWidth = t.id === selected ? 4 : 2.5;
-    ctx.strokeStyle = t.id === selected ? '#fff' : t.owner && t.owner !== '*' ? 'rgba(255,255,255,.75)' : 'rgba(0,0,0,.65)';
-    if (t.hidden) ctx.setLineDash([6, 4]);
-    ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    if (lit && !t.hidden) { // 1.7: a metal rim, gold for player characters
+      drawTokenRing(ctx, cx, cy, rad - 4, !!(t.owner && t.owner !== '*'));
+      if (t.id === selected) { ctx.lineWidth = 2.5; ctx.strokeStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, rad - 0.5, 0, Math.PI * 2); ctx.stroke(); }
+    } else {
+      ctx.lineWidth = t.id === selected ? 4 : 2.5;
+      ctx.strokeStyle = t.id === selected ? '#fff' : t.owner && t.owner !== '*' ? 'rgba(255,255,255,.75)' : 'rgba(0,0,0,.65)';
+      if (t.hidden) ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    }
     // health bar along the bottom of the token
     if (pct != null) {
       const bw = t.size * CELL * 0.72, bh = Math.max(4, t.size * 3), bx = cx - bw / 2, by = pos.y + t.size * CELL - 14 - bh;
@@ -567,8 +702,10 @@ function render() {
     ctx.globalAlpha = 1;
     if (view.zoom > 0.55) { // name tag under the token
       ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      const label = (t.hidden ? '◌ ' : '') + t.label, w = ctx.measureText(label).width + 8;
-      ctx.fillStyle = t.hidden ? 'rgba(60,40,0,.8)' : 'rgba(0,0,0,.7)'; ctx.fillRect(cx - w / 2, pos.y + t.size * CELL - 5, w, 13);
+      const label = (t.hidden ? '◌ ' : '') + t.label, w = ctx.measureText(label).width + (lit ? 10 : 8);
+      ctx.fillStyle = t.hidden ? 'rgba(60,40,0,.8)' : lit ? 'rgba(14,14,18,.82)' : 'rgba(0,0,0,.7)';
+      if (lit) { ctx.beginPath(); ctx.roundRect(cx - w / 2, pos.y + t.size * CELL - 5, w, 13, 6.5); ctx.fill(); if (!t.hidden) { ctx.lineWidth = 1; ctx.strokeStyle = t.owner && t.owner !== '*' ? 'rgba(217,176,76,.7)' : 'rgba(154,161,169,.6)'; ctx.stroke(); } }
+      else ctx.fillRect(cx - w / 2, pos.y + t.size * CELL - 5, w, 13);
       ctx.fillStyle = t.hidden ? '#fcd34d' : '#ddd'; ctx.fillText(label, cx, pos.y + t.size * CELL + 2);
     }
   }
@@ -2211,6 +2348,7 @@ $('mapName').onkeydown = (e) => { if (e.key === 'Enter') e.target.blur(); };
 $('applySize').onclick = () => updateScene({ cols: $('mapCols').value, rows: $('mapRows').value });
 $('showGrid').onchange = () => updateScene({ showGrid: $('showGrid').checked });
 $('mapDiag').onchange = () => updateScene({ diag: $('mapDiag').value });
+$('mapWalls').onchange = () => { sc().wallStyle = $('mapWalls').value; updateScene({ wallStyle: $('mapWalls').value }); draw(); };
 $('newMap').onclick = () => { pendingNewScene = true; sendMsg({ type: 'sceneCreate', name: `Map ${order.length + 1}`, cols: 30, rows: 20 }); };
 $('dupMap').onclick = () => { pendingNewScene = true; sendMsg({ type: 'sceneDuplicate', sceneId: editing }); };
 $('delMap').onclick = (e) => {
@@ -2623,7 +2761,7 @@ function runGenerator(replace) {
   out.tokens.forEach((t) => { counts[t.label] = (counts[t.label] || 0) + 1; });
   const numbered = out.tokens.map((t) => (counts[t.label] > 1 ? { ...t, label: `${t.label} ${(seen[t.label] = (seen[t.label] || 0) + 1)}` } : t));
   const tokens = fog ? numbered.map((t) => ({ ...t, hidden: false })) : numbered;
-  const content = { tiles: out.tiles, props: out.props, tokens, fog: { on: fog, reveal: out.start ? [out.start] : [] } };
+  const content = { tiles: out.tiles, props: out.props, tokens, fog: { on: fog, reveal: out.start ? [out.start] : [] }, wallStyle: out.wallStyle || 'built' };
   if (replace) {
     sendMsg({ type: 'sceneReplace', sceneId: editing, name: out.name, cols: out.cols, rows: out.rows, content });
     undoStack.length = redoStack.length = 0; updateUndo();
@@ -2897,7 +3035,7 @@ function start(name) {
 }
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
-window.tabletop = { view, sound: snd, renderTime: () => { mapRev++; const t0 = performance.now(); render(); return performance.now() - t0; }, frameTime: () => { const t0 = performance.now(); render(); return performance.now() - t0; }, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
+window.tabletop = { view, sound: snd, chunksPending: () => chunkWant.length + chunkJobs.size + (chunkTimer ? 1 : 0), chunkInfo: () => ({ built: chunks.size, workers: (chunkWorkers || []).length, fx: fxMode() }), renderTime: () => { mapRev++; const t0 = performance.now(); render(); return performance.now() - t0; }, frameTime: () => { const t0 = performance.now(); render(); return performance.now() - t0; }, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
 const preset = params.get('name') || (dmKey ? 'DM' : '');
 if (preset) start(preset);
 else {
