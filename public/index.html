@@ -424,7 +424,7 @@
     <div class="vrow"><span>Ambience</span><input type="range" id="vAmb" min="0" max="100"><b id="vAmbN"></b></div>
     <label class="check"><input type="checkbox" id="vMute"> Mute</label>
     <label class="check"><input type="checkbox" id="vWx"> Show moving weather (rain, snow…)</label>
-    <div class="vrow" style="grid-template-columns:72px 1fr"><span>Map look</span><select id="vFx" title="How the map is drawn on this screen"><option value="full">Lit and moving (fire, water, light)</option><option value="still">Lit, nothing moving (slower PCs)</option><option value="off">Classic (no lighting effects)</option></select></div>
+    <div class="vrow" style="grid-template-columns:72px 1fr"><span>Map look</span><select id="vFx" title="How the map is drawn on this screen"><option value="full">Lit and moving (fire, water, light)</option><option value="still">Lit, nothing moving (slower PCs)</option><option value="off">Classic (the look before 1.6)</option></select></div>
   </div>
   <div id="me" title="Your name at this table: click to protect it with a PIN"></div>
   <div id="mePop" class="pop" hidden>
@@ -479,6 +479,7 @@
       <input id="mapName" placeholder="Map name">
       <div class="row"><span class="fixed hint" style="margin:0">Size</span><input id="mapCols" type="number" min="5" max="200" title="Columns"><span class="fixed hint" style="margin:0">×</span><input id="mapRows" type="number" min="5" max="200" title="Rows"><button id="applySize" class="fixed">Set</button></div>
       <label class="check"><input type="checkbox" id="showGrid"> Show grid</label>
+      <div class="row"><span class="fixed hint" style="margin:0">Walls look</span><select id="mapWalls" title="How walls are drawn on this map (only the look: they block movement and sight the same)"><option value="built">Built stone (dungeons, buildings)</option><option value="rock">Natural rock (caves)</option></select></div>
       <div class="row"><span class="fixed hint" style="margin:0">Ruler diagonals</span><select id="mapDiag" title="How the ruler counts diagonal squares on this map"><option value="5">5 ft each (5e rule)</option><option value="5105">5 / 10 / 5 ft (variant)</option></select></div>
     </section>
 

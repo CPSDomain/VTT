@@ -20,7 +20,7 @@ const isDM = () => /DM/.test(app.getName());
 
 // 1.2.10 > 1.2.9; a version with a suffix (1.0.0-beta) counts as older than without
 function newer(a, b) {
-  const p = (v) => String(v).replace(/^v/, '').split('-');
+  const p = (v) => String(v).replace(/^v/i, '').split('-');
   const [an, as] = p(a), [bn, bs] = p(b);
   const x = an.split('.').map(Number), y = bn.split('.').map(Number);
   for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); }
@@ -43,13 +43,13 @@ async function latest() {
     const r = await net.fetch(`${API}/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Tabletop-app' } });
     if (!r.ok) throw new Error('GitHub answered ' + r.status);
     const rel = await r.json();
-    return { version: String(rel.tag_name || '').replace(/^v/, ''), url: rel.html_url || page, notes: String(rel.body || ''),
+    return { version: String(rel.tag_name || '').replace(/^v/i, ''), url: rel.html_url || page, notes: String(rel.body || ''),
       assets: (rel.assets || []).map((a) => ({ name: a.name, url: a.browser_download_url, size: a.size })) };
   } catch (e) {
     if (process.env.TABLETOP_UPDATE_API) throw e;
     // GitHub's API limits how often one address can ask; the releases page redirects to the latest tag too
     const r = await net.fetch(page, { redirect: 'manual', headers: { 'User-Agent': 'Tabletop-app' } });
-    const m = String(r.headers.get('location') || r.url || '').match(/\/releases\/tag\/v?([^/?#]+)/);
+    const m = String(r.headers.get('location') || r.url || '').match(/\/releases\/tag\/v?([^/?#]+)/i);
     if (!m) throw e;
     const v = decodeURIComponent(m[1]), name = `Tabletop-${isDM() ? 'DM' : 'Player'}-Setup-${v}.exe`;
     // the asset list wasn't available, but release files have predictable names

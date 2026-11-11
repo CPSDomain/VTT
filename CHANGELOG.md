@@ -2,6 +2,30 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.7.1] - 2026-11-11
+
+The new map art. (1.7.0 was never released: its tag was typed with a capital V, so nothing was built. 1.7.1 is that version, plus the fix below.)
+
+### Added
+- **New map art** (the look from the Map Art Lab):
+  - **Natural edges instead of squares:** grass, dirt, sand, snow, water, lava and pits spread into their neighbours with soft, uneven edges. Built floors (stone, wood, marble, cobbles, farmland) stay straight. The grid stays for movement and rules; only the drawing changes, on every map you already have.
+  - **Detailed ground:** new seamless stone flags, cobbles, marble, planks, grass, dirt and more, with scattered detail (grass tufts, flowers, pebbles, cracks, moss). Water gets darker towards its banks with a little foam where it meets land.
+  - **Walls with height:** a cast shadow on the floor and a visible front face on walls that face into a room.
+  - **Props with shading** and a soft contact shadow.
+  - **Rounded rock walls for caves:** generated natural caves use them by themselves; any map can switch under **Map settings → Walls look** (built or natural rock).
+  - **Tokens:** gold rims for players' characters, iron for monsters and NPCs, name tags as small labels.
+- The map is drawn in blocks in the background, so panning and animation stay smooth on big maps; until a block is ready, that part shows the classic drawing for a moment.
+
+### Changed
+- **🔊 → Map look → Classic** still gives the square-by-square look from before 1.6, for slow PCs. Picture maps (imported images) look as before.
+
+### Fixed
+- **Releases:** a version tag starting with a capital `V` (`V1.7.1`) now builds and publishes the release too, still as `v1.7.1`. The apps' update check accepts either.
+
+## [1.7.0] - 2026-11-11
+
+Not released (see 1.7.1).
+
 ## [1.6.2] - 2026-11-09
 
 ### Fixed

@@ -36,7 +36,7 @@ git push && git push --tags
 
 Then watch it under the repository's **Actions** tab (about 10 minutes). When it's green, the Release is on the Releases page as the latest version: the installers and zips for the DM and Player apps.
 
-- The tag must match `package.json` (`v1.1.0` for `1.1.0`), or the workflow stops and says so.
+- The tag must match `package.json` (`v1.1.0` for `1.1.0`), or the workflow stops and says so. A capital `V1.1.0` works too: the release is still published as `v1.1.0`, on the same commit.
 - **Actions → Release → Run workflow** builds everything without publishing, to check a build works. The files are under that run's **Artifacts**.
 - The first time, check **Settings → Actions → General → Workflow permissions** is set to **Read and write**, so the workflow may create releases.
 
