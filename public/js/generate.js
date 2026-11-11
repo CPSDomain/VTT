@@ -676,7 +676,7 @@ function caves(S, M, lib) {
   const nTraps = S.traps === 'none' ? 0 : S.traps === 'many' ? 8 : 3;
   for (let i = 0; i < nTraps; i++) put('trap', ...M.pick(cells));
   const name = M.pick(['The Dripping', 'The Echoing', 'The Black', 'Wyrm', 'Bat', 'The Glittering']) + ' ' + M.pick(['Caves', 'Caverns', 'Grotto', 'Hollows']);
-  return { wallStyle: 'rock', name, summary: `Natural caves · ${foes ? M.tokens.length + ' creatures' : 'no monsters'}${nTraps ? ` · ${nTraps} traps` : ''}${S.boss ? ' · lair at the far end' : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [entry[0] - 5, entry[1] - 5, entry[0] + 5, entry[1] + 5] };
+  return { name, summary: `Natural caves · ${foes ? M.tokens.length + ' creatures' : 'no monsters'}${nTraps ? ` · ${nTraps} traps` : ''}${S.boss ? ' · lair at the far end' : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [entry[0] - 5, entry[1] - 5, entry[0] + 5, entry[1] + 5] };
 }
 
 // =========================================================================================

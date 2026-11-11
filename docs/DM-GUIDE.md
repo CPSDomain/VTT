@@ -251,13 +251,7 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## The look of the map
 
-Since 1.7, maps are painted rather than built from hard squares. Grass, dirt, sand, snow, water, lava and pits blend into their neighbours with natural, uneven edges; built floors (stone, wood, marble, cobbles) stay straight. Water darkens towards its banks, walls show their height with a shadow and a front face, and props have shading and a shadow. The grid stays exactly as before for movement, the ruler and spells: only the drawing changed, so every map you already have gets the new look.
-
-- **Walls look** (under **Map settings** in Build mode): **Built** walls of cut stone, or **Natural rock** with rounded edges, for caves. Generated natural caves get natural rock by themselves.
-- **Big maps** are drawn in blocks in the background. When you jump to a new part of a big map, it can show the plain square drawing for a moment until the new art is ready. After you paint, the old drawing stays up for a moment until the changed part is redrawn.
-- **Picture maps** (imported images) look exactly as before.
-
-On top of that, maps are drawn with light and darkness. Torches, braziers, campfires, fireplaces, candles, lamp posts, glowing crystals, lights on tokens and the lights that come with imported maps all give flickering light that fades with distance, using the same ranges as the rules (a torch is bright to 20 ft, dim to 40 ft). Walls, closed doors and imported walls block the light; pillars, statues, trees and tents cast soft shadows. Flames move and throw sparks, braziers and campfires smoke, water ripples, lava glows and lights the room around it, dust floats in the torchlight, and fireflies come out at dusk and night. Tokens cast a shadow away from the nearest light and are shaded by the light they stand in.
+Maps are drawn with light and darkness. Torches, braziers, campfires, fireplaces, candles, lamp posts, glowing crystals, lights on tokens and the lights that come with imported maps all give flickering light that fades with distance, using the same ranges as the rules (a torch is bright to 20 ft, dim to 40 ft). Walls, closed doors and imported walls block the light; pillars, statues, trees and tents cast soft shadows. Flames move and throw sparks, braziers and campfires smoke, water ripples, lava glows and lights the room around it, dust floats in the torchlight, and fireflies come out at dusk and night. Tokens cast a shadow away from the nearest light and are shaded by the light they stand in.
 
 How dark the map is comes from two settings: **Light on this map** under **👁 Vision** (bright, dim or dark) and the time of day under **🌦 Weather** (dawn, dusk or night). A bright map in daylight looks as it always has, with the fires alive.
 

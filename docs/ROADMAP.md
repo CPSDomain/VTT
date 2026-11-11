@@ -24,24 +24,13 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.4 | Encounter builder with the SRD monsters and 2024 difficulty, stat blocks with clickable rolls, buildings with floors and stairs |
 | 1.5 | Atmosphere: music and ambience the DM plays for everyone (12 built in, plus your own files), each map's own sound, weather and time of day on the map |
 | 1.6 | New look: light and darkness with flickering fire and soft shadows, living fire, water and lava; playing over the internet with automatic port opening (UPnP) and a port of your choice; one-click updates |
-| 1.7 | New map art: natural edges between kinds of ground, detailed textures, walls with height, shaded props, rounded rock walls for caves, token rims |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
 
-### Later — more map art 📋
-Left over from the 1.7 plan:
-- **Your own asset packs (optional):** point Tabletop at a folder of PNG tiles and props you own (Forgotten Adventures, Tom Cartos and the like) and use them in the build palettes. They stay on your PC; Tabletop can't ship them.
-- **Portrait-style tokens** from uploaded art.
-
-### 1.8 — A bigger map generator 💬
-- More kinds of places, more control over the result, and maps that come ready to play: built in, no internet or API key.
-- Ideas to choose from: ships, castles, sewer networks, caverns with underground lakes, graveyards, mines with cart tracks, city blocks; buildings and dungeons with several floors (stairs between them); settings for room count and size, twisty corridors, doors, secret doors, traps and clutter; monsters for the party's level from the SRD, treasure, room names and DM notes; lighting, time of day, weather and sound set to fit.
-- **To settle first:** which of these the group wants most.
-
-### Parked — AI map generation
-- Claude designing a map from a free-text description (needs internet and an Anthropic API key). Parked in favour of the bigger built-in generator; can come back later.
+### Last — AI map generation 💬
+- Claude reads a free-text description and designs the map, on top of today's built-in description box. Needs internet and an Anthropic API key. **To discuss first:** how the DM would use it, what it would cost, and what it adds over the built-in generator.
 
 ## Not planned
 

@@ -122,14 +122,9 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 ![Table tools: a ruler, spell templates, a room label and a DM note](docs/images/table-tools.jpg)
 
 **The look of the map**
-- Painted-looking maps: grass, dirt, sand and water blend into each other with natural, uneven edges instead of hard squares; detailed stone, cobbles, wood and marble; scattered grass, flowers, pebbles and cracks; walls with height and shadow; props with shading and shadows. The grid stays for movement and rules
-- Caves with rounded natural rock walls (generated caves get them by themselves; any map can switch under **Walls look**)
-- Tokens with gold (players) or iron (monsters and NPCs) rims
 - Light and darkness: torches, braziers, campfires, lamps and lit tokens throw flickering light, with soft shadows from walls, pillars and trees; dark dungeons and night-time maps are really dark around the light
 - Living fire with sparks and smoke, water that ripples, lava that glows and lights the room, dust in the torchlight, fireflies at night
 - Purely for looks: what characters can see still follows the vision rules. Slower PCs can keep the light without the movement, or use the classic look
-
-![The 1.7 map art: a village, a natural cave with rounded rock walls, a mine](docs/images/map-art.jpg)
 
 ![The new look: a torch-lit crypt with shadows from the pillars, glowing lava and rippling water](docs/images/lighting.jpg)
 

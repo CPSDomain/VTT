@@ -1,6 +1,6 @@
 // Procedural map art: terrain textures and props, drawn in code (no image assets).
 export const CELL = 50;
-const catalog = await (await fetch(new URL('../catalog.json', import.meta.url))).json();
+const catalog = await (await fetch('catalog.json')).json();
 export const TERRAINS = catalog.terrains;
 export const PROPS = catalog.props;
 export const PROP_CATS = catalog.propCats;
@@ -134,7 +134,7 @@ export function texture(id, x, y) {
     cache[id] = [];
     const n = TERRAINS.findIndex((t) => t.id === id) + 1;
     for (let v = 0; v < VARIANTS; v++) {
-      const c = typeof document === 'undefined' ? new OffscreenCanvas(T, T) : document.createElement('canvas'); c.width = c.height = T; // OffscreenCanvas in the block worker
+      const c = document.createElement('canvas'); c.width = c.height = T;
       (painters[id] || painters.dirt)(c.getContext('2d'), rng(1000 * n + v * 17 + 3));
       cache[id].push(c);
     }
