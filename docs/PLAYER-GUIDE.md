@@ -36,6 +36,8 @@ You get your portrait, hit points, AC, speed, initiative and darkvision, and a b
 
 - **📍 Put my token on the map** places your token in the middle of your view. Click it again on another map to bring your character there, or after an update to refresh your token.
 - **Spells:** your slots are pips (click to tick one off or back). Click a spell to open it: **Cast** spends a slot (pick a higher one to upcast), **As a ritual** spends none, and the buttons roll its attack, damage or healing. **◎ Area** gets its template ready to drag onto the map. **☾ Short rest** and **⛺ Long rest** bring slots (and on a long rest, hit points) back.
+- **Healing, damage and protection go straight onto the map:** **Cast** a spell like Cure Wounds, Healing Word, Fireball or False Life, then click the tokens it's for (they get a dashed ring). **Me** adds your own token; **In my area** adds every token inside the area you placed. Click **Apply**: the slot is spent, the dice roll for everyone, and hit points change at once. Attack spells roll against each target's AC, save spells make each target save (half damage where the spell says so). `Esc` or **Cancel** stops without spending anything.
+- **Class features** such as Lay on Hands, Second Wind, Channel Divinity or Bardic Inspiration sit under **Class features**: click a pip to use one. **💛 Heal…** for Lay on Hands lets you pick who and how many hit points from your pool.
 - **Coins and inventory** show your money, what you carry (and in which bag) and your spells by level.
 - **↻ Update from D&D Beyond** after you level up, spend gold or change gear.
 - Hit points you lose at the table stay at the table: they don't go back to D&D Beyond.

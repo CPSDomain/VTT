@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 const ddb = require('./ddb');
 
-const VERSION = '1.12.0';
+const VERSION = '1.13.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -466,6 +466,56 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   }
   const skinOf = (name) => state.diceSkins[String(name).toLowerCase()] || null;
   const charOf = (name) => state.characters[String(name).toLowerCase()] || null;
+
+  // ---------- 1.13: spells and class features that land on tokens ----------
+  let SRD = null;
+  const srdOf = (t) => { if (!t.srd) return null; if (!SRD) try { SRD = new Map(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'public', 'monsters.json'), 'utf8')).monsters.map((m) => [m.id, m])); } catch { SRD = new Map(); } return SRD.get(t.srd) || null; };
+  const ABL = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  const charForToken = (t) => (t.owner && t.ddb ? Object.values(state.characters).find((c) => c.link === t.ddb) : null);
+  function saveBonus(t, abl) {
+    const ch = charForToken(t); if (ch) { const sv = (ch.saves || []).find((x) => x.name === abl); return sv ? sv.bonus : 0; }
+    const m = srdOf(t); if (!m) return 0;
+    const hit = new RegExp('\\b' + abl + ' ([+-]\\d+)', 'i').exec(m.saves || ''); if (hit) return +hit[1];
+    return Math.floor(((m.abl || [])[ABL.indexOf(abl)] - 10) / 2) || 0;
+  }
+  const acOf = (t) => t.ac || (charForToken(t) || {}).ac || (srdOf(t) || {}).ac || 10;
+  // how a monster takes this kind of damage (spells are magical, so "nonmagical" clauses don't count)
+  function takes(t, type) {
+    const m = srdOf(t); if (!m || !type) return 1;
+    const has = (list) => String(list || '').split(';').some((part) => !/nonmagical/i.test(part) && new RegExp('\\b' + type + '\\b', 'i').test(part));
+    return has(m.immune) ? 0 : has(m.resist) ? 0.5 : has(m.vuln) ? 2 : 1;
+  }
+  const doubleDice = (e) => e.replace(/(\d*)d(\d+)/g, (_, n, d) => (2 * (+n || 1)) + 'd' + d);
+  function hpTo(sc, tok, amount, temp) { // amount < 0 damage (temp soaks first), > 0 healing; temp: temporary hit points
+    const before = { ...tok }; let hp = tok.hp ?? tok.maxHp ?? 0, th = tok.tempHp || 0;
+    if (temp) th = Math.max(th, temp);
+    else if (amount < 0) { const soak = Math.min(th, -amount); th -= soak; hp = Math.max(0, hp - (-amount - soak)); }
+    else if (amount > 0) { hp = tok.maxHp ? Math.min(tok.maxHp, hp + amount) : hp + amount; if (hp > 0) tok.conditions = (tok.conditions || []).filter((c) => c !== 'unconscious'); }
+    tok.hp = hp; tok.tempHp = th;
+    if (hp === 0 && amount < 0 && tok.owner && !(tok.conditions || []).includes('unconscious')) tok.conditions = [...(tok.conditions || []), 'unconscious'];
+    tokenChanged(sc, tok, before);
+  }
+  const diceAt = (base, per, extra) => {
+    if (!base) return ''; if (!per || extra <= 0) return base;
+    const m = /^(\d+)d(\d+)(.*)$/.exec(base), q = /^(\d+)d(\d+)$/.exec(per);
+    if (m && q && m[2] === q[2]) return `${+m[1] + +q[1] * extra}d${m[2]}${m[3]}`;
+    return base + Array(extra).fill('+' + per).join('');
+  };
+  const ORD = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
+  const sgnS = (n) => (n >= 0 ? '+' + n : String(n));
+  // spend a slot (or a use) for a spell; returns the level it was cast at, or an error message
+  function spendSpell(ch, sp, msg) {
+    if (sp.level > 0 && sp.usesSlot && !msg.free) {
+      const list = msg.pact ? ch.pact : ch.slots, sl = (list || []).find((x) => x.level === int(msg.slot, sp.level) && x.level >= sp.level);
+      if (!sl || sl.used >= sl.max) return { error: `No ${msg.pact ? 'pact' : 'level ' + int(msg.slot, sp.level)} slots left` };
+      sl.used++; return { at: sl.level };
+    }
+    if (sp.uses && !msg.free) {
+      const n = ch.spellUses[sp.name] || 0; if (n >= sp.uses) return { error: `${sp.name}: no uses left until you rest` };
+      ch.spellUses[sp.name] = n + 1;
+    }
+    return { at: sp.level };
+  }
   function viewFor(u) {
     const base = { diceSkin: skinOf(u.name), character: u.isDM ? null : charOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
     if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, characters: state.characters, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
@@ -492,6 +542,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (old && old.id === ch.id) {
       for (const k of ['slots', 'pact']) for (const sl of ch[k] || []) { const o = (old[k] || []).find((x) => x.level === sl.level); if (o) sl.used = Math.min(sl.max, o.used || 0); }
       ch.spellUses = old.spellUses || {};
+      for (const r of ch.resources || []) { const o = (old.resources || []).find((x) => x.name === r.name); if (o) r.used = Math.min(r.max, o.used || 0); }
     } else ch.spellUses = {};
     const perception = ch.skills.find((s) => s.name === 'Perception');
     ch.pp = 10 + (perception ? perception.bonus : 0);
@@ -1294,15 +1345,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       case 'charCast': {
         if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
         const sp = (ch.spells || []).find((x) => x.name === msg.name); if (!sp) return;
-        let at = sp.level;
-        if (sp.level > 0 && sp.usesSlot && !msg.free) {
-          const list = msg.pact ? ch.pact : ch.slots, sl = (list || []).find((x) => x.level === int(msg.slot, sp.level) && x.level >= sp.level);
-          if (!sl || sl.used >= sl.max) return send(ws, { type: 'error', message: `No ${msg.pact ? 'pact' : 'level ' + int(msg.slot, sp.level)} slots left` });
-          sl.used++; at = sl.level;
-        } else if (sp.uses) {
-          const n = ch.spellUses[sp.name] || 0; if (n >= sp.uses) return send(ws, { type: 'error', message: `${sp.name}: no uses left until you rest` });
-          ch.spellUses[sp.name] = n + 1;
-        }
+        const spent = spendSpell(ch, sp, msg); if (spent.error) return send(ws, { type: 'error', message: spent.error });
+        const at = spent.at;
         const ord = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
         const entry = { kind: 'chat', who: u.name, text: `✨ ${ch.name.split(' ')[0]} casts ${sp.name}${at > sp.level ? ` at ${ord(at)} level` : ''}${sp.save ? ` (${sp.save})` : ''}${msg.ritual ? ' as a ritual' : ''}`, time: Date.now(), cast: true };
         state.log.push(entry); state.log = state.log.slice(-200);
@@ -1316,12 +1360,94 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
         const long = msg.kind === 'long';
         for (const sl of ch.pact || []) sl.used = 0;
+        for (const r of ch.resources || []) if (long || r.reset === 'short') r.used = 0;
         if (long) { for (const sl of ch.slots || []) sl.used = 0; ch.spellUses = {}; }
         if (long) for (const scn of Object.values(state.scenes)) for (const t of Object.values(scn.tokens)) if (t.owner === u.name && t.ddb === ch.link) {
-          const before = { ...t }; if (t.maxHp) t.hp = t.maxHp; t.tempHp = 0; t.conditions = (t.conditions || []).filter((c) => c !== 'concentrating' && c !== 'unconscious'); tokenChanged(scn, t, before);
+          const before = { ...t }; if (ch.maxHp) t.maxHp = ch.maxHp; if (t.maxHp) t.hp = t.maxHp; t.tempHp = 0; t.conditions = (t.conditions || []).filter((c) => c !== 'concentrating' && c !== 'unconscious'); tokenChanged(scn, t, before);
         }
         const entry = { kind: 'chat', who: u.name, text: long ? `⛺ ${ch.name.split(' ')[0]} takes a long rest: hit points and spell slots restored` : `☾ ${ch.name.split(' ')[0]} takes a short rest${(ch.pact || []).length ? ': pact slots restored' : ''}`, time: Date.now(), cast: true };
         state.log.push(entry); state.log = state.log.slice(-200); clients().forEach((c) => send(c, { type: 'chat', entry }));
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      // ----- 1.13: a spell or class feature that lands on tokens: rolled once here, applied straight away -----
+      case 'spellEffect': {
+        if (u.isDM || !sc) return; const ch = charOf(u.name); if (!ch) return;
+        const first = ch.name.split(' ')[0];
+        const ids = [...new Set((Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string'))].slice(0, 30);
+        const targets = ids.map((id) => sc.tokens[id]).filter((t) => t && tokVisible(sc, t, u));
+        const lines = [], rolls = [];
+        const rollOut = (expr, label) => { const r = rollDice(expr); const entry = { who: u.name, label: str(label, 30), expr, ...r, private: false, time: Date.now(), skin: skinOf(u.name) }; rolls.push(entry); return r; };
+        const nameOf = (t) => t.label || '?';
+        const hpNote = (t) => (t.owner ? ` (${t.hp}/${t.maxHp ?? '?'}${t.tempHp ? ' +' + t.tempHp + ' temp' : ''})` : t.hp === 0 ? ' (down)' : '');
+        try {
+          if (msg.res) { // a class feature: Lay on Hands (an amount from the pool), Second Wind and friends (dice)
+            const r = (ch.resources || []).find((x) => x.name === msg.res); if (!r) return;
+            if (r.pool) {
+              const amt = clamp(int(msg.amount, 0), 1, r.max - r.used); if (!(r.max - r.used)) return send(ws, { type: 'error', message: `${r.name}: the pool is empty until you rest` });
+              const t = targets[0]; if (!t) return send(ws, { type: 'error', message: 'Pick who to heal first' });
+              r.used += amt; hpTo(sc, t, amt);
+              lines.push(`💛 ${first} uses ${r.name} on ${nameOf(t)}: ${amt} hit points${hpNote(t)}. ${r.max - r.used} left in the pool`);
+            } else {
+              if (r.used >= r.max) return send(ws, { type: 'error', message: `${r.name}: none left until you rest` });
+              r.used++;
+              const who = r.self ? Object.values(sc.tokens).filter((t) => t.owner === u.name && t.ddb === ch.link).slice(0, 1) : targets;
+              if (r.heal && who.length) { const x = rollOut(r.heal, r.name); for (const t of who) { hpTo(sc, t, x.total); lines.push(`💚 ${first} uses ${r.name}: ${nameOf(t)} regains ${x.total} hit points${hpNote(t)}`); } }
+              else lines.push(`⭐ ${first} uses ${r.name} (${r.max - r.used}/${r.max} left)`);
+            }
+          } else {
+            const sp = (ch.spells || []).find((x) => x.name === msg.name); if (!sp) return;
+            const spent = msg.cast ? spendSpell(ch, sp, msg) : { at: clamp(int(msg.slot, sp.level), sp.level, 9) };
+            if (spent.error) return send(ws, { type: 'error', message: spent.error });
+            const at = spent.at, up = at - sp.level;
+            const casting = `${msg.cast ? '✨' : '🎯'} ${first} ${msg.cast ? 'casts' : 'uses'} ${sp.name}${up > 0 ? ` at ${ORD(at)} level` : ''}`;
+            lines.push(casting + (targets.length ? ' on ' + targets.map(nameOf).join(', ') : ''));
+            if (sp.heal && targets.length) {
+              const x = rollOut(diceAt(sp.heal, sp.healPer, up) + (sp.healMod ? sgnS(sp.healMod) : ''), sp.name + ' healing');
+              for (const t of targets) { hpTo(sc, t, x.total); lines.push(`💚 ${nameOf(t)} regains ${x.total} hit points${hpNote(t)}`); }
+            }
+            if (sp.maxUp && targets.length) {
+              const add = sp.maxUp + 5 * up;
+              for (const t of targets) { const before = { ...t }; t.maxHp = (t.maxHp || 0) + add; t.hp = (t.hp ?? 0) + add; tokenChanged(sc, t, before); lines.push(`💪 ${nameOf(t)}: hit point maximum up by ${add}${hpNote(t)}`); }
+            }
+            if (sp.temp && targets.length) {
+              const x = rollOut(sp.temp.replace(/\s/g, ''), sp.name + ' temp HP');
+              for (const t of targets) { hpTo(sc, t, 0, x.total); lines.push(`🛡 ${nameOf(t)} gains ${x.total} temporary hit points`); }
+            }
+            if (sp.dice && targets.length) {
+              const expr = diceAt(sp.dice, sp.per, up), type = sp.type || '';
+              const saveAbl = sp.save ? (/\b(STR|DEX|CON|INT|WIS|CHA)\b/i.exec(sp.save) || [])[1] : null, dc = sp.save ? +((/DC (\d+)/.exec(sp.save) || [])[1] || (ch.casting || {}).dc || 10) : 0;
+              let shared = null; // a save spell rolls its damage once for everyone
+              for (const t of targets) {
+                let amount = 0, how = '';
+                if (sp.attack) {
+                  const a = rollOut(sp.attack, sp.name + ' → ' + nameOf(t)), ac = acOf(t), hit = a.crit === 'nat20' || (a.crit !== 'nat1' && a.total >= ac);
+                  if (!hit) { lines.push(`💨 ${nameOf(t)}: miss (${a.total})`); continue; }
+                  amount = rollOut(a.crit === 'nat20' ? doubleDice(expr) : expr, sp.name + ' damage').total; how = a.crit === 'nat20' ? 'critical hit! ' : `hit (${a.total}) `;
+                } else if (saveAbl) {
+                  shared = shared || rollOut(expr, sp.name + ' damage');
+                  const sv = rollDice('1d20' + sgnS(saveBonus(t, saveAbl.toUpperCase()))), ok = sv.total >= dc; // the target's save: only the outcome is shown
+                  if (ok && !sp.half) { lines.push(`🛡 ${nameOf(t)} saves: no effect`); continue; }
+                  amount = ok ? Math.floor(shared.total / 2) : shared.total; how = ok ? 'saves, half: ' : 'fails the save: ';
+                } else { shared = shared || rollOut(expr, sp.name + ' damage'); amount = shared.total; }
+                const k = takes(t, type), dealt = Math.floor(amount * k);
+                hpTo(sc, t, -dealt);
+                lines.push(`💥 ${nameOf(t)}: ${how}${dealt} ${type} damage${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}${hpNote(t)}`);
+              }
+            }
+            if (sp.conc && msg.cast) for (const t of Object.values(sc.tokens)) if (t.owner === u.name && t.ddb === ch.link && !(t.conditions || []).includes('concentrating')) { const before = { ...t }; t.conditions = [...(t.conditions || []), 'concentrating']; tokenChanged(sc, t, before); }
+          }
+        } catch (e) { return send(ws, { type: 'error', message: e.message }); }
+        for (const entry of rolls) { state.log.push(entry); clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'roll', entry })); }
+        const entry = { kind: 'chat', who: u.name, text: lines.join('\n').slice(0, 1500), time: Date.now(), cast: true };
+        state.log.push(entry); state.log = state.log.slice(-200); clients().forEach((c) => send(c, { type: 'chat', entry }));
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      case 'charRes': { // tick a class feature used or back
+        if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
+        const r = (ch.resources || []).find((x) => x.name === msg.name); if (!r) return;
+        r.used = clamp(int(msg.used, 0), 0, r.max);
         send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
         break;
       }

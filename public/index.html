@@ -427,6 +427,9 @@
   #charBody .spbtns { display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 2px; }
   #charBody .spbtns button, #charBody .spbtns select { padding:3px 8px; font-size:12px; }
   #charBody .spdesc summary { text-transform:none; letter-spacing:0; }
+  #aimBar { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
+  #aimBar #aimTitle { font-weight:600; } #aimBar #aimCount { color:#bfb39a; font-size:12px; } #aimBar #aimAmt { width:70px; }
+  #charBody .res .rn { min-width:110px; } #charBody .res button:not(.pip) { margin-left:auto; padding:2px 8px; font-size:12px; }
   #charBody .sptext { font-size:12px; line-height:1.45; white-space:pre-wrap; color:#cfc6b8; max-height:220px; overflow:auto; }
   #charBody .atk { display:grid; grid-template-columns:1fr auto auto; gap:4px; align-items:center; margin-top:4px; font-size:12px; }
   #charBody .atk button { padding:3px 8px; font-size:12px; }
@@ -817,6 +820,7 @@
     </div>
   </div>
 </div>
+<div id="aimBar" hidden><span id="aimTitle"></span><span id="aimCount"></span><input id="aimAmt" type="number" min="1" title="How many hit points" hidden><button id="aimSelf" title="Add your own token">Me</button><button id="aimArea" title="Every token inside the area you placed">In my area</button><button id="aimGo" class="primary">Apply</button><button id="aimCancel">Cancel</button></div>
 <div class="modal" id="charModal" hidden>
   <div class="dialog">
     <div class="dhead"><h2 style="margin:0" id="cmName"></h2><div class="spacer"></div><button class="close" data-close>✕</button></div>

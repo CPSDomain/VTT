@@ -674,6 +674,10 @@ function render() {
     const rad = (t.size * CELL) / 2, cx = pos.x + rad, cy = pos.y + rad;
     const pct0 = hpFraction(t), down = efx.lying(t, pct0 === 0);
     if (!t.hidden) { if (pct0 === 0 || (t.conditions || []).includes('dead')) efx.pool(ctx, t, cx, cy, rad); efx.under(ctx, t, cx, cy, rad); }
+    if (aim && aim.ids.has(t.id)) { // chosen as a target for a spell
+      ctx.save(); ctx.setLineDash([6 / view.zoom, 4 / view.zoom]); ctx.lineDashOffset = -performance.now() / 60; ctx.lineWidth = 4 / view.zoom; ctx.strokeStyle = aim.color;
+      ctx.beginPath(); ctx.arc(cx, cy, rad + 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
     if (t.id === turnId) { // whose turn it is: a glowing gold ring
       ctx.save(); ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 18; ctx.lineWidth = 5; ctx.strokeStyle = '#fbbf24';
       ctx.beginPath(); ctx.arc(cx, cy, rad - 1, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -739,7 +743,7 @@ function render() {
   drawToolPreview(s);
   weather.update();
   // fire flickers and water moves: keep drawing, about 30 times a second, while there's some in view
-  if (!animTimer && (efx.active() || (s.atmo && s.atmo.mood && s.atmo.mood !== 'none' && moving) || (lit && moving && mode !== 'build' && life.active(s, (s.atmo && s.atmo.time) || 'day', amb && !lighting.isDay(amb))) || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
+  if (!animTimer && ((aim && aim.ids.size) || efx.active() || (s.atmo && s.atmo.mood && s.atmo.mood !== 'none' && moving) || (lit && moving && mode !== 'build' && life.active(s, (s.atmo && s.atmo.time) || 'day', amb && !lighting.isDay(amb))) || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
 }
 
 function drawSelection(s) {
@@ -2077,6 +2081,12 @@ canvas.addEventListener('pointerdown', (e) => {
   const p = toWorld(e), c = toCell(p);
   const building = me.isDM && mode === 'build';
 
+  if (aim) { // choosing targets for a spell: clicking a token adds it or takes it off
+    const t = tokenAt(s, p);
+    if (t) { if (aim.ids.has(t.id)) aim.ids.delete(t.id); else { if (aim.one) aim.ids.clear(); aim.ids.add(t.id); } aimBar(); draw(); }
+    return;
+  }
+
   if (me.isDM && fogTool) { // fog tools take the click, in Play or Build mode
     if (fogTool === 'room') {
       const cells = roomCells(s, c);
@@ -2989,11 +2999,59 @@ function diceAt(base, per, extra) {
   return base + Array(extra).fill('+' + per).join('');
 }
 const FX_OF = { fire: 'fire', lightning: 'lightning', cold: 'cold', acid: 'acid', thunder: 'thunder', necrotic: 'necrotic', radiant: 'radiant', poison: 'poison', force: 'force', psychic: 'psychic' };
+// ---------- 1.13: spells and class features land on tokens straight away ----------
+// aim = { title, color, ids: Set, one, amount, send(ids, amount) }: the player clicks tokens, then Apply
+let aim = null;
+const myTokens = (s) => Object.values(s.tokens).filter((t) => t.owner === me.name && (!myChar || !t.ddb || t.ddb === myChar.link));
+function startAim(o) {
+  const s = sc(); if (!s) return toast('Open a map first');
+  aim = { color: '#22c55e', ids: new Set(), ...o };
+  if (o.self) for (const t of myTokens(s).slice(0, 1)) aim.ids.add(t.id);
+  aimBar(); draw();
+}
+function stopAim() { aim = null; $('aimBar').hidden = true; draw(); }
+function aimBar() {
+  const bar = $('aimBar'); bar.hidden = !aim; if (!aim) return;
+  $('aimTitle').textContent = aim.title;
+  $('aimCount').textContent = aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
+  $('aimAmt').hidden = !aim.amount; if (aim.amount && !$('aimAmt').value) $('aimAmt').value = aim.amount;
+  $('aimAmt').max = aim.amount || '';
+  $('aimArea').hidden = !!aim.one;
+  $('aimGo').disabled = !aim.ids.size && !aim.allowNone;
+  $('aimGo').textContent = aim.ids.size ? 'Apply' : aim.allowNone ? 'Cast with no targets' : 'Apply';
+}
+$('aimCancel').onclick = stopAim;
+$('aimSelf').onclick = () => { const s = sc(); if (!s || !aim) return; const t = myTokens(s)[0]; if (!t) return toast('Your token isn’t on this map'); if (aim.one) aim.ids.clear(); aim.ids.add(t.id); aimBar(); draw(); };
+$('aimArea').onclick = () => { // every token in my most recent area on this map
+  const s = sc(); if (!s || !aim) return;
+  const mine = Object.values(s.templates || {}).filter((t) => t.owner === me.name).pop();
+  if (!mine) return toast('Place your area on the map first (◎ Area)');
+  const cells = new Set(tplCells(s, mine).map(([x, y]) => x + ',' + y));
+  for (const t of Object.values(s.tokens)) { let inside = false; for (let y = t.y; y < t.y + t.size && !inside; y++) for (let x = t.x; x < t.x + t.size; x++) if (cells.has(x + ',' + y)) { inside = true; break; } if (inside) aim.ids.add(t.id); }
+  aimBar(); draw();
+};
+$('aimGo').onclick = () => { if (!aim) return; const amt = Math.max(1, Math.min(+$('aimAmt').value || 0, aim.amount || 1e9)); aim.send([...aim.ids], amt); $('aimAmt').value = ''; stopAim(); };
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && aim) stopAim(); });
+
+function renderResources(d, c, el) {
+  if (!(c.resources || []).length) return;
+  d.append(el('div', 'splvl', 'Class features'));
+  for (const r of c.resources) {
+    const row = el('div', 'slots res'), left = r.max - r.used;
+    row.append(el('span', 'sl rn', r.name)); row.title = r.reset === 'short' ? 'Back after a short or long rest' : 'Back after a long rest';
+    if (r.pool || r.max > 10) row.append(el('span', 'left', `${left}/${r.max}`));
+    else for (let i = 0; i < r.max; i++) { const pip = el('button', 'pip' + (i < left ? ' on' : '')); pip.onclick = () => sendMsg({ type: 'charRes', name: r.name, used: i < left ? r.used + 1 : r.used - 1 }); row.append(pip); }
+    if (r.pool) { const b = el('button', '', '💛 Heal…'); b.disabled = !left; b.onclick = () => startAim({ title: `${r.name}: who to heal, and how much`, one: true, amount: left, color: '#facc15', send: (ids, amount) => sendMsg({ type: 'spellEffect', res: r.name, targets: ids, amount }) }); row.append(b); }
+    else if (r.heal) { const b = el('button', '', '💚 ' + r.heal); b.disabled = !left; b.onclick = () => (r.self ? sendMsg({ type: 'spellEffect', res: r.name, targets: [] }) : startAim({ title: r.name, one: true, send: (ids) => sendMsg({ type: 'spellEffect', res: r.name, targets: ids }) })); row.append(b); }
+    else if (r.max > 10) { const b = el('button', '', 'Use 1'); b.disabled = !left; b.onclick = () => sendMsg({ type: 'charRes', name: r.name, used: r.used + 1 }); row.append(b); }
+    d.append(row);
+  }
+}
 function renderSpells(d, c, el) {
   // spell attack, save DC and rests
   if (c.casting) d.append(el('div', 'hint', `Spell attack ${sgn(c.casting.attack)} · Save DC ${c.casting.dc} (${c.casting.ability})`));
   const rests = el('div', 'row');
-  const shortR = el('button', '', '☾ Short rest'); shortR.title = 'Pact magic slots come back'; shortR.onclick = () => sendMsg({ type: 'charRest', kind: 'short' });
+  const shortR = el('button', '', '☾ Short rest'); shortR.title = 'Pact magic slots and short-rest features come back'; shortR.onclick = () => sendMsg({ type: 'charRest', kind: 'short' });
   const longR = el('button', '', '⛺ Long rest'); longR.title = 'All spell slots and hit points come back; concentration ends';
   longR.onclick = () => { if (longR.dataset.armed) return sendMsg({ type: 'charRest', kind: 'long' }); longR.dataset.armed = 1; longR.textContent = 'Sure? Click again'; setTimeout(() => { delete longR.dataset.armed; longR.textContent = '⛺ Long rest'; }, 3000); };
   rests.append(shortR, longR); d.append(rests);
@@ -3004,6 +3062,7 @@ function renderSpells(d, c, el) {
     row.append(el('span', 'left', `${sl.max - sl.used}/${sl.max}`)); d.append(row);
   };
   (c.slots || []).forEach((sl) => slotRow(sl, false)); (c.pact || []).forEach((sl) => slotRow(sl, true));
+  renderResources(d, c, el);
   // the spells, by level
   let lvl = -1;
   for (const sp of c.spells) {
@@ -3025,9 +3084,17 @@ function renderSpells(d, c, el) {
       if (options.length > 1) { sel = el('select'); for (const o of options) { const op = el('option', '', o.t); op.value = o.v; sel.append(op); } }
       const cast = el('button', 'primary', sp.level === 0 ? 'Cast' : sp.usesSlot ? (options.length ? 'Cast' : 'No slots left') : sp.uses ? 'Cast (uses 1)' : 'Cast');
       cast.disabled = sp.level > 0 && sp.usesSlot && !options.length;
-      cast.onclick = () => { const o = sel ? sel.value : options[0] && options[0].v; sendMsg({ type: 'charCast', name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }); };
+      const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp);
+      const slotMsg = () => { const o = sel ? sel.value : options[0] && options[0].v; return { name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }; };
+      const harm = sp.dice && !sp.heal && !sp.temp;
+      cast.onclick = () => {
+        if (!lands) return sendMsg({ type: 'charCast', ...slotMsg() });
+        startAim({ title: `Cast ${sp.name}`, harm, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly, allowNone: true,
+          send: (ids) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
+      };
+      if (lands) cast.title = 'Spends the slot, then you pick the targets: rolls and hit points are done for you';
       btns.append(cast); if (sel) btns.append(sel);
-      if (sp.ritual && sp.level > 0) { const r = el('button', '', 'As a ritual'); r.title = 'Takes 10 minutes longer, uses no slot'; r.onclick = () => sendMsg({ type: 'charCast', name: sp.name, free: true, ritual: true }); btns.append(r); }
+      if (sp.ritual && sp.level > 0 && !lands) { const r = el('button', '', 'As a ritual'); r.title = 'Takes 10 minutes longer, uses no slot'; r.onclick = () => sendMsg({ type: 'charCast', name: sp.name, free: true, ritual: true }); btns.append(r); }
       if (sp.attack) { const b = el('button', '', 'Attack ' + sp.attack.replace('1d20', '')); b.onclick = (ev) => rollWith(sp.attack, sp.name.slice(0, 22) + ' attack', ev); btns.append(b); }
       if (sp.dice) { const b = el('button', ''); const upd = () => { b.textContent = diceAt(sp.dice, sp.per, lvAt() - sp.level) + (sp.type ? ' ' + sp.type : ''); }; upd(); if (sel) sel.addEventListener('change', upd); b.title = 'Damage'; b.onclick = () => rollWith(diceAt(sp.dice, sp.per, lvAt() - sp.level), sp.name.slice(0, 20) + ' damage'); btns.append(b); }
       if (sp.heal) { const b = el('button', ''); const ex = () => diceAt(sp.heal, sp.healPer, lvAt() - sp.level) + (sp.healMod ? sgn(sp.healMod) : ''); b.textContent = 'Heal ' + ex(); if (sel) sel.addEventListener('change', () => { b.textContent = 'Heal ' + ex(); }); b.onclick = () => rollWith(ex(), sp.name.slice(0, 22) + ' healing'); btns.append(b); }
@@ -3064,7 +3131,7 @@ function renderChar() {
   head.append(who); box.append(head);
   const stats = el('div', 'stats');
   const onMap = sc() && Object.values(sc().tokens).find((t) => t.ddb === c.link && t.owner && sameName(t.owner, me.name)); // in play, the token's HP is the one that counts
-  for (const [v, k] of [[`${onMap && onMap.hp != null ? onMap.hp : c.hp}/${c.maxHp}`, 'HP'], [c.ac, 'AC'], [c.speed + ' ft', 'Speed'], [sgn(c.init), 'Init'], [c.darkvision ? c.darkvision + ' ft' : '—', 'Dark']]) { const d = el('div'); d.append(el('b', '', v), el('span', '', k)); stats.append(d); }
+  for (const [v, k] of [[`${onMap && onMap.hp != null ? onMap.hp : c.hp}/${(onMap && onMap.maxHp) || c.maxHp}${onMap && onMap.tempHp ? ' +' + onMap.tempHp : ''}`, 'HP'], [c.ac, 'AC'], [c.speed + ' ft', 'Speed'], [sgn(c.init), 'Init'], [c.darkvision ? c.darkvision + ' ft' : '—', 'Dark']]) { const d = el('div'); d.append(el('b', '', v), el('span', '', k)); stats.append(d); }
   box.append(stats);
   const actions = el('div', 'row'), place = el('button', 'primary', '📍 Put my token on the map'); place.title = 'Your token appears in the middle of your view (or is updated if it is already on this map)';
   place.onclick = () => { const s = sc(); if (!s) return; const r = canvas.getBoundingClientRect(); sendMsg({ type: 'charToken', x: Math.floor((r.width / 2 - view.x) / view.zoom / CELL), y: Math.floor((r.height / 2 - view.y) / view.zoom / CELL) }); };

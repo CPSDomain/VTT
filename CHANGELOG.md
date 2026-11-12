@@ -2,6 +2,19 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.13.0] - 2026-11-12
+
+### Added
+- **Spells land on the map straight away.** Click **Cast** on a spell that heals, hurts or protects, click the tokens it's for (or **Me**, or **In my area** for every token inside your placed template), then **Apply**. Tabletop spends the slot, rolls once with dice on everyone's screen, and changes hit points at once:
+  - **Healing** (Cure Wounds, Healing Word, Mass Cure Wounds, Prayer of Healing…) adds the roll plus your spellcasting modifier, up to each target's maximum, and gets an unconscious character back up.
+  - **Temporary hit points** (False Life, Heroism…) and **Aid**'s higher maximum.
+  - **Attack spells** (Fire Bolt, Guiding Bolt…) roll to hit against each target's AC; a natural 20 doubles the damage dice.
+  - **Save spells** (Fireball, Sacred Flame…) roll the damage once and make each target's saving throw against your DC: half damage on a save where the spell says so. Monsters use their stat block's saves, players their character's.
+  - Monsters' **resistances, immunities and vulnerabilities** count (an imp shrugs off Fireball). Temporary hit points soak damage first.
+  - The log says who was hit, healed or saved. Monsters' hit points and saving throw rolls stay hidden from players, only the outcome shows.
+- **Class features** under **My character → Spells → Class features**, from D&D Beyond: Lay on Hands (pick who and how many hit points from the pool), Second Wind, Channel Divinity, Focus/Ki points, Sorcery Points, Bardic Inspiration, Action Surge, Rage, Wild Shape and others with limited uses. Short and long rests bring them back.
+- Healing spells that D&D Beyond only describes in words are read from their description too.
+
 ## [1.12.0] - 2026-11-12
 
 ### Added

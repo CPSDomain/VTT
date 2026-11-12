@@ -30,6 +30,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.10 | More immersion: moods (magical darkness, blood moon), lightning and earthquakes, turn banner, look here, a living map, remembered places and black-and-white darkvision, chests and traps, full-screen handouts |
 | 1.11 | A bigger map generator: ships, castles, graveyards and city streets; dungeons with several levels, room size, twisty corridors, doors, clutter, underground lakes and mine tracks; buildings with upstairs and cellars; SRD monsters sized for the party, treasure, room names and DM notes; lighting, time, weather and sound to fit |
 | 1.12 | Spells for players: slots and pact magic, casting with upcasting, spell details and rolls, areas from the spell, concentration, short and long rests |
+| 1.13 | Spells and class features land on the map: healing, temporary hit points, attack and save spells against each target, resistances, Lay on Hands, Second Wind, Channel Divinity and other limited-use features |
 
 ## Next
 

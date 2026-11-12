@@ -159,6 +159,23 @@ function readCharacter(d) {
       const per = hl.find((h) => h.dice && h.dice.diceString); return { dice: m.die.diceString + (m.die.fixedValue ? '+' + m.die.fixedValue : ''), per: per ? per.dice.diceString : '' };
     };
     const D = pickDie(dmg), Hh = pickDie(heal);
+    const desc = text(def.description);
+    // healing and temporary hit points: D&D Beyond's own fields first, then what the description says
+    const firstDice = (arr) => (Array.isArray(arr) && arr[0] && (arr[0].diceString || (arr[0].fixedValue ? String(arr[0].fixedValue) : ''))) || '';
+    let healDice = Hh.dice || firstDice(def.healingDice), healPer = Hh.per, tempDice = firstDice(def.tempHpDice), usePrimary = !!(heal && heal.usePrimaryStat);
+    const temp = mods.find((m) => m.type === 'bonus' && /temporary-hit-points/.test(m.subType || ''));
+    if (!tempDice && temp) tempDice = temp.die && temp.die.diceString ? temp.die.diceString + (temp.die.fixedValue ? '+' + temp.die.fixedValue : '') : String(temp.value || temp.fixedValue || '');
+    if (!healDice && heal && heal.die && heal.die.fixedValue) healDice = String(heal.die.fixedValue);
+    const plain = desc.replace(/\s+/g, ' ');
+    let m;
+    if (!healDice && (m = /regains? (?:a number of )?hit points equal to (\d+d\d+)( (?:\+|plus) your spellcasting (?:ability )?modifier)?/i.exec(plain))) { healDice = m[1]; usePrimary = !!m[2]; }
+    if (!healDice && (m = /regains? (\d+) hit points/i.exec(plain))) healDice = m[1];
+    if (!tempDice && (m = /(\d+d\d+ ?\+ ?\d+|\d+d\d+|\d+) temporary hit points/i.exec(plain))) tempDice = m[1].replace(/\s/g, '');
+    if (!healPer && healDice && (m = /(?:healing|hit points)[^.]*increases? by (\d+d\d+) for each (?:spell )?slot level above/i.exec(plain))) healPer = m[1];
+    let dmgDice = D.dice, dmgPer = D.per, dmgType = dmg ? String(dmg.subType || '').toLowerCase() : '';
+    if (!dmgDice && (m = /(\d+d\d+(?: ?\+ ?\d+)?) (acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder) damage/i.exec(plain))) { dmgDice = m[1].replace(/\s/g, ''); dmgType = m[2].toLowerCase(); }
+    if (dmgDice && !dmgPer && (def.level || 0) > 0 && (m = /damage increases by (\d+d\d+) for each (?:spell )?slot level above/i.exec(plain))) dmgPer = m[1];
+    const maxHpUp = /hit point maximum and current hit points increase by (\d+)/i.exec(plain); // Aid
     const aoe = rng.aoeType ? { shape: String(rng.aoeType).toLowerCase(), size: rng.aoeValue || 0 } : null;
     spellsOut.push({
       name: String(def.name).slice(0, 40), level: def.level || 0, ritual: !!def.ritual, conc: !!def.concentration,
@@ -168,8 +185,9 @@ function readCharacter(d) {
       duration: dur.durationType === 'Instantaneous' ? 'Instantaneous' : dur.durationInterval ? `${def.concentration ? 'Concentration, up to ' : ''}${dur.durationInterval} ${String(dur.durationUnit || '').toLowerCase()}${dur.durationInterval > 1 ? 's' : ''}` : dur.durationType || '',
       comps: (def.components || []).map((c) => ({ 1: 'V', 2: 'S', 3: 'M' }[c])).filter(Boolean).join(', ') + (def.componentsDescription ? ` (${String(def.componentsDescription).slice(0, 60)})` : ''),
       attack: def.requiresAttackRoll ? '1d20' + (atk >= 0 ? '+' + atk : atk) : '', save: def.requiresSavingThrow ? `${STAT[(def.saveDcAbilityId || 1) - 1]} save, DC ${dc}` : '',
-      dice: D.dice, per: D.per, type: dmg ? String(dmg.subType || '').toLowerCase() : '', heal: Hh.dice, healPer: Hh.per, healMod: heal && def.level > 0 ? M[ab] : 0,
-      aoe, desc: text(def.description).slice(0, 1200),
+      dice: dmgDice, per: dmgPer, type: dmgType, heal: healDice, healPer, healMod: healDice && usePrimary ? M[ab] : 0, temp: tempDice,
+      maxUp: maxHpUp ? +maxHpUp[1] : 0, half: /half as much damage/i.test(plain), selfOnly: rng.origin === 'Self' && !rng.aoeType,
+      aoe, desc: desc.slice(0, 1200),
       uses: sp.limitedUse && sp.limitedUse.maxUses ? sp.limitedUse.maxUses : 0, usesSlot: sp.usesSpellSlot !== false && source === 'class'
     });
   };
@@ -185,6 +203,28 @@ function readCharacter(d) {
     slots = (TABLE[Math.min(20, cl)] || []).map((max, i) => ({ level: i + 1, max, used: 0 }));
   }
   const casting = { attack: prof + M[firstCaster - 1], dc: 8 + prof + M[firstCaster - 1], ability: STAT[firstCaster - 1] };
+  // class resources: Lay on Hands, Channel Divinity, Ki, Sorcery Points, Bardic Inspiration, Second Wind, Rage…
+  const resources = [], seenRes = new Set();
+  const addRes = (name, max, used, reset, extra = {}) => { if (!name || !(max > 0) || seenRes.has(name)) return; seenRes.add(name); resources.push({ name: String(name).slice(0, 30), max, used: Math.min(max, used || 0), reset, ...extra }); };
+  for (const list of Object.values(d.actions || {})) for (const a of list || []) {
+    const lu = a && a.limitedUse; if (!lu) continue;
+    let max = lu.maxUses || 0;
+    if (lu.statModifierUsesId) max = Math.max(1, max + M[lu.statModifierUsesId - 1]);
+    if (lu.useProficiencyBonus) max = lu.proficiencyBonusOperator === 2 ? max * prof : max + prof;
+    const dice = a.dice && a.dice.diceString ? a.dice.diceString + (a.value ? '+' + a.value : '') : '';
+    addRes(a.name, max, lu.numberUsed, lu.resetType === 1 ? 'short' : 'long', /heal|second wind|lay on hands/i.test(a.name) ? { heal: dice || '', pool: /lay on hands/i.test(a.name) } : dice ? { dice } : {});
+  }
+  // the usual ones, when D&D Beyond didn't list them as actions
+  const lvOf = (n) => (d.classes || []).filter((c) => c.definition && c.definition.name === n).reduce((t, c) => t + c.level, 0);
+  const lp = lvOf('Paladin'), lc = lvOf('Cleric'), lm = lvOf('Monk'), lso = lvOf('Sorcerer'), lb = lvOf('Bard'), lf = lvOf('Fighter'), lba = lvOf('Barbarian'), ld = lvOf('Druid');
+  if (lp) addRes('Lay on Hands', lp * 5, 0, 'long', { heal: '', pool: true });
+  if (lp >= 3 || lc >= 2) addRes('Channel Divinity', lc >= 18 ? 4 : lc >= 6 ? 3 : lc >= 2 ? 2 : lp >= 11 ? 3 : 2, 0, 'short');
+  if (lm >= 2) addRes('Focus Points', lm, 0, 'short');
+  if (lso >= 2) addRes('Sorcery Points', lso, 0, 'long');
+  if (lb) addRes('Bardic Inspiration', Math.max(1, M[5]), 0, lb >= 5 ? 'short' : 'long');
+  if (lf) { addRes('Second Wind', lf >= 10 ? 4 : lf >= 4 ? 3 : 2, 0, 'short', { heal: '1d10+' + lf, self: true }); if (lf >= 2) addRes('Action Surge', lf >= 17 ? 2 : 1, 0, 'short'); }
+  if (lba) addRes('Rage', lba >= 17 ? 6 : lba >= 12 ? 5 : lba >= 6 ? 4 : lba >= 3 ? 3 : 2, 0, 'long');
+  if (ld >= 2) addRes('Wild Shape', ld >= 17 ? 4 : ld >= 6 ? 3 : 2, 0, 'short');
   spellsOut.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
   const avatar = (d.decorations && d.decorations.avatarUrl) || d.avatarUrl || null;
@@ -192,7 +232,7 @@ function readCharacter(d) {
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,
-    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150), slots, pact, casting: spellsOut.length ? casting : null,
+    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150), slots, pact, casting: spellsOut.length ? casting : null, resources,
     avatar: typeof avatar === 'string' && /^https?:\/\//.test(avatar) ? avatar : null
   };
 }
