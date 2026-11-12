@@ -139,13 +139,52 @@ function readCharacter(d) {
     bag: i.containerEntityId && bags.has(i.containerEntityId) ? bags.get(i.containerEntityId) : ''
   })).slice(0, 200);
   const spellsOut = [], seenSpell = new Set();
-  const addSpell = (sp, source) => {
+  const STAT = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  const classAbility = new Map((d.classes || []).map((c) => [c.id, c.definition && c.definition.spellCastingAbilityId]));
+  const firstCaster = (d.classes || []).map((c) => c.definition && c.definition.spellCastingAbilityId).find(Boolean) || 6;
+  const text = (h) => String(h || '').replace(/<\/(p|li|h\d)>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&rsquo;|&#39;/g, '’').replace(/&quot;/g, '"').replace(/\n{3,}/g, '\n\n').trim();
+  const TIME = { 1: 'action', 2: 'no action', 3: 'bonus action', 4: 'reaction', 6: 'minute', 7: 'hour', 8: 'special' };
+  const addSpell = (sp, source, ability) => {
     const def = sp && sp.definition; if (!def || !def.name) return;
     const key = def.name + '|' + (def.level || 0); if (seenSpell.has(key)) return; seenSpell.add(key);
-    spellsOut.push({ name: String(def.name).slice(0, 40), level: def.level || 0, ritual: !!def.ritual, conc: !!def.concentration, prepared: !!(sp.prepared || sp.alwaysPrepared || sp.countsAsKnownSpell || (def.level || 0) === 0 || source !== 'class'), source });
+    const ab = (ability || firstCaster) - 1, atk = prof + M[ab], dc = 8 + prof + M[ab];
+    const act = def.activation || {}, rng = def.range || {}, dur = def.duration || {};
+    const mods = def.modifiers || [];
+    const dmg = mods.find((m) => m.type === 'damage' && m.die && m.die.diceString);
+    const heal = mods.find((m) => m.type === 'bonus' && /hit-points/.test(m.subType || '') && m.die && m.die.diceString);
+    const pickDie = (m) => { // cantrips grow with the character's level; others give extra dice per slot above the spell's level
+      if (!m) return { dice: '', per: '' };
+      const hl = m.atHigherLevels && m.atHigherLevels.higherLevelDefinitions || [];
+      if ((def.level || 0) === 0 && hl.length) { const best = hl.filter((h) => h.level <= level && h.dice && h.dice.diceString).sort((a, b) => b.level - a.level)[0]; return { dice: best ? best.dice.diceString : m.die.diceString, per: '' }; }
+      const per = hl.find((h) => h.dice && h.dice.diceString); return { dice: m.die.diceString + (m.die.fixedValue ? '+' + m.die.fixedValue : ''), per: per ? per.dice.diceString : '' };
+    };
+    const D = pickDie(dmg), Hh = pickDie(heal);
+    const aoe = rng.aoeType ? { shape: String(rng.aoeType).toLowerCase(), size: rng.aoeValue || 0 } : null;
+    spellsOut.push({
+      name: String(def.name).slice(0, 40), level: def.level || 0, ritual: !!def.ritual, conc: !!def.concentration,
+      prepared: !!(sp.prepared || sp.alwaysPrepared || sp.countsAsKnownSpell || (def.level || 0) === 0 || source !== 'class'), source,
+      school: def.school || '', time: act.activationTime ? `${act.activationTime > 1 ? act.activationTime + ' ' : '1 '}${TIME[act.activationType] || 'action'}${act.activationTime > 1 && act.activationType >= 6 ? 's' : ''}` : '',
+      range: rng.origin === 'Self' ? 'Self' + (aoe ? ` (${aoe.size}-ft ${aoe.shape})` : '') : rng.origin === 'Touch' ? 'Touch' : rng.rangeValue ? `${rng.rangeValue} ft` + (aoe ? ` (${aoe.size}-ft ${aoe.shape})` : '') : rng.origin || '',
+      duration: dur.durationType === 'Instantaneous' ? 'Instantaneous' : dur.durationInterval ? `${def.concentration ? 'Concentration, up to ' : ''}${dur.durationInterval} ${String(dur.durationUnit || '').toLowerCase()}${dur.durationInterval > 1 ? 's' : ''}` : dur.durationType || '',
+      comps: (def.components || []).map((c) => ({ 1: 'V', 2: 'S', 3: 'M' }[c])).filter(Boolean).join(', ') + (def.componentsDescription ? ` (${String(def.componentsDescription).slice(0, 60)})` : ''),
+      attack: def.requiresAttackRoll ? '1d20' + (atk >= 0 ? '+' + atk : atk) : '', save: def.requiresSavingThrow ? `${STAT[(def.saveDcAbilityId || 1) - 1]} save, DC ${dc}` : '',
+      dice: D.dice, per: D.per, type: dmg ? String(dmg.subType || '').toLowerCase() : '', heal: Hh.dice, healPer: Hh.per, healMod: heal && def.level > 0 ? M[ab] : 0,
+      aoe, desc: text(def.description).slice(0, 1200),
+      uses: sp.limitedUse && sp.limitedUse.maxUses ? sp.limitedUse.maxUses : 0, usesSlot: sp.usesSpellSlot !== false && source === 'class'
+    });
   };
-  for (const cs of d.classSpells || []) for (const sp of cs.spells || []) addSpell(sp, 'class');
-  for (const [src, list] of Object.entries(d.spells || {})) for (const sp of list || []) addSpell(sp, src);
+  for (const cs of d.classSpells || []) for (const sp of cs.spells || []) addSpell(sp, 'class', classAbility.get(cs.characterClassId));
+  for (const [src, list] of Object.entries(d.spells || {})) for (const sp of list || []) addSpell(sp, src, sp.spellCastingAbilityId);
+  // spell slots (and a warlock's pact magic): what D&D Beyond says, or worked out from the classes
+  const slotsFrom = (arr) => (Array.isArray(arr) ? arr.filter((x) => x && x.available > 0).map((x) => ({ level: x.level, max: x.available, used: Math.min(x.used || 0, x.available) })) : []);
+  let slots = slotsFrom(d.spellSlots), pact = slotsFrom(d.pactMagic);
+  if (!slots.length) { // full casters count their level, half casters half (rounded up), third casters a third
+    const FULL = ['Bard', 'Cleric', 'Druid', 'Sorcerer', 'Wizard'], HALF = ['Paladin', 'Ranger', 'Artificer'];
+    const cl = (d.classes || []).reduce((t, c) => { const n = c.definition && c.definition.name, sub = c.subclassDefinition && c.subclassDefinition.name || ''; return t + (FULL.includes(n) ? c.level : HALF.includes(n) ? Math.ceil(c.level / 2) : /Eldritch Knight|Arcane Trickster/.test(sub) ? Math.floor(c.level / 3) : 0); }, 0);
+    const TABLE = [[], [2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1]];
+    slots = (TABLE[Math.min(20, cl)] || []).map((max, i) => ({ level: i + 1, max, used: 0 }));
+  }
+  const casting = { attack: prof + M[firstCaster - 1], dc: 8 + prof + M[firstCaster - 1], ability: STAT[firstCaster - 1] };
   spellsOut.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
   const avatar = (d.decorations && d.decorations.avatarUrl) || d.avatarUrl || null;
@@ -153,7 +192,7 @@ function readCharacter(d) {
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,
-    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150),
+    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150), slots, pact, casting: spellsOut.length ? casting : null,
     avatar: typeof avatar === 'string' && /^https?:\/\//.test(avatar) ? avatar : null
   };
 }

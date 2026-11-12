@@ -2,6 +2,19 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.12.0] - 2026-11-12
+
+### Added
+- **Spells for players**, from their D&D Beyond character (click **↻ Update from D&D Beyond** once to bring them in):
+  - **Spell slots** (and a warlock's pact magic) as pips under **My character → Spells**: click one to mark it used or get it back.
+  - **Every spell opens** to show its school, casting time, range, duration, components, save and description.
+  - **Cast** uses the lowest free slot at the spell's level, or pick a higher slot to upcast; the log tells the table what was cast (and the save DC). **As a ritual** casts without a slot. Racial and feat spells count their own uses.
+  - **The spell's rolls:** spell attacks, damage with its type, healing. Damage and healing grow with the slot you pick, and cantrips with your level.
+  - **◎ Area** picks the Spell tool with the spell's shape, size and effect (Burning Hands: a 15-ft cone of fire) so you just drag it into place.
+  - **Concentration** spells put the concentrating ring on your token.
+  - **☾ Short rest** brings back pact slots; **⛺ Long rest** brings back every slot and your hit points, and ends concentration. Both show in the log.
+- The DM sees each player's slots in **🎒 Inventory and spells…**.
+
 ## [1.11.0] - 2026-11-12
 
 ### Added

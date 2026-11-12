@@ -160,7 +160,7 @@ function onMessage(msg) {
     case 'active': active = msg.sceneId; renderSceneBar(); break;
     case 'roll': addLog(msg.entry, true); showRoll(msg.entry); break;
     case 'diceSkin': mySkin = msg.skin; renderMyDice(); renderSkins(); break;
-    case 'character': { const first = !myChar; myChar = msg.character; charBusy = false; renderChar(); if (myChar) toast(first ? `${myChar.name} is here. Put your token on the map when you're ready.` : `${myChar.name} is up to date`); break; }
+    case 'character': { const first = !myChar; myChar = msg.character; charBusy = false; renderChar(); if (myChar && !msg.quiet) toast(first ? `${myChar.name} is here. Put your token on the map when you're ready.` : `${myChar.name} is up to date`); break; }
     case 'characterBusy': charBusy = msg.on; renderChar(); break;
     case 'note': toast(msg.text, 5000); break;
     case 'characters': dmChars = msg.characters || {}; renderEditor(); break;
@@ -2977,7 +2977,72 @@ function mapSounds() {
 }
 setInterval(mapSounds, 500);
 // ---------- my character, from D&D Beyond ----------
-let myChar = null, charBusy = false;
+let myChar = null, charBusy = false, charOpen = {}, spellOpen = new Set();
+// ---------- 1.12: spells: slots to tick off, casting (with a higher slot), the spell's rolls and its area ----------
+const ORD = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
+// damage or healing dice at a slot level: the base dice plus the extra dice for every level above the spell's
+function diceAt(base, per, extra) {
+  if (!base) return '';
+  if (!per || extra <= 0) return base;
+  const m = /^(\d+)d(\d+)(.*)$/.exec(base), q = /^(\d+)d(\d+)$/.exec(per);
+  if (m && q && m[2] === q[2]) return `${+m[1] + +q[1] * extra}d${m[2]}${m[3]}`;
+  return base + Array(extra).fill('+' + per).join('');
+}
+const FX_OF = { fire: 'fire', lightning: 'lightning', cold: 'cold', acid: 'acid', thunder: 'thunder', necrotic: 'necrotic', radiant: 'radiant', poison: 'poison', force: 'force', psychic: 'psychic' };
+function renderSpells(d, c, el) {
+  // spell attack, save DC and rests
+  if (c.casting) d.append(el('div', 'hint', `Spell attack ${sgn(c.casting.attack)} · Save DC ${c.casting.dc} (${c.casting.ability})`));
+  const rests = el('div', 'row');
+  const shortR = el('button', '', '☾ Short rest'); shortR.title = 'Pact magic slots come back'; shortR.onclick = () => sendMsg({ type: 'charRest', kind: 'short' });
+  const longR = el('button', '', '⛺ Long rest'); longR.title = 'All spell slots and hit points come back; concentration ends';
+  longR.onclick = () => { if (longR.dataset.armed) return sendMsg({ type: 'charRest', kind: 'long' }); longR.dataset.armed = 1; longR.textContent = 'Sure? Click again'; setTimeout(() => { delete longR.dataset.armed; longR.textContent = '⛺ Long rest'; }, 3000); };
+  rests.append(shortR, longR); d.append(rests);
+  // slots: a pip per slot, click to tick one off or back
+  const slotRow = (sl, pact) => {
+    const row = el('div', 'slots'); row.append(el('span', 'sl', (pact ? 'Pact ' : '') + ORD(sl.level)));
+    for (let i = 0; i < sl.max; i++) { const pip = el('button', 'pip' + (i < sl.max - sl.used ? ' on' : '')); pip.title = i < sl.max - sl.used ? 'Mark a slot used' : 'Get a slot back'; pip.onclick = () => sendMsg({ type: 'charSlot', pact, level: sl.level, used: i < sl.max - sl.used ? sl.used + 1 : sl.used - 1 }); row.append(pip); }
+    row.append(el('span', 'left', `${sl.max - sl.used}/${sl.max}`)); d.append(row);
+  };
+  (c.slots || []).forEach((sl) => slotRow(sl, false)); (c.pact || []).forEach((sl) => slotRow(sl, true));
+  // the spells, by level
+  let lvl = -1;
+  for (const sp of c.spells) {
+    if (sp.level !== lvl) { lvl = sp.level; d.append(el('div', 'splvl', lvl === 0 ? 'Cantrips' : ORD(lvl) + ' level')); }
+    const wrap = el('div', 'spell' + (sp.prepared ? '' : ' unprep'));
+    const head = el('div', 'sphead'), nm = el('span', 'spn', sp.name);
+    const tags = [sp.conc ? 'C' : '', sp.ritual ? 'R' : '', sp.uses ? `${sp.uses - ((c.spellUses || {})[sp.name] || 0)}/${sp.uses}` : ''].filter(Boolean);
+    head.append(nm); if (tags.length) head.append(el('span', 'tag', tags.join(' · ')));
+    head.onclick = () => { if (spellOpen.has(sp.name)) spellOpen.delete(sp.name); else spellOpen.add(sp.name); renderChar(); };
+    wrap.append(head);
+    if (spellOpen.has(sp.name)) {
+      const body = el('div', 'spbody');
+      body.append(el('div', 'spmeta', [sp.school, sp.time, sp.range, sp.duration, sp.comps].filter(Boolean).join(' · ')));
+      if (sp.save) body.append(el('div', 'spmeta', sp.save));
+      // which slot: the lowest free one at or above the spell's level, or pick a higher one
+      const options = sp.level > 0 && sp.usesSlot ? [...(c.slots || []).filter((x) => x.level >= sp.level && x.used < x.max).map((x) => ({ v: 's' + x.level, t: ORD(x.level) + ' level slot', lv: x.level })), ...(c.pact || []).filter((x) => x.level >= sp.level && x.used < x.max).map((x) => ({ v: 'p' + x.level, t: 'Pact slot (' + ORD(x.level) + ')', lv: x.level }))] : [];
+      const btns = el('div', 'spbtns');
+      let sel = null; const lvAt = () => (sel && sel.value ? +sel.value.slice(1) : sp.level);
+      if (options.length > 1) { sel = el('select'); for (const o of options) { const op = el('option', '', o.t); op.value = o.v; sel.append(op); } }
+      const cast = el('button', 'primary', sp.level === 0 ? 'Cast' : sp.usesSlot ? (options.length ? 'Cast' : 'No slots left') : sp.uses ? 'Cast (uses 1)' : 'Cast');
+      cast.disabled = sp.level > 0 && sp.usesSlot && !options.length;
+      cast.onclick = () => { const o = sel ? sel.value : options[0] && options[0].v; sendMsg({ type: 'charCast', name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }); };
+      btns.append(cast); if (sel) btns.append(sel);
+      if (sp.ritual && sp.level > 0) { const r = el('button', '', 'As a ritual'); r.title = 'Takes 10 minutes longer, uses no slot'; r.onclick = () => sendMsg({ type: 'charCast', name: sp.name, free: true, ritual: true }); btns.append(r); }
+      if (sp.attack) { const b = el('button', '', 'Attack ' + sp.attack.replace('1d20', '')); b.onclick = (ev) => rollWith(sp.attack, sp.name.slice(0, 22) + ' attack', ev); btns.append(b); }
+      if (sp.dice) { const b = el('button', ''); const upd = () => { b.textContent = diceAt(sp.dice, sp.per, lvAt() - sp.level) + (sp.type ? ' ' + sp.type : ''); }; upd(); if (sel) sel.addEventListener('change', upd); b.title = 'Damage'; b.onclick = () => rollWith(diceAt(sp.dice, sp.per, lvAt() - sp.level), sp.name.slice(0, 20) + ' damage'); btns.append(b); }
+      if (sp.heal) { const b = el('button', ''); const ex = () => diceAt(sp.heal, sp.healPer, lvAt() - sp.level) + (sp.healMod ? sgn(sp.healMod) : ''); b.textContent = 'Heal ' + ex(); if (sel) sel.addEventListener('change', () => { b.textContent = 'Heal ' + ex(); }); b.onclick = () => rollWith(ex(), sp.name.slice(0, 22) + ' healing'); btns.append(b); }
+      if (sp.aoe && /cone|sphere|cube|line|cylinder|emanation/.test(sp.aoe.shape)) {
+        const b = el('button', '', '◎ Area'); b.title = `Place a ${sp.aoe.size}-ft ${sp.aoe.shape} on the map`;
+        b.onclick = () => { document.querySelector('[data-tt="template"]').click(); setTplShape(sp.aoe.shape === 'emanation' ? 'sphere' : sp.aoe.shape); $('tplSize').value = sp.aoe.size; $('tplFx').value = FX_OF[sp.type] || (sp.heal ? 'healing' : ''); toast(`Drag from where ${sp.name} starts (or click to place it)`); };
+        btns.append(b);
+      }
+      body.append(btns);
+      if (sp.desc) { const ds = el('details', 'spdesc'); ds.append(el('summary', '', 'Description'), el('div', 'sptext', sp.desc)); body.append(ds); }
+      wrap.append(body);
+    }
+    d.append(wrap);
+  }
+}
 const sgn = (n) => (n >= 0 ? '+' + n : String(n));
 function renderChar() {
   const sec = $('charSec'); sec.hidden = me.isDM; if (me.isDM) return;
@@ -3005,13 +3070,14 @@ function renderChar() {
   place.onclick = () => { const s = sc(); if (!s) return; const r = canvas.getBoundingClientRect(); sendMsg({ type: 'charToken', x: Math.floor((r.width / 2 - view.x) / view.zoom / CELL), y: Math.floor((r.height / 2 - view.y) / view.zoom / CELL) }); };
   const init = el('button', 'fixed', '🎲 Init'); init.title = 'Roll initiative: 1d20' + sgn(c.init); init.onclick = (ev) => { const s = sc(), t = s && Object.values(s.tokens).find((x) => x.ddb === c.link && x.owner && sameName(x.owner, me.name)); if (t && s.combat && s.combat.active && s.combat.entries.some((e) => e.id === t.id)) sendMsg({ type: 'combatRoll', tokenIds: [t.id] }); else rollWith('1d20' + sgn(c.init), 'Initiative', ev); }; // in a fight, it goes on the initiative list
   actions.append(place, init); box.append(actions);
-  const section = (title, open, fill) => { const d = el('details'); d.open = open; d.append(el('summary', '', title)); fill(d); box.append(d); };
+  const section = (title, open, fill) => { const d = el('details'); d.open = title in charOpen ? charOpen[title] : open; d.ontoggle = () => { charOpen[title] = d.open; }; d.append(el('summary', '', title)); fill(d); box.append(d); };
   const rollBtn2 = (label, bonus, what, pro) => { const b = el('button', pro ? 'pro' : ''); b.append(el('span', '', label), el('b', '', sgn(bonus))); b.title = `${what}: 1d20${sgn(bonus)} (Shift: advantage, Alt: disadvantage)`; b.onclick = (ev) => rollWith('1d20' + sgn(bonus), what, ev); return b; };
   if (c.attacks.length) section('Attacks', true, (d) => { for (const a of c.attacks) { const row = el('div', 'atk'); row.append(el('span', '', a.name + (a.dc ? ` (save DC ${a.dc})` : ''))); const h = el('button', '', 'Hit ' + a.hit.replace('1d20', '')); h.onclick = (ev) => rollWith(a.hit, a.name.slice(0, 22) + ' hit', ev); row.append(h); if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
   section('Ability checks', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.abilities) g.append(rollBtn2(a.name, a.mod, a.name + ' check')); d.append(g); });
   section('Saving throws', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.saves) g.append(rollBtn2(a.name, a.bonus, a.name + ' save', a.bonus !== (c.abilities.find((x) => x.name === a.name) || {}).mod)); d.append(g); });
   section('Skills', false, (d) => { const g = el('div', 'rolls'); for (const k of c.skills) g.append(rollBtn2(k.name, k.bonus, k.name, k.prof > 0)); d.append(g); });
-  fillGear(box, c, section, false);
+  if ((c.spells || []).length) section('Spells', true, (d) => renderSpells(d, c, el));
+  fillGear(box, c, section, false, true);
   const foot = el('div', 'row'); foot.style.marginTop = '8px';
   const refresh = el('button', '', charBusy ? 'Reading…' : '↻ Update from D&D Beyond'); refresh.disabled = charBusy; refresh.title = 'After levelling up or changing gear. Your token on this map is updated too when you click Put my token on the map.';
   refresh.onclick = () => { charBusy = true; renderChar(); sendMsg({ type: 'ddbImport', link: c.link }); };
@@ -3020,7 +3086,7 @@ function renderChar() {
   foot.append(refresh, forget); box.append(foot);
 }
 // coins, inventory and spells: in the player's panel, and in the DM's look at a character
-function fillGear(box, c, section, open) {
+function fillGear(box, c, section, open, noSpells) {
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const sec = section || ((title, op, fill) => { const d = el('details'); d.open = op; d.append(el('summary', '', title)); fill(d); box.append(d); });
   if (c.coins || (c.items && c.items.length)) sec('Coins and inventory', open, (d) => {
@@ -3038,7 +3104,8 @@ function fillGear(box, c, section, open) {
     if (!(c.items || []).length) ul.append(el('li', '', 'Nothing carried'));
     d.append(ul);
   });
-  if (c.spells && c.spells.length) sec('Spells', open, (d) => {
+  if (c.spells && c.spells.length && !noSpells) sec('Spells', open, (d) => {
+    if ((c.slots || []).length || (c.pact || []).length) { const row = el('div', 'coins'); for (const sl of [...(c.slots || []), ...(c.pact || []).map((x) => ({ ...x, pact: true }))]) { const sp = el('span'); sp.textContent = `${sl.pact ? 'Pact ' : ''}L${sl.level} ${'●'.repeat(sl.max - sl.used)}${'○'.repeat(sl.used)}`; sp.title = `${sl.max - sl.used} of ${sl.max} left`; row.append(sp); } d.append(row); }
     const ul = el('ul', 'invl'); let lvl = -1;
     for (const sp of c.spells) {
       if (sp.level !== lvl) { lvl = sp.level; ul.append(el('li', 'bag', lvl === 0 ? 'Cantrips' : 'Level ' + lvl)); }

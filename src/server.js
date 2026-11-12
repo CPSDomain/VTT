@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 const ddb = require('./ddb');
 
-const VERSION = '1.11.0';
+const VERSION = '1.12.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -487,6 +487,12 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (buf.length < 8 * 1024 * 1024) { const name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + ext; fs.mkdirSync(uploads, { recursive: true }); fs.writeFileSync(path.join(uploads, name), buf); ch.img = '/uploads/' + name; }
       }
     } catch { /* no portrait then */ }
+    // what's been spent at this table stays spent when the character is brought in again
+    const old = state.characters[u.name.toLowerCase()];
+    if (old && old.id === ch.id) {
+      for (const k of ['slots', 'pact']) for (const sl of ch[k] || []) { const o = (old[k] || []).find((x) => x.level === sl.level); if (o) sl.used = Math.min(sl.max, o.used || 0); }
+      ch.spellUses = old.spellUses || {};
+    } else ch.spellUses = {};
     const perception = ch.skills.find((s) => s.name === 'Perception');
     ch.pp = 10 + (perception ? perception.bonus : 0);
     ch.at = Date.now(); ch.player = u.name;
@@ -1275,6 +1281,48 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           .then((ch) => { send(ws, { type: 'character', character: ch }); toDMs({ type: 'characters', characters: state.characters }); toDMs({ type: 'note', text: `${u.name} brought in ${ch.name} from D&D Beyond` }); })
           .catch((e) => send(ws, { type: 'error', message: e.message }))
           .finally(() => { u.importing = false; send(ws, { type: 'characterBusy', on: false }); });
+        break;
+      }
+      // ----- 1.12: spells: slots spent, casting, rests -----
+      case 'charSlot': { // tick a slot used or free
+        if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
+        const list = msg.pact ? ch.pact : ch.slots, sl = (list || []).find((x) => x.level === int(msg.level, 0)); if (!sl) return;
+        sl.used = clamp(int(msg.used, 0), 0, sl.max);
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      case 'charCast': {
+        if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
+        const sp = (ch.spells || []).find((x) => x.name === msg.name); if (!sp) return;
+        let at = sp.level;
+        if (sp.level > 0 && sp.usesSlot && !msg.free) {
+          const list = msg.pact ? ch.pact : ch.slots, sl = (list || []).find((x) => x.level === int(msg.slot, sp.level) && x.level >= sp.level);
+          if (!sl || sl.used >= sl.max) return send(ws, { type: 'error', message: `No ${msg.pact ? 'pact' : 'level ' + int(msg.slot, sp.level)} slots left` });
+          sl.used++; at = sl.level;
+        } else if (sp.uses) {
+          const n = ch.spellUses[sp.name] || 0; if (n >= sp.uses) return send(ws, { type: 'error', message: `${sp.name}: no uses left until you rest` });
+          ch.spellUses[sp.name] = n + 1;
+        }
+        const ord = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
+        const entry = { kind: 'chat', who: u.name, text: `✨ ${ch.name.split(' ')[0]} casts ${sp.name}${at > sp.level ? ` at ${ord(at)} level` : ''}${sp.save ? ` (${sp.save})` : ''}${msg.ritual ? ' as a ritual' : ''}`, time: Date.now(), cast: true };
+        state.log.push(entry); state.log = state.log.slice(-200);
+        clients().forEach((c) => send(c, { type: 'chat', entry }));
+        // concentration shows on the caster's token
+        if (sp.conc && sc) for (const t of Object.values(sc.tokens)) if (t.owner === u.name && t.ddb === ch.link && !(t.conditions || []).includes('concentrating')) { const before = { ...t }; t.conditions = [...(t.conditions || []), 'concentrating']; tokenChanged(sc, t, before); }
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      case 'charRest': { // short: pact magic back; long: everything back, hit points full, concentration ends
+        if (u.isDM) return; const ch = charOf(u.name); if (!ch) return;
+        const long = msg.kind === 'long';
+        for (const sl of ch.pact || []) sl.used = 0;
+        if (long) { for (const sl of ch.slots || []) sl.used = 0; ch.spellUses = {}; }
+        if (long) for (const scn of Object.values(state.scenes)) for (const t of Object.values(scn.tokens)) if (t.owner === u.name && t.ddb === ch.link) {
+          const before = { ...t }; if (t.maxHp) t.hp = t.maxHp; t.tempHp = 0; t.conditions = (t.conditions || []).filter((c) => c !== 'concentrating' && c !== 'unconscious'); tokenChanged(scn, t, before);
+        }
+        const entry = { kind: 'chat', who: u.name, text: long ? `⛺ ${ch.name.split(' ')[0]} takes a long rest: hit points and spell slots restored` : `☾ ${ch.name.split(' ')[0]} takes a short rest${(ch.pact || []).length ? ': pact slots restored' : ''}`, time: Date.now(), cast: true };
+        state.log.push(entry); state.log = state.log.slice(-200); clients().forEach((c) => send(c, { type: 'chat', entry }));
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
         break;
       }
       case 'charForget': { if (u.isDM) return; delete state.characters[u.name.toLowerCase()]; send(ws, { type: 'character', character: null }); save(); break; }

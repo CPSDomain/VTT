@@ -192,7 +192,7 @@ Ctrl+Z undoes, Ctrl+Y redoes. Pan with right-drag or Space+drag, zoom with the m
 
 ## Players' characters from D&D Beyond
 
-Players can bring in their own characters: under **My character** in Tabletop Player they paste their D&D Beyond link, and **📍 Put my token on the map** places their token with portrait, hit points, initiative bonus and darkvision. Their sheet's rolls become buttons on their screen. Your PC fetches the character, so it needs the internet, and the character must be public on D&D Beyond. You see the character's AC, passive Perception and speed when you select its token, and **🎒 Inventory and spells…** shows their coins, gear and spells. You can still move, edit or delete their tokens as usual.
+Players can bring in their own characters: under **My character** in Tabletop Player they paste their D&D Beyond link, and **📍 Put my token on the map** places their token with portrait, hit points, initiative bonus and darkvision. Their sheet's rolls become buttons on their screen. Your PC fetches the character, so it needs the internet, and the character must be public on D&D Beyond. You see the character's AC, passive Perception and speed when you select its token, and **🎒 Inventory and spells…** shows their coins, gear, spells and spell slots left. Players track their own slots, cast with a button (the log shows what they cast and its save DC) and take short and long rests. You can still move, edit or delete their tokens as usual.
 
 If a character comes in wrong (a number that doesn't match D&D Beyond), what D&D Beyond sent is saved in the `dndbeyond` folder inside the data folder (**File → Open data folder**): send that file along with the report.
 
