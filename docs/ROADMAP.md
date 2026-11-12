@@ -26,21 +26,19 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.6 | New look: light and darkness with flickering fire and soft shadows, living fire, water and lava; playing over the internet with automatic port opening (UPnP) and a port of your choice; one-click updates |
 | 1.7 | New map art: natural edges between kinds of ground, detailed textures, walls with height, shaded props, rounded rock walls for caves, token rims |
 | 1.8 | Immersion: dice rolling on screen with skins (and your own picture), DM rolls kept secret, sound from the map (fires, water, doors, footsteps, blows), read-aloud text, scene title cards, spell effects, tokens that react to hits, healing and conditions |
-| 1.9 | Characters from D&D Beyond: players bring in their character, place their own token and roll from their sheet |
+| 1.9 | Characters from D&D Beyond: players bring in their character, place their own token and roll from their sheet; coins, inventory and spells (1.9.1) |
+| 1.10 | More immersion: moods (magical darkness, blood moon), lightning and earthquakes, turn banner, look here, a living map, remembered places and black-and-white darkvision, chests and traps, full-screen handouts |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
-
-### Ideas for more immersion 💬
-Not built yet, from the 1.8 list: DM effect buttons (a lightning flash with thunder, an earthquake shake, magical darkness, a blood moon), a "look here" button that turns every player's view, a turn banner with a chime, ambient life (birds, fish, rats, moths), places you've seen kept in faded colour, darkvision in black and white, traps and chests with their own animations, full-screen handouts.
 
 ### Later — more map art 📋
 Left over from the 1.7 plan:
 - **Your own asset packs (optional):** point Tabletop at a folder of PNG tiles and props you own (Forgotten Adventures, Tom Cartos and the like) and use them in the build palettes. They stay on your PC; Tabletop can't ship them.
 - **Portrait-style tokens** from uploaded art.
 
-### 1.10 — A bigger map generator 💬
+### 1.11 — A bigger map generator 🔨
 - More kinds of places, more control over the result, and maps that come ready to play: built in, no internet or API key.
 - Ideas to choose from: ships, castles, sewer networks, caverns with underground lakes, graveyards, mines with cart tracks, city blocks; buildings and dungeons with several floors (stairs between them); settings for room count and size, twisty corridors, doors, secret doors, traps and clutter; monsters for the party's level from the SRD, treasure, room names and DM notes; lighting, time of day, weather and sound set to fit.
 - **To settle first:** which of these the group wants most.

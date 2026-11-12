@@ -23,7 +23,7 @@ export const SPELLS = {
 export const LIVE_CONDITIONS = new Set(['burning', 'poisoned', 'raging', 'blessed', 'concentrating', 'frightened', 'invisible', 'hasted', 'bleeding']);
 
 export function createFx({ CELL }) {
-  const spells = [], parts = [], toks = new Map(), floats = [];
+  const spells = [], parts = [], toks = new Map(), floats = [], bursts = [];
   const now = () => performance.now() / 1000;
 
   // ---------- spells ----------
@@ -127,6 +127,34 @@ export function createFx({ CELL }) {
     g.globalCompositeOperation = 'source-over';
   }
 
+  // ---------- things on the map going off: a chest opened, a trap sprung (x, y: the square) ----------
+  function burst(kind, x, y) {
+    const cx = (x + 0.5) * CELL, cy = (y + 0.5) * CELL;
+    if (kind === 'chest') for (let i = 0; i < 26; i++) parts.push({ k: 'mote', x: cx + rand(-0.3, 0.3) * CELL, y: cy + rand(-0.2, 0.1) * CELL, vx: rand(-12, 12), vy: rand(-70, -25), r: rand(1.4, 3), life: 0, max: rand(0.7, 1.4), col: Math.random() < 0.7 ? '255,215,110' : '255,250,220' });
+    if (kind === 'trap') { for (let i = 0; i < 14; i++) { const a = rand(0, 6.28), v = rand(30, 80); parts.push({ k: 'dust', x: cx, y: cy, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: rand(0.15, 0.3) * CELL, life: 0, max: rand(0.6, 1.1) }); } }
+    bursts.push({ kind, cx, cy, t0: now() });
+  }
+  function drawBursts(g) {
+    const T = now();
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const b = bursts[i], u = T - b.t0;
+      if (u > 1.6) { bursts.splice(i, 1); continue; }
+      if (b.kind === 'chest') { const k = Math.max(0, 1 - u / 1.2), gr = g.createRadialGradient(b.cx, b.cy, 0, b.cx, b.cy, CELL * 1.2); gr.addColorStop(0, `rgba(255,210,110,${0.55 * k})`); gr.addColorStop(1, 'rgba(255,210,110,0)'); g.save(); g.globalCompositeOperation = 'lighter'; g.fillStyle = gr; g.fillRect(b.cx - CELL * 1.2, b.cy - CELL * 1.2, CELL * 2.4, CELL * 2.4); g.restore(); }
+      if (b.kind === 'trap') { // spikes shoot up, hold, and sink back
+        const up = u < 0.12 ? u / 0.12 : u < 0.9 ? 1 : Math.max(0, 1 - (u - 0.9) / 0.5);
+        if (u < 0.4) { g.fillStyle = `rgba(220,30,20,${0.4 * (1 - u / 0.4)})`; g.fillRect(b.cx - CELL / 2, b.cy - CELL / 2, CELL, CELL); }
+        g.save();
+        for (const [dx, dy] of [[-0.28, -0.25], [0.02, -0.3], [0.3, -0.22], [-0.18, 0.12], [0.16, 0.1], [-0.32, 0.32], [0.06, 0.34], [0.32, 0.3]]) {
+          const x = b.cx + dx * CELL, y = b.cy + dy * CELL + CELL * 0.12, h = CELL * 0.42 * up, w = CELL * 0.07;
+          g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.ellipse(x + 2, y + 1, w * 1.3, w * 0.6, 0, 0, 7); g.fill();
+          const gr = g.createLinearGradient(x - w, 0, x + w, 0); gr.addColorStop(0, '#5a5f66'); gr.addColorStop(0.5, '#d9dde2'); gr.addColorStop(1, '#3e4248');
+          g.fillStyle = gr; g.beginPath(); g.moveTo(x - w, y); g.lineTo(x, y - h); g.lineTo(x + w, y); g.closePath(); g.fill();
+        }
+        g.restore();
+      }
+    }
+  }
+
   // ---------- tokens ----------
   function hit(id, amount) { toks.set(id, { kind: 'hit', t0: now() }); if (amount != null) floats.push({ id, text: '−' + amount, col: '#ff6a5a', t0: now() }); }
   function heal(id, amount) { toks.set(id, { kind: 'heal', t0: now() }); if (amount != null) floats.push({ id, text: '+' + amount, col: '#6ef0a0', t0: now() }); }
@@ -184,7 +212,7 @@ export function createFx({ CELL }) {
 
   let lastT = 0;
   return {
-    spell, hit, heal, offset, under, over, tokenAlpha, lying, pool, drawFloats,
+    spell, burst, hit, heal, offset, under, over, tokenAlpha, lying, pool, drawFloats,
     // the spells and their bits, over everything on the map
     draw(g) {
       const T = now(), dt = lastT ? Math.min(0.05, T - lastT) : 0.016; lastT = T;
@@ -193,10 +221,10 @@ export function createFx({ CELL }) {
         if (t > S.k.dur) { spells.splice(i, 1); continue; }
         emit(S, t, dt); drawSpell(g, S, t);
       }
-      drawParts(g, dt);
+      drawParts(g, dt); drawBursts(g);
     },
     // is anything moving (so the map keeps drawing)
-    active: () => spells.length > 0 || parts.length > 0 || floats.length > 0 || [...toks.values()].some((r) => now() - r.t0 < 1.5),
+    active: () => spells.length > 0 || parts.length > 0 || bursts.length > 0 || floats.length > 0 || [...toks.values()].some((r) => now() - r.t0 < 1.5),
     clear() { spells.length = 0; parts.length = 0; floats.length = 0; toks.clear(); }
   };
 }

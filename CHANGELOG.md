@@ -2,6 +2,18 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.10.0] - 2026-11-12
+
+### Added
+- **Moods and moments** (🌦 Weather): **🌑 Magical darkness** sinks the whole map into black, **🩸 Blood moon** casts it red; **⚡ Lightning** flashes every screen white before the thunder rolls, **🌋 Earthquake** shakes it with a deep rumble.
+- **Turn banner:** when combat moves on, everyone sees whose turn it is; on your own turn a big "Your turn, Thorin" appears with a chime.
+- **Look here:** the DM's Shift+click with the Ping tool now glides every player's view to the spot, with a note saying the DM wants them to look.
+- **A living map:** cloud shadows drift over open country and birds fly across by day, fish swim in ponds and rivers, a rat now and then runs along a dungeon wall, and moths circle torches and lamps at dusk and night. (On **Lit and moving** only.)
+- **Places you've seen:** with fog of war and vision, areas your character explored but can't see right now stay on screen in faded grey, instead of going black.
+- **Darkvision in black and white:** what a character sees by darkvision in the dark is shown without colour, as the rules describe it.
+- **Chests and traps:** click a chest with the **Door** tool to open it (the lid flies back, gold glints, coins jingle) or close it. The DM clicks a trap with the Door tool to spring it: spikes shoot up with a snap for everyone to see.
+- **Full-screen handouts:** a handout the DM shows fills each player's screen for a moment (picture, title and text on parchment), then waits under Handouts.
+
 ## [1.9.1] - 2026-11-12
 
 ### Added

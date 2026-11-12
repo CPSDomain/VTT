@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 const ddb = require('./ddb');
 
-const VERSION = '1.9.1';
+const VERSION = '1.10.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -30,6 +30,8 @@ const AUDIO_EXT = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/ogg': '.og
 const SOUNDS = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'audio', 'catalog.json'), 'utf8')).sounds;
 const WEATHER = ['none', 'rain', 'storm', 'snow', 'fog', 'embers'];
 const TIMES = ['day', 'dawn', 'dusk', 'night'];
+const MOODS = ['none', 'darkness', 'bloodmoon']; // 1.10: a mood over the whole map
+const MOMENTS = ['lightning', 'quake']; // 1.10: one-off moments the DM sets off
 const WALL_STYLES = ['built', 'rock'];
 const MAX_AMB = 5;
 const MAX_SIDE = 200;
@@ -417,7 +419,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (u.isDM || !c.active) return c;
     const entries = c.entries.filter((e) => sc.tokens[e.id] && tokVisible(sc, sc.tokens[e.id], u));
     const turnSeen = entries.some((e) => e.id === c.turnId);
-    return { active: true, round: c.round, turnId: turnSeen ? c.turnId : null, hiddenTurn: !turnSeen && !!c.turnId, entries };
+    return { active: true, round: c.round, started: !!c.started, turnId: turnSeen ? c.turnId : null, hiddenTurn: !turnSeen && !!c.turnId, entries };
   }
   function sendCombat(sc) {
     clients().forEach((c) => {
@@ -675,6 +677,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (WEATHER.includes(m.weather)) a.weather = m.weather;
     if (m.level != null) a.level = clamp(int(m.level, 2), 1, 3);
     if (TIMES.includes(m.time)) a.time = m.time;
+    if (MOODS.includes(m.mood)) a.mood = m.mood;
     if ('sound' in m) a.sound = preset(cleanSound(m.sound));
     if ('auto' in m) a.auto = !!m.auto;
     return a;
@@ -979,6 +982,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         toScene(sc.id, { type: 'labelRemove', sceneId: sc.id, id: msg.id }); save();
         break;
 
+      case 'moment': { // lightning or an earthquake, on every screen showing this map
+        if (!u.isDM || !sc || !MOMENTS.includes(msg.kind)) return;
+        toScene(sc.id, { type: 'moment', sceneId: sc.id, kind: msg.kind });
+        break;
+      }
       // ----- ping and live ruler: passed straight on, never saved -----
       case 'ping': {
         if (!sc) return;
@@ -1017,6 +1025,17 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const px = num(msg.x, -1), py = num(msg.y, -1), cx = Math.floor(px), cy = Math.floor(py);
         if (!inside(cx, cy)) return;
         const canSeeAt = (x, y) => u.isDM || ((!fogOn(sc) || revealed(sc, x, y)) && (!visionOn(sc) || sightFor(sc, u.name)[y * sc.cols + x] > 0));
+        // chests open and close like doors; a trap is the DM's to spring, and everyone sees it go off
+        const chest = Object.values(sc.props).find((p) => p.x === cx && p.y === cy && p.kind === 'chest');
+        if (chest) {
+          if (!canSeeAt(cx, cy)) return;
+          chest.open = !chest.open;
+          toScene(sc.id, { type: 'prop', sceneId: sc.id, prop: chest });
+          toScene(sc.id, { type: 'sfx', sceneId: sc.id, name: chest.open ? 'chest-open' : 'chest-close', x: cx + 0.5, y: cy + 0.5, fx: chest.open ? 'chest' : '' });
+          save(); break;
+        }
+        const trap = u.isDM && Object.values(sc.props).find((p) => p.x === cx && p.y === cy && p.kind === 'trap');
+        if (trap) { toScene(sc.id, { type: 'sfx', sceneId: sc.id, name: 'trap', x: cx + 0.5, y: cy + 0.5, fx: 'trap' }); break; }
         const prop = Object.values(sc.props).find((p) => p.x === cx && p.y === cy && DOOR_KINDS.has(p.kind));
         if (prop) {
           if (!canSeeAt(cx, cy)) return;

@@ -264,6 +264,13 @@ const P = {
     g.fillStyle = '#c9a03a'; g.fillRect(-17, -2, 34, 4); g.fillRect(-4, -12, 3, 24); g.fillRect(1, -12, 3, 24);
     g.fillStyle = '#3a2410'; g.fillRect(-2, -1, 4, 5);
   },
+  chestopen(g) { // lid thrown back, coins and a glint inside
+    shadow(g); rr(g, -17, -4, 34, 16, 3); g.fillStyle = '#7b4a22'; g.fill(); noShadow(g);
+    g.fillStyle = '#2a170a'; g.fillRect(-14, -2, 28, 9);
+    for (const [x, y, r] of [[-8, 2, 3.2], [-2, 3, 3.4], [5, 1, 3.2], [10, 3, 2.8], [1, 0, 2.6]]) { g.fillStyle = '#e8b93a'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.fillStyle = '#fff1b0'; g.beginPath(); g.arc(x - r * 0.3, y - r * 0.3, r * 0.35, 0, 7); g.fill(); }
+    rr(g, -17, -20, 34, 14, 3); g.fillStyle = '#5e3818'; g.fill(); // the lid, open behind
+    g.fillStyle = '#c9a03a'; g.fillRect(-17, -9, 34, 3); g.fillRect(-4, -20, 3, 14); g.fillRect(1, -20, 3, 14);
+  },
   crate(g) {
     shadow(g); g.fillStyle = '#9a6b3c'; g.fillRect(-16, -16, 32, 32); noShadow(g);
     g.strokeStyle = '#5b3a1c'; g.lineWidth = 3; g.strokeRect(-14.5, -14.5, 29, 29);

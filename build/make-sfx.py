@@ -243,6 +243,26 @@ def quake():
 def thunderclap():
     return spell_lightning()
 
+def coins(n=14, d=0.9):
+    out = np.zeros(int(d * SR))
+    for k in range(n):
+        at = rng.uniform(0.0, d * 0.6) * (1 - 0.5 * k / n); p = partials(0.25, rng.uniform(2600, 4800), [1, 2.4, 3.9, 5.6], [0.06, 0.04, 0.025, 0.015], [1, 0.6, 0.35, 0.2])
+        i = int(at * SR); out[i:i + len(p)] += p[: len(out) - i] * rng.uniform(0.2, 0.7)
+    return out
+def chest_open():
+    hinge = creak(0.55, 160, 260, 0.9) * 0.8
+    return room(mix((latch(), 0, 0.6), (hinge, 0.06, 1.0), (thud(95, 0.06, 0.4), 0.6, 0.6), (coins(), 0.62, 0.55)), 0.45, 0.2, 0.6)
+def chest_close():
+    return room(mix((creak(0.25, 220, 150, 0.9), 0, 0.5), (thud(85, 0.09, 0.6), 0.24, 1.3), (latch(), 0.27, 0.7)), 0.45, 0.2, 0.5)
+def trap():
+    click = hp(noise(0.05), 2000) * env(0.05, 0.0003, 0.004)
+    snap = partials(0.6, 900, [1, 2.71, 4.3, 6.1], [0.12, 0.08, 0.05, 0.03], [1, 0.6, 0.4, 0.2]) * 0.6
+    stabs = np.zeros(int(0.5 * SR))
+    for k in range(5):
+        st = mix((bp(noise(0.06), 1200, 6000) * env(0.06, 0.0005, 0.012), 0, 1), (partials(0.3, rng.uniform(1300, 1900), [1, 2.4, 3.8], [0.08, 0.05, 0.03], [1, 0.4, 0.2]), 0, 0.3))
+        i = int((0.02 + k * 0.025) * SR); stabs[i:i + len(st)] += st[: len(stabs) - i]
+    return room(mix((click, 0, 1.0), (swish(0.12, 800, 4000), 0.04, 0.6), (stabs, 0.12, 1.2), (snap, 0.12, 0.7), (thud(70, 0.1, 0.5), 0.12, 0.8)), 0.5, 0.22, 0.6)
+
 # ---------------- loops from things on the map ----------------
 def loopify(x, fade=1.0):  # crossfade the end into the start
     n = int(fade * SR); x = x.copy(); a = np.linspace(0, 1, n)[:, None] if x.ndim == 2 else np.linspace(0, 1, n)
@@ -273,6 +293,7 @@ SFX = [('dice-' + str(k), lambda k=k: dice_hit(k), -24) for k in range(1, 5)] + 
     ('spell-force', spell_force, -18), ('spell-psychic', spell_psychic, -21), ('heal', heal, -21),
     ('nat20', nat20, -19), ('nat1', nat1, -20),
     *[(f'step-{kind}-{k}', (lambda f=f, k=k: f(k)), lv) for kind, f, lv in [('stone', step_stone, -27), ('wood', step_wood, -26), ('grass', step_grass, -29), ('dirt', step_dirt, -28), ('water', step_water, -26)] for k in (1, 2, 3)],
+    ('chest-open', chest_open, -22), ('chest-close', chest_close, -22), ('trap', trap, -18),
     ('transition', transition, -24), ('page', page, -24), ('turn', turn, -24), ('quake', quake, -18), ('thunderclap', thunderclap, -16),
 ]
 LOOPS = [('loop-torch', torch_loop, -24), ('loop-lava', lava_loop, -23)]

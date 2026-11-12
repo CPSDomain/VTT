@@ -9,6 +9,7 @@ import { createLighting } from './lighting.js';
 import { buildChunk, drawTokenRing } from './art2.js';
 import { createDice, SKINS, skinById, defaultSkin } from './dice3d.js';
 import { createFx, SPELLS, LIVE_CONDITIONS } from './fx.js';
+import { createLife } from './life.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -85,7 +86,7 @@ function onMessage(msg) {
     case 'doors': if (s) { s.doors = msg.doors; } break;
     case 'doorFlash': pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.open ? 'Door opened' : 'Door closed', dm: false, t0: performance.now() }); break;
     case 'handouts': handouts = msg.handouts; renderHandouts(); break;
-    case 'sfx': if (s && msg.sceneId === editing) { const at = hear(s, msg.x, msg.y, 20, 0.15); snd.effect(msg.name, { vol: at.vol, pan: at.pan, rate: 0.95 + Math.random() * 0.1 }); } break;
+    case 'sfx': if (s && msg.sceneId === editing) { const at = hear(s, msg.x, msg.y, 20, 0.15); snd.effect(msg.name, { vol: at.vol, pan: at.pan, rate: 0.95 + Math.random() * 0.1 }); if (msg.fx) { efx.burst(msg.fx, Math.floor(msg.x), Math.floor(msg.y)); draw(); } } break;
     case 'sound': soundNow = msg.sound; snd.apply(msg.sound, msg.now); renderSound(); break;
     case 'audio': audioLib = msg.audio; renderSound(); break;
     case 'encounters': encounters = msg.encounters; renderEncLoad(); break;
@@ -93,7 +94,7 @@ function onMessage(msg) {
       const i = handouts.findIndex((h) => h.id === msg.handout.id);
       if (i >= 0) handouts[i] = msg.handout; else handouts.push(msg.handout);
       renderHandouts();
-      if (msg.show) { openHandout(msg.handout); }
+      if (msg.show) { if (me.isDM) openHandout(msg.handout); else handoutFull(msg.handout); }
       break;
     }
     case 'handoutRemove': handouts = handouts.filter((h) => h.id !== msg.id); renderHandouts(); if (viewing === msg.id) $('handoutView').hidden = true; break;
@@ -103,17 +104,18 @@ function onMessage(msg) {
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
     case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (myChar && msg.token.ddb === myChar.link) renderChar(); if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
-    case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); } } break;
+    case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); turnBanner(s); } } break;
+    case 'moment': if (msg.sceneId === editing && !document.hidden) moment(msg.kind); break;
     case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); renderInit(); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
     case 'prop': if (s) s.props[msg.prop.id] = msg.prop; break;
-    case 'fog': if (s) { const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = msg.reveal ? 1 : 0; fogDirty = true; if (fogTool === 'room' && hover) fogPreview = roomCells(s, hover); } break;
+    case 'fog': if (s) { const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = msg.reveal ? 1 : 0; fogDirty = true; fogRevN++; if (fogTool === 'room' && hover) fogPreview = roomCells(s, hover); } break;
     case 'fogReveal': // player: an area came into view, with what's in it
       if (s) {
         const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = 1;
         Object.assign(s.tiles, msg.tiles); msg.props.forEach((p) => { s.props[p.id] = p; }); msg.tokens.forEach((t) => { s.tokens[t.id] = t; });
         (msg.labels || []).forEach((l) => { (s.labels = s.labels || {})[l.id] = l; });
-        fogDirty = true;
+        fogDirty = true; fogRevN++;
       }
       break;
     case 'fogHide': // player: an area was covered again; forget what was there
@@ -123,7 +125,7 @@ function onMessage(msg) {
         for (const p of Object.values(s.props)) if (set.has(p.x + ',' + p.y)) delete s.props[p.id];
         for (const l of Object.values(s.labels || {})) if (set.has(Math.floor(l.x) + ',' + Math.floor(l.y))) delete s.labels[l.id];
         msg.tokens.forEach((id) => { delete s.tokens[id]; if (selected === id) select(null); });
-        fogDirty = true;
+        fogDirty = true; fogRevN++;
       }
       break;
     case 'propRemove': if (s) delete s.props[msg.propId]; break;
@@ -133,7 +135,7 @@ function onMessage(msg) {
     case 'labelRemove': if (s && s.labels) { delete s.labels[msg.id]; if (labelEdit && labelEdit.id === msg.id) closeLabelEditor(); } break;
     case 'ping':
       pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.who, dm: msg.dm, t0: performance.now() });
-      if (msg.focus && msg.sceneId === editing) centreOnSquare(msg.x, msg.y);
+      if (msg.focus && msg.sceneId === editing) { centreOnSquare(msg.x, msg.y, true); if (!me.isDM) toast('The DM wants you to look here', 2500); }
       break;
     case 'measure': {
       const key = (msg.dm ? 'dm:' : 'p:') + msg.who;
@@ -313,7 +315,7 @@ function renderPlayers() {
 function sceneChanged(refit) {
   const s = sc();
   if (!s) return;
-  fogDirty = true;
+  fogDirty = true; fogRevN++;
   if (refit) { selTpl = null; tplDraft = null; ruler = null; if (labelEdit) closeLabelEditor(); }
   renderChatTargets();
   renderInit(); renderEditor();
@@ -430,7 +432,8 @@ const staticLayer = document.createElement('canvas');
 function draw() { mapRev++; if (!frame) frame = requestAnimationFrame(render); }
 function tick() { animTimer = 0; if (!frame) frame = requestAnimationFrame(render); }
 const lighting = createLighting({ CELL, VIS: window.TabletopVision });
-const efx = createFx({ CELL }); // spells, hits, heals and condition looks
+const efx = createFx({ CELL });
+const life = createLife({ CELL }); let lifeT = 0; // spells, hits, heals and condition looks
 const fxMode = () => (prefs.fx === 'still' || prefs.fx === 'off' ? prefs.fx : 'full');
 // the parts of the map that don't move, for the current view: drawn again only after a change
 // ---------- the 1.7 map art, in blocks of 16×16 squares (see art2.js) ----------
@@ -607,7 +610,7 @@ function classicStatic(g, s, x0, y0, x1, y1, lit) {
   // props (torch light first so it sits under everything else)
   const props = Object.values(s.props).filter((p) => p.x >= x0 - 1 && p.x <= x1 + 1 && p.y >= y0 - 1 && p.y <= y1 + 1)
     .sort((a, b) => (a.kind === 'torch' ? -1 : 0) - (b.kind === 'torch' ? -1 : 0) || a.y - b.y);
-  for (const p of props) drawProp(g, p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? { ...p, kind: 'dooropen' } : p, { lit });
+  for (const p of props) drawProp(g, p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? { ...p, kind: 'dooropen' } : p.open && p.kind === 'chest' ? { ...p, kind: 'chestopen' } : p, { lit });
 
   // grid
   if (s.showGrid !== false) {
@@ -645,16 +648,20 @@ function render() {
     lighting.prepare(s);
     lighting.step(s, t, cells, moving, amb, view.zoom);
     lighting.drawWater(ctx, s, t, cells, moving);
+    const lifeOn = moving && mode !== 'build', ldt = lifeT ? Math.min(0.1, t - lifeT) : 0.03; lifeT = t;
+    if (lifeOn) life.under(ctx, s, cells, t, ldt, (s.atmo && s.atmo.time) || 'day');
     lighting.drawLitParticles(ctx);
     if (!lighting.isDay(amb)) lighting.applyLight(ctx, s, t, view, dpr, canvas.width, canvas.height, me.isDM ? null : sightNow(s), moving, amb);
     ctx.setTransform(view.zoom * dpr, 0, 0, view.zoom * dpr, view.x * dpr, view.y * dpr);
     lighting.drawEmissive(ctx, s, t, cells, moving, amb, view.zoom);
+    if (lifeOn) life.over(ctx, s, cells, t, ldt, (s.atmo && s.atmo.time) || 'day', !lighting.isDay(amb));
   } else {
     // the classic look: time of day colours the map, lights drawn as pools
     const tint = s.atmo && TINT[s.atmo.time];
     if (tint) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, Hh); ctx.restore(); drawLightPools(s, s.atmo.time); }
     drawTokenLights(s);
   }
+  drawMood(s, t);
   drawVision(s);
   drawFog(s);
   drawTemplates(s);
@@ -732,7 +739,7 @@ function render() {
   drawToolPreview(s);
   weather.update();
   // fire flickers and water moves: keep drawing, about 30 times a second, while there's some in view
-  if (!animTimer && (efx.active() || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
+  if (!animTimer && (efx.active() || (s.atmo && s.atmo.mood && s.atmo.mood !== 'none' && moving) || (lit && moving && mode !== 'build' && life.active(s, (s.atmo && s.atmo.time) || 'day', amb && !lighting.isDay(amb))) || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
 }
 
 function drawSelection(s) {
@@ -767,13 +774,14 @@ function drawSelection(s) {
 const fogCache = new WeakMap();
 let fogDirty = true, fogMask = null, fogTool = null, fogPreview = null, fogStroke = null;
 const fogOn = (s) => !!(s && s.fog && s.fog.on);
+let fogRevN = 0; // goes up whenever fog changes, so the remembered areas are worked out again
 function fogArr(s) {
   let a = fogCache.get(s);
   if (!a || a.length !== s.cols * s.rows) {
     a = new Uint8Array(s.cols * s.rows);
     const d = s.fog && s.fog.data;
     if (d) { const bin = atob(d); if (bin.length === a.length) for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); }
-    fogCache.set(s, a); fogDirty = true;
+    fogCache.set(s, a); fogDirty = true; fogRevN++;
   }
   return a;
 }
@@ -870,7 +878,7 @@ function fogCells(s, cells, reveal) {
   if (reveal !== fogPendingReveal) flushFog();
   fogPendingReveal = reveal;
   for (const [x, y] of cells) { const i = y * s.cols + x; if (a[i] !== v) { a[i] = v; fogPending.push([x, y]); } }
-  fogDirty = true;
+  fogDirty = true; fogRevN++;
   if (!fogTimer) fogTimer = setTimeout(flushFog, 60);
 }
 function flushFog() {
@@ -979,19 +987,36 @@ function drawVision(s) {
   if (!me.isDM) previewSight = null; else if (!S) previewSight = null;
   if (!S || S.length !== s.cols * s.rows) return;
   const P = 2, Z = 4;
-  if (!visionMask || visionMask.src !== S) {
+  // 1.10: places explored before but out of sight now are remembered, faded and grey; what darkvision shows in the
+  // dark is in black and white, as the rules describe it. Both are only looks: what's seen is still decided as before.
+  const fogOn = s.fog && s.fog.on, F = fogOn ? fogArr(s) : null;
+  if (!visionMask || visionMask.src !== S || visionMask.fogRev !== fogRevN) {
+    let L = null; try { L = VIS && s.vision.ambient !== 'bright' ? VIS.lightMap(s, VIS.blockers(s)) : null; } catch { L = null; }
     const w = (s.cols + 2 * P) * Z, h = (s.rows + 2 * P) * Z, c1 = document.createElement('canvas'); c1.width = w; c1.height = h;
     const g = c1.getContext('2d'); g.fillStyle = 'rgba(6,6,10,.8)'; g.fillRect(0, 0, w, h);
+    const grey = new Path2D(), mem = new Path2D(); let anyGrey = false, anyMem = false;
     for (let y = 0; y < s.rows; y++) for (let x = 0; x < s.cols; x++) {
-      const v = S[y * s.cols + x]; if (!v) continue;
+      const i = y * s.cols + x, v = S[i];
+      if (!v) {
+        if (F && F[i] && s.vision.explore !== false) { g.clearRect((x + P) * Z, (y + P) * Z, Z, Z); g.fillStyle = 'rgba(8,8,14,.35)'; g.fillRect((x + P) * Z, (y + P) * Z, Z, Z); mem.rect(x * CELL, y * CELL, CELL, CELL); anyMem = true; }
+        continue;
+      }
       g.clearRect((x + P) * Z, (y + P) * Z, Z, Z);
-      if (v === 1) { g.fillStyle = 'rgba(10,12,30,.42)'; g.fillRect((x + P) * Z, (y + P) * Z, Z, Z); }
+      if (v === 1) {
+        if (L && L[i] === 0) { grey.rect(x * CELL, y * CELL, CELL, CELL); anyGrey = true; g.fillStyle = 'rgba(10,12,30,.28)'; } // darkvision in the dark
+        else g.fillStyle = 'rgba(10,12,30,.42)';
+        g.fillRect((x + P) * Z, (y + P) * Z, Z, Z);
+      }
     }
     const c2 = document.createElement('canvas'); c2.width = w; c2.height = h;
     const g2 = c2.getContext('2d'); g2.filter = 'blur(1.2px)'; g2.drawImage(c1, 0, 0);
-    visionMask = c2; visionMask.src = S;
+    visionMask = c2; visionMask.src = S; visionMask.fogRev = fogRevN; visionMask.grey = anyGrey ? grey : null; visionMask.mem = anyMem ? mem : null;
   }
   ctx.save(); ctx.imageSmoothingEnabled = true;
+  if (visionMask.mem) { // remembered: the map as it was seen, without the light, in grey
+    ctx.save(); ctx.clip(visionMask.mem); const m = ctx.getTransform(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.filter = 'grayscale(1) brightness(.42)'; ctx.drawImage(staticLayer, 0, 0); ctx.filter = 'none'; ctx.setTransform(m); ctx.restore();
+  }
+  if (visionMask.grey) { ctx.save(); ctx.clip(visionMask.grey); ctx.globalCompositeOperation = 'saturation'; ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, s.cols * CELL, s.rows * CELL); ctx.restore(); }
   ctx.drawImage(visionMask, -P * CELL, -P * CELL, (s.cols + 2 * P) * CELL, (s.rows + 2 * P) * CELL);
   ctx.restore();
 }
@@ -1331,6 +1356,17 @@ function openHandout(h) {
   if (h.img) $('hvImg').src = h.img; else $('hvImg').removeAttribute('src');
   $('handoutView').hidden = false;
 }
+// a handout the DM shows: it takes over the whole screen for a moment, then waits under Handouts
+function handoutFull(h) {
+  const el = $('handoutFull'); viewing = h.id;
+  el.querySelector('.hf-title').textContent = h.title || '';
+  const im = el.querySelector('img'); if (h.img) im.src = h.img; else im.removeAttribute('src');
+  el.querySelector('.hf-text').textContent = h.text || '';
+  el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  snd.effect('page', { vol: 0.8 });
+}
+$('handoutFull').onclick = () => { const el = $('handoutFull'); el.classList.remove('show'); setTimeout(() => { el.hidden = true; }, 600); };
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('handoutFull').hidden) $('handoutFull').onclick(); });
 function editHandout(h) {
   hEdit = h ? { ...h } : { title: '', text: '', img: null, to: 'all' };
   $('hmTitle').textContent = h ? 'Edit handout' : 'New handout';
@@ -1939,9 +1975,13 @@ function centreOn(t) {
   const sx = view.x + cx * view.zoom, sy = view.y + cy * view.zoom;
   if (sx < 60 || sy < 60 || sx > r.width - 60 || sy > r.height - 60) { view.x = r.width / 2 - cx * view.zoom; view.y = r.height / 2 - cy * view.zoom; draw(); }
 }
-function centreOnSquare(x, y) {
-  const r = canvas.getBoundingClientRect();
-  view.x = r.width / 2 - x * CELL * view.zoom; view.y = r.height / 2 - y * CELL * view.zoom; draw();
+function centreOnSquare(x, y, glide) {
+  const r = canvas.getBoundingClientRect(), tx = r.width / 2 - x * CELL * view.zoom, ty = r.height / 2 - y * CELL * view.zoom;
+  if (!glide) { view.x = tx; view.y = ty; draw(); return; }
+  // "look here": the view glides over, so everyone sees where it went
+  const fx0 = view.x, fy0 = view.y, t0 = performance.now(), D = 700;
+  const step = () => { const u = Math.min(1, (performance.now() - t0) / D), e = u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; view.x = fx0 + (tx - fx0) * e; view.y = fy0 + (ty - fy0) * e; draw(); if (u < 1) requestAnimationFrame(step); };
+  requestAnimationFrame(step);
 }
 // Everyone players can see, plus every monster (the DM decides who's actually in the fight)
 const allTokenIds = () => Object.values(sc().tokens).map((t) => t.id);
@@ -3008,6 +3048,43 @@ function openCharSheet(c) {
   b.append(p); fillGear(b, c, null, true);
   $('charModal').hidden = false;
 }
+// ---------- moods and moments the DM sets off ----------
+// magical darkness: everything sinks into black, light and all, with slow smoke at the edges; blood moon: a red cast
+function drawMood(s, t) {
+  const m = s.atmo && s.atmo.mood; if (!m || m === 'none') return;
+  const W = s.cols * CELL, H = s.rows * CELL;
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
+  if (m === 'darkness') {
+    ctx.fillStyle = 'rgba(4,2,8,.78)'; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 7; i++) { const x = ((i * 0.37 + t * 0.012 * (i % 2 ? 1 : -1)) % 1 + 1) % 1 * W, y = ((i * 0.61 + t * 0.008) % 1) * H, r = CELL * (4 + (i % 3)); const g = ctx.createRadialGradient(x, y, 0, x, y, r); g.addColorStop(0, 'rgba(20,6,30,.35)'); g.addColorStop(1, 'rgba(20,6,30,0)'); ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2); }
+  } else if (m === 'bloodmoon') {
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = 'rgb(200,70,62)'; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = `rgba(120,10,10,${0.12 + 0.04 * Math.sin(t * 0.8)})`; ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
+}
+function moment(kind) {
+  if (kind === 'lightning') {
+    const f = $('flash'); f.hidden = false; f.className = ''; void f.offsetWidth; f.className = 'go';
+    setTimeout(() => { f.hidden = true; }, 1400);
+    snd.effect('thunderclap', { vol: 0.9, delay: 0.5 + Math.random() * 0.6 });
+  } else if (kind === 'quake') {
+    const b = $('board'); b.classList.remove('quake'); void b.offsetWidth; b.classList.add('quake'); setTimeout(() => b.classList.remove('quake'), 3000);
+    snd.effect('quake', { vol: 1 });
+  }
+}
+// whose turn it is: a banner across the top, bigger (with a chime) when it's yours
+let lastTurn = null, turnTimer = 0;
+function turnBanner(s) {
+  const c = s && s.combat; const id = c && c.active && c.started ? (c.turnId || (c.hiddenTurn ? 'unseen:' + c.round : null)) : null;
+  if (id === lastTurn) return; lastTurn = id; if (!id) return;
+  const t = s.tokens[id], el = $('turnBanner');
+  const mine = t && t.owner && sameName(t.owner, me.name);
+  el.textContent = !t ? 'Something unseen is taking its turn…' : mine ? `Your turn, ${t.label}` : `${t.hidden && !me.isDM ? 'Someone' : t.label}'s turn`;
+  el.className = mine ? 'mine' : ''; el.hidden = false; void el.offsetWidth; el.classList.add('show');
+  if (mine) snd.effect('turn', { vol: 0.8 });
+  clearTimeout(turnTimer); turnTimer = setTimeout(() => { el.classList.remove('show'); turnTimer = setTimeout(() => { el.hidden = true; }, 500); }, mine ? 3200 : 2000);
+}
 // ---------- the scene and the story ----------
 // a player's screen fades to black and names the new place, then fades in on it
 let titleTimer = 0;
@@ -3244,11 +3321,12 @@ const weather = createWeather($('wx'), () => {
 });
 function renderWxPop() {
   const a = atmoOf(sc());
-  $('wxBtn').classList.toggle('on', a.weather !== 'none' || a.time !== 'day');
+  $('wxBtn').classList.toggle('on', a.weather !== 'none' || a.time !== 'day' || (a.mood && a.mood !== 'none'));
   if ($('wxPop').hidden) return;
   document.querySelectorAll('#wxKinds button').forEach((b) => b.classList.toggle('on', b.dataset.wx === a.weather));
   document.querySelectorAll('#wxLevels button').forEach((b) => { b.classList.toggle('on', +b.dataset.lv === a.level); b.disabled = a.weather === 'none'; });
   document.querySelectorAll('#wxTimes button').forEach((b) => b.classList.toggle('on', b.dataset.tm === a.time));
+  document.querySelectorAll('#wxMoods button').forEach((b) => b.classList.toggle('on', b.dataset.md === (a.mood || 'none')));
   const m = MATCH[a.weather] || MATCH[a.time];
   $('wxSound').disabled = !m || soundNow.amb.some((x) => x.id === m);
   $('wxSound').textContent = m ? `▶ Play matching sound: ${soundName(m)}` : '▶ Play matching sound';
@@ -3258,6 +3336,9 @@ $('wxClose').onclick = () => { $('wxPop').hidden = true; };
 document.querySelectorAll('#wxKinds button').forEach((b) => b.onclick = () => setAtmo({ weather: b.dataset.wx }));
 document.querySelectorAll('#wxLevels button').forEach((b) => b.onclick = () => setAtmo({ level: +b.dataset.lv }));
 document.querySelectorAll('#wxTimes button').forEach((b) => b.onclick = () => setAtmo({ time: b.dataset.tm }));
+document.querySelectorAll('#wxMoods button').forEach((b) => b.onclick = () => setAtmo({ mood: b.dataset.md }));
+$('wxLightning').onclick = () => sendMsg({ type: 'moment', sceneId: editing, kind: 'lightning' });
+$('wxQuake').onclick = () => sendMsg({ type: 'moment', sceneId: editing, kind: 'quake' });
 $('wxSound').onclick = () => {
   const a = atmoOf(sc()), m = MATCH[a.weather] || MATCH[a.time]; if (!m) return;
   const n = cleanNow(soundNow); if (n.amb.some((x) => x.id === m)) return;

@@ -267,6 +267,17 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 **Scene changes.** When you show players a different map, their screens fade to black and show its name, then fade in on the new place. Name your maps for it ("The Drowned Hall", "Tomb of the Ash King").
 
+## Moods, moments and the living map
+
+- **Moods** (🌦 Weather → Mood): **🌑 Darkness** sinks the whole map into black, **🩸 Blood moon** casts it red. They stay until you set **Normal**.
+- **Moments** (🌦 Weather → Moments): **⚡ Lightning** flashes every screen white, then thunder; **🌋 Earthquake** shakes everyone's map with a rumble.
+- **Look here:** Shift+click with the Ping tool glides every player's view to that spot.
+- **Turn banner:** each time you press **Next turn**, everyone sees whose turn it is; the player whose turn it is gets a big banner and a chime.
+- **Chests and traps:** with the **Door** tool, click a chest to open or close it (players can too, if they can see it). Click a trap to spring it: everyone sees the spikes and hears the snap, even though the trap itself stays hidden.
+- **Showing a handout** fills each player's screen with it for a moment; they click to close it and it waits under Handouts.
+- **The living map** (players on **Lit and moving**): clouds and birds over open country by day, fish in water, rats along dungeon walls, moths round lights at night.
+- **With fog of war and vision**, places a player's character has explored but can't see right now stay visible in faded grey, and darkvision in the dark shows in black and white.
+
 ## Spells and hits
 
 - **Spell effects:** with the **Spell** tool, pick an effect in the bar (🔥 Fire, ⚡ Lightning, ❄ Cold, 🧪 Acid, 💥 Thunder, 💀 Necrotic, ✨ Radiant, ☠ Poison, 🔮 Force, 🧠 Psychic, 💚 Healing) before placing a template. It goes off for everyone with its sound: a fireball bursts and burns, lightning crackles along its line, cold frosts the cone. Click a template and **Cast** to set it off again. Players can do the same with theirs.

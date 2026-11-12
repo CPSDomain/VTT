@@ -340,7 +340,7 @@ export function buildStatic(sc, R, opts) {
   // 5. props
   const props = Object.values(sc.props).sort((a, b) => a.y - b.y);
   for (const p of props) {
-    const kind = p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? 'dooropen' : p.kind;
+    const kind = p.open && (p.kind === 'door' || p.kind === 'doubledoor') ? 'dooropen' : p.open && p.kind === 'chest' ? 'chestopen' : p.kind;
     if (opts.props) {
       const sp = propSprite(kind, p.rot || 0, R), x0 = (p.x - 1) * R, y0 = (p.y - 1) * R;
       if (sp.sh) { g.save(); g.globalAlpha = 0.42; g.drawImage(sp.sh, x0 + R * 0.07, y0 + R * 0.11); g.restore(); }

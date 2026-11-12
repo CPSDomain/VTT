@@ -362,6 +362,26 @@
   #narration.long .nr-text { text-align:left; }
   .entry.narrate { border-left:3px solid #b8944e; }
   .entry.narrate .say { font-family:Georgia, serif; font-style:italic; }
+  #flash { position:absolute; inset:0; z-index:7; pointer-events:none; background:#eef4ff; opacity:0; }
+  #flash.go { animation:flash 1.3s ease-out; }
+  @keyframes flash { 0% { opacity:0 } 4% { opacity:.92 } 12% { opacity:.15 } 20% { opacity:.75 } 34% { opacity:.05 } 42% { opacity:.3 } 100% { opacity:0 } }
+  #board.quake canvas#c, #board.quake canvas#wx { animation:quake 2.8s linear; }
+  @keyframes quake { 0%,100% { transform:none } 5% { transform:translate(-7px,4px) rotate(-.3deg) } 10% { transform:translate(8px,-5px) } 15% { transform:translate(-9px,-3px) rotate(.3deg) } 20% { transform:translate(7px,6px) } 25% { transform:translate(-8px,2px) } 30% { transform:translate(9px,-4px) rotate(-.2deg) } 35% { transform:translate(-6px,5px) } 40% { transform:translate(7px,-6px) } 45% { transform:translate(-8px,-2px) rotate(.2deg) } 50% { transform:translate(6px,4px) } 55% { transform:translate(-5px,-3px) } 60% { transform:translate(5px,3px) } 70% { transform:translate(-4px,2px) } 80% { transform:translate(3px,-2px) } 90% { transform:translate(-2px,1px) } }
+  #turnBanner { position:absolute; left:50%; top:62px; transform:translate(-50%, -12px); z-index:6; pointer-events:none; padding:7px 22px; border-radius:20px; background:rgba(14,12,10,.85); color:#efe2c4; font:600 15px Georgia, serif; border:1px solid rgba(217,176,76,.5); opacity:0; transition:opacity .35s, transform .35s; white-space:nowrap; }
+  #turnBanner.show { opacity:1; transform:translate(-50%, 0); }
+  #turnBanner.mine { top:40%; padding:14px 36px; font-size:30px; border:2px solid #d9b04c; box-shadow:0 0 40px rgba(217,176,76,.35); border-radius:12px; }
+  #turnBanner[hidden], #flash[hidden] { display:none; }
+  #handoutFull { position:fixed; inset:0; z-index:40; background:radial-gradient(ellipse at center, rgba(20,16,12,.92), rgba(0,0,0,.97)); display:flex; align-items:center; justify-content:center; cursor:pointer; opacity:0; transition:opacity .6s ease; }
+  #handoutFull.show { opacity:1; }
+  #handoutFull[hidden] { display:none; }
+  #handoutFull .hf-in { display:flex; flex-direction:column; align-items:center; gap:16px; max-width:min(1100px, 92vw); transform:scale(.97); transition:transform .8s ease; }
+  #handoutFull.show .hf-in { transform:none; }
+  #handoutFull .hf-title { font:600 clamp(22px, 3vw, 36px)/1.2 Georgia, serif; color:#efe2c4; text-align:center; letter-spacing:.03em; }
+  #handoutFull img { max-width:100%; max-height:70vh; border-radius:4px; box-shadow:0 20px 70px rgba(0,0,0,.8); }
+  #handoutFull img:not([src]) { display:none; }
+  #handoutFull .hf-text { max-width:720px; max-height:30vh; overflow:auto; padding:16px 24px; border-radius:6px; background:radial-gradient(ellipse at 50% 40%, #f3e6c6 0%, #e6d2a6 75%, #cdb07a 100%); color:#3a2a14; font:17px/1.6 Georgia, serif; white-space:pre-wrap; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+  #handoutFull .hf-text:empty { display:none; }
+  #handoutFull .hf-hint { color:rgba(239,226,196,.45); font-size:12px; }
   canvas#diceLayer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:6; }
   .skins { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; padding:0 16px; }
   .skins .tile { border:2px solid transparent; cursor:pointer; }
@@ -559,6 +579,8 @@
     <canvas id="diceLayer"></canvas>
     <div id="titleCard" hidden><div class="tc-in"><div class="tc-rule"></div><div class="tc-name"></div><div class="tc-rule"></div></div></div>
     <div id="narration" hidden title="Click to close"><div class="nr-text"></div></div>
+    <div id="flash" hidden></div>
+    <div id="turnBanner" hidden></div>
     <button id="soundBlocked" hidden>🔊 Click to hear the table's sound</button>
     <div id="status">Connecting…</div>
     <div id="fogBar" class="dm-only">
@@ -582,6 +604,10 @@
       <div class="hpl" style="margin-top:10px">Time of day</div>
       <div class="wxseg" id="wxTimes"><button data-tm="day">☀️ Day</button><button data-tm="dawn">🌅 Dawn</button><button data-tm="dusk">🌇 Dusk</button><button data-tm="night">🌙 Night</button></div>
       <div class="row"><button id="wxSound" title="Add the matching ambience to what's playing">▶ Play matching sound</button></div>
+      <div class="hpl" style="margin-top:10px">Mood</div>
+      <div class="wxseg" id="wxMoods"><button data-md="none">Normal</button><button data-md="darkness" title="Magical darkness: everything sinks into black">🌑 Darkness</button><button data-md="bloodmoon" title="A red cast over everything">🩸 Blood moon</button></div>
+      <div class="hpl" style="margin-top:10px">Moments</div>
+      <div class="row"><button id="wxLightning" title="A lightning flash, then thunder, on every screen">⚡ Lightning</button><button id="wxQuake" title="The ground shakes on every screen">🌋 Earthquake</button></div>
       <div class="hint">Players see this on this map. It's only a look: what characters can see still follows 👁 Vision (set the light to Dark for a real night).</div>
     </div>
     <div id="visionPop" class="pop dm-only" hidden>
@@ -598,7 +624,7 @@
       <button data-tt="ruler" title="Ruler: drag to measure distance (R)"><span>📏</span>Ruler</button>
       <button data-tt="template" title="Spell templates: cone, sphere, cube, line, cylinder (T)"><span>🔥</span>Spell</button>
       <button data-tt="door" title="Door: click a door to open or close it (D)"><span>🚪</span>Door</button>
-      <button data-tt="ping" title="Ping: click to flash a spot for everyone (P, or Alt+click with any tool)"><span>📍</span>Ping</button>
+      <button data-tt="ping" title="Ping: click to flash a spot for everyone (P, or Alt+click with any tool). DM: Shift+click to turn everyone's view there (look here)"><span>📍</span>Ping</button>
       <button data-tt="label" class="dm-only" title="Labels and DM notes on the map (L)"><span>🏷️</span>Label</button>
     </div>
     <div id="tplPop" class="pop" hidden>
@@ -796,6 +822,7 @@
     </div>
   </div>
 </div>
+<div id="handoutFull" hidden title="Click to close (it stays in your handouts)"><div class="hf-in"><div class="hf-title"></div><img alt=""><div class="hf-text"></div><div class="hf-hint">Click anywhere to close · it stays under Handouts</div></div></div>
 <div class="modal" id="handoutView" hidden>
   <div class="dialog">
     <div class="dhead"><h2 style="margin:0" id="hvTitle"></h2><div class="spacer"></div><button class="close" data-close>✕</button></div>

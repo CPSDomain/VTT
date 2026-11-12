@@ -39,6 +39,13 @@ You get your portrait, hit points, AC, speed, initiative and darkvision, and a b
 - **↻ Update from D&D Beyond** after you level up, spend gold or change gear.
 - Hit points you lose at the table stay at the table: they don't go back to D&D Beyond.
 
+## What you'll see
+
+- **Your turn:** in combat, a banner says whose turn it is, and a big one with a chime says when it's yours.
+- **Places you've been** stay on your map in faded grey while your character can't see them; what you see by **darkvision** in the dark is in black and white.
+- **Chests:** click one with the **Door** tool to open it.
+- **Handouts** the DM shows fill your screen; click to close, and find them again under **Handouts**.
+
 ## Table tools
 
 The bar on the left of the map:
