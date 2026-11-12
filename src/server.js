@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 const ddb = require('./ddb');
 
-const VERSION = '1.9.0';
+const VERSION = '1.9.1';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -466,7 +466,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   const charOf = (name) => state.characters[String(name).toLowerCase()] || null;
   function viewFor(u) {
     const base = { diceSkin: skinOf(u.name), character: u.isDM ? null : charOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
-    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
+    if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, characters: state.characters, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
     u.view = viewOf(u);
     return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
   }
@@ -829,7 +829,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           e.init = r.total;
           // monsters' rolls stay between the DM and the dice
           const who = u.isDM && !t.owner ? 'DM' : u.name;
-          const entry = { who, label: t.label === who ? 'Initiative' : `${t.label} · Initiative`, expr: '1d20' + (b ? (b > 0 ? '+' : '') + b : ''), ...r, private: u.isDM && !t.owner, time: Date.now() };
+          const entry = { who, label: t.label === who ? 'Initiative' : `${t.label} · Initiative`, expr: '1d20' + (b ? (b > 0 ? '+' : '') + b : ''), ...r, private: u.isDM && !t.owner, time: Date.now(), skin: skinOf(u.name) };
+          if (u.isDM) delete entry.dice; // a whole room of monsters rolling at once stays in the log
           state.log.push(entry);
           clients().forEach((cl) => canSee(cl.user, entry) && send(cl, { type: 'roll', entry }));
         }
@@ -1233,7 +1234,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (u.importing) return send(ws, { type: 'error', message: 'Still reading your character…' });
         u.importing = true; send(ws, { type: 'characterBusy', on: true });
         importCharacter(u, String(msg.link || '').slice(0, 300))
-          .then((ch) => { send(ws, { type: 'character', character: ch }); toDMs({ type: 'note', text: `${u.name} brought in ${ch.name} from D&D Beyond` }); })
+          .then((ch) => { send(ws, { type: 'character', character: ch }); toDMs({ type: 'characters', characters: state.characters }); toDMs({ type: 'note', text: `${u.name} brought in ${ch.name} from D&D Beyond` }); })
           .catch((e) => send(ws, { type: 'error', message: e.message }))
           .finally(() => { u.importing = false; send(ws, { type: 'characterBusy', on: false }); });
         break;

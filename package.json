@@ -1,6 +1,6 @@
 {
   "name": "tabletop",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Self-hosted virtual tabletop for D&D",
   "main": "apps/dm/main.js",
   "scripts": {

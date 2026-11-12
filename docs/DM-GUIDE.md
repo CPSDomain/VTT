@@ -182,7 +182,7 @@ Ctrl+Z undoes, Ctrl+Y redoes. Pan with right-drag or Space+drag, zoom with the m
 
 ## Players' characters from D&D Beyond
 
-Players can bring in their own characters: under **My character** in Tabletop Player they paste their D&D Beyond link, and **📍 Put my token on the map** places their token with portrait, hit points, initiative bonus and darkvision. Their sheet's rolls become buttons on their screen. Your PC fetches the character, so it needs the internet, and the character must be public on D&D Beyond. You see the character's AC, passive Perception and speed when you select its token. You can still move, edit or delete their tokens as usual.
+Players can bring in their own characters: under **My character** in Tabletop Player they paste their D&D Beyond link, and **📍 Put my token on the map** places their token with portrait, hit points, initiative bonus and darkvision. Their sheet's rolls become buttons on their screen. Your PC fetches the character, so it needs the internet, and the character must be public on D&D Beyond. You see the character's AC, passive Perception and speed when you select its token, and **🎒 Inventory and spells…** shows their coins, gear and spells. You can still move, edit or delete their tokens as usual.
 
 If a character comes in wrong (a number that doesn't match D&D Beyond), what D&D Beyond sent is saved in the `dndbeyond` folder inside the data folder (**File → Open data folder**): send that file along with the report.
 
@@ -220,7 +220,7 @@ The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under 
 
 **Run turns:** **Next turn ▶** moves down the list and starts the next round at the bottom; **◀** goes back. Whose turn it is glows gold on the map. Click a name to select that token and bring it into view. **End combat** (click twice) clears the tracker.
 
-**Hit points:** select a token to see its HP box. Library monsters come with their standard HP and initiative bonus; for others, type HP and max HP. To hurt or heal, type the amount and press **Damage** or **Heal** (Enter = damage, Shift+Enter = heal). Temporary HP soaks damage first. At 0 HP a token is darkened and crossed out.
+**Hit points:** select a token to see its HP box. Library monsters come with their standard HP and initiative bonus; for others, type HP and max HP. To hurt or heal, type the amount and press **Damage** or **Heal** (Enter = damage, Shift+Enter = heal). Temporary HP soaks damage first. At 0 HP a token falls over in a pool of blood.
 
 **What players see of HP** is set per token under **Players see**: HP numbers, a health bar only, or nothing. By default player characters show numbers and everything else shows a bar.
 

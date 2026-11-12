@@ -35,7 +35,8 @@ The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) g
 You get your portrait, hit points, AC, speed, initiative and darkvision, and a button for every roll on your sheet: attacks (to hit and damage), ability checks, saving throws and skills. Shift-click rolls with advantage, Alt-click with disadvantage.
 
 - **📍 Put my token on the map** places your token in the middle of your view. Click it again on another map to bring your character there, or after an update to refresh your token.
-- **↻ Update from D&D Beyond** after you level up or change gear.
+- **Coins and inventory** and **Spells** show your money, what you carry (and in which bag) and your spells by level.
+- **↻ Update from D&D Beyond** after you level up, spend gold or change gear.
 - Hit points you lose at the table stay at the table: they don't go back to D&D Beyond.
 
 ## Table tools

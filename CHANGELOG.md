@@ -2,6 +2,15 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.9.1] - 2026-11-12
+
+### Added
+- **Coins, inventory and spells from D&D Beyond.** **My character** now shows your platinum, gold, electrum, silver and copper; everything you carry, with quantities, what's equipped or attuned, rarity, and what's in which bag; and your spells by level (cantrips first), marked concentration, ritual or not prepared. Click **↻ Update from D&D Beyond** to bring them in for a character you imported with 1.9.0.
+- **The DM can look:** select a player's token and click **🎒 Inventory and spells…** to see their character's coins, gear and spells.
+
+### Fixed
+- The DM guide still said a token at 0 HP is crossed out; it falls over now.
+
 ## [1.9.0] - 2026-11-12
 
 ### Added

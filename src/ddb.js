@@ -129,12 +129,31 @@ function readCharacter(d) {
     attacks.push({ name: 'Spell attack' + (casters.length > 1 ? ' (' + SHORT[k] + ')' : ''), hit: '1d20' + sign(prof + M[k]), damage: '', dc: 8 + prof + M[k] });
   }
 
+  // coins, everything they carry (and in which bag), and their spells
+  const cur = d.currencies || {};
+  const coins = { pp: cur.pp || 0, gp: cur.gp || 0, ep: cur.ep || 0, sp: cur.sp || 0, cp: cur.cp || 0 };
+  const bags = new Map(inv.filter((i) => i.definition && i.definition.isContainer).map((i) => [i.id, (i.definition.name || 'Bag').slice(0, 30)]));
+  const items = inv.filter((i) => i.definition && i.definition.name).map((i) => ({
+    name: String(i.definition.name).slice(0, 40), qty: i.quantity || 1, equipped: !!i.equipped, attuned: !!i.isAttuned,
+    magic: !!i.definition.magic, rarity: i.definition.rarity && i.definition.rarity !== 'Common' ? i.definition.rarity : '',
+    bag: i.containerEntityId && bags.has(i.containerEntityId) ? bags.get(i.containerEntityId) : ''
+  })).slice(0, 200);
+  const spellsOut = [], seenSpell = new Set();
+  const addSpell = (sp, source) => {
+    const def = sp && sp.definition; if (!def || !def.name) return;
+    const key = def.name + '|' + (def.level || 0); if (seenSpell.has(key)) return; seenSpell.add(key);
+    spellsOut.push({ name: String(def.name).slice(0, 40), level: def.level || 0, ritual: !!def.ritual, conc: !!def.concentration, prepared: !!(sp.prepared || sp.alwaysPrepared || sp.countsAsKnownSpell || (def.level || 0) === 0 || source !== 'class'), source });
+  };
+  for (const cs of d.classSpells || []) for (const sp of cs.spells || []) addSpell(sp, 'class');
+  for (const [src, list] of Object.entries(d.spells || {})) for (const sp of list || []) addSpell(sp, src);
+  spellsOut.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
+
   const avatar = (d.decorations && d.decorations.avatarUrl) || d.avatarUrl || null;
   return {
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,
-    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12),
+    abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150),
     avatar: typeof avatar === 'string' && /^https?:\/\//.test(avatar) ? avatar : null
   };
 }
