@@ -10,7 +10,7 @@ const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 const ddb = require('./ddb');
 
-const VERSION = '1.10.0';
+const VERSION = '1.11.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -1100,6 +1100,25 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (msg.content) fillScene(s, msg.content);
         syncFog(s);
         state.scenes[s.id] = s; state.order.push(s.id);
+        // 1.11: a generated building, ship, castle or dungeon can come with its other floors (stairs between them)
+        const extra = Array.isArray(msg.floors) ? msg.floors.slice(0, 4).filter((f) => f && f.content) : [];
+        if (extra.length && state.order.length + extra.length <= 200) {
+          const base = s.name;
+          s.group = uid(); s.level = 0; s.floor = str(msg.floorName, 30).trim() || 'Ground floor'; s.name = str(`${base} – ${s.floor}`, 40);
+          for (const f of extra) {
+            const name = str(f.floor, 30).trim() || 'Floor';
+            const fs = newScene(`${base} – ${name}`, f.cols || s.cols, f.rows || s.rows);
+            fillScene(fs, f.content); syncFog(fs);
+            Object.assign(fs, { group: s.group, level: clamp(int(f.level, 1), -9, 9), floor: name, showGrid: s.showGrid });
+            state.scenes[fs.id] = fs; state.order.push(fs.id);
+          }
+          // one at a time, each with the order as far as the DM's screen knows it
+          const fresh = state.order.slice(-extra.length), known = state.order.filter((id) => !fresh.includes(id));
+          toDMs({ type: 'sceneAdded', scene: s, order: known });
+          fresh.forEach((id, i) => toDMs({ type: 'sceneAdded', scene: state.scenes[id], order: [...known, ...fresh.slice(0, i + 1)] }));
+          refreshFloors(s.group); save();
+          break;
+        }
         toDMs({ type: 'sceneAdded', scene: s, order: state.order }); save();
         break;
       }

@@ -28,6 +28,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.8 | Immersion: dice rolling on screen with skins (and your own picture), DM rolls kept secret, sound from the map (fires, water, doors, footsteps, blows), read-aloud text, scene title cards, spell effects, tokens that react to hits, healing and conditions |
 | 1.9 | Characters from D&D Beyond: players bring in their character, place their own token and roll from their sheet; coins, inventory and spells (1.9.1) |
 | 1.10 | More immersion: moods (magical darkness, blood moon), lightning and earthquakes, turn banner, look here, a living map, remembered places and black-and-white darkvision, chests and traps, full-screen handouts |
+| 1.11 | A bigger map generator: ships, castles, graveyards and city streets; dungeons with several levels, room size, twisty corridors, doors, clutter, underground lakes and mine tracks; buildings with upstairs and cellars; SRD monsters sized for the party, treasure, room names and DM notes; lighting, time, weather and sound to fit |
 
 ## Next
 
@@ -38,10 +39,8 @@ Left over from the 1.7 plan:
 - **Your own asset packs (optional):** point Tabletop at a folder of PNG tiles and props you own (Forgotten Adventures, Tom Cartos and the like) and use them in the build palettes. They stay on your PC; Tabletop can't ship them.
 - **Portrait-style tokens** from uploaded art.
 
-### 1.11 — A bigger map generator 🔨
-- More kinds of places, more control over the result, and maps that come ready to play: built in, no internet or API key.
-- Ideas to choose from: ships, castles, sewer networks, caverns with underground lakes, graveyards, mines with cart tracks, city blocks; buildings and dungeons with several floors (stairs between them); settings for room count and size, twisty corridors, doors, secret doors, traps and clutter; monsters for the party's level from the SRD, treasure, room names and DM notes; lighting, time of day, weather and sound set to fit.
-- **To settle first:** which of these the group wants most.
+### Next 💬
+Whatever the table needs most after playing with 1.11.
 
 ### Parked — AI map generation
 - Claude designing a map from a free-text description (needs internet and an Anthropic API key). Parked in favour of the bigger built-in generator; can come back later.

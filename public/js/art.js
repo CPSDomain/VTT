@@ -271,6 +271,46 @@ const P = {
     rr(g, -17, -20, 34, 14, 3); g.fillStyle = '#5e3818'; g.fill(); // the lid, open behind
     g.fillStyle = '#c9a03a'; g.fillRect(-17, -9, 34, 3); g.fillRect(-4, -20, 3, 14); g.fillRect(1, -20, 3, 14);
   },
+  // ----- ships and mines (1.11) -----
+  mast(g) { // seen from above: the mast, its yard and the furled sail along it
+    shadow(g, 8); g.fillStyle = '#e8dcc0'; rr(g, -H + 3, -6, CELL - 6, 12, 6); g.fill(); noShadow(g);
+    g.strokeStyle = 'rgba(120,100,70,.6)'; g.lineWidth = 1; for (let x = -H + 9; x < H - 6; x += 6) { g.beginPath(); g.moveTo(x, -6); g.lineTo(x, 6); g.stroke(); }
+    g.fillStyle = '#6b4423'; g.fillRect(-H + 1, -1.5, CELL - 2, 3);
+    circle(g, 0, 0, 7, '#7a4f2a'); circle(g, 0, 0, 4, '#5b3a1e');
+  },
+  cannon(g) {
+    shadow(g, 5); g.fillStyle = '#6b4423'; g.fillRect(-12, -9, 20, 18); noShadow(g);
+    circle(g, -9, -10, 3.5, '#3a2a1a'); circle(g, -9, 10, 3.5, '#3a2a1a'); circle(g, 5, -10, 3.5, '#3a2a1a'); circle(g, 5, 10, 3.5, '#3a2a1a');
+    g.fillStyle = grad(g, 0, -6, 0, 6, '#5a5f66', '#22252a'); rr(g, -14, -5.5, 36, 11, 5); g.fill();
+    circle(g, 22, 0, 5.5, '#2a2d31'); circle(g, 22, 0, 2.5, '#0b0c0e');
+  },
+  helm(g) {
+    shadow(g, 4); g.strokeStyle = '#6b4423'; g.lineWidth = 3.5; circle(g, 0, 0, 13); g.stroke(); noShadow(g);
+    g.lineWidth = 3; for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.beginPath(); g.moveTo(Math.cos(a) * 4, Math.sin(a) * 4); g.lineTo(Math.cos(a) * 19, Math.sin(a) * 19); g.stroke(); circle(g, Math.cos(a) * 19, Math.sin(a) * 19, 2.6, '#8b5e34'); }
+    circle(g, 0, 0, 5, '#8b5e34'); circle(g, 0, 0, 2, '#c9a03a');
+  },
+  rails(g) { // a straight run of mine track
+    for (let x = -H + 3; x < H; x += 9) { g.fillStyle = '#5b3a1e'; g.fillRect(x, -15, 5, 30); }
+    g.fillStyle = '#9aa0a6'; g.fillRect(-H, -11, CELL, 3); g.fillRect(-H, 8, CELL, 3);
+    g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(-H, -11, CELL, 1); g.fillRect(-H, 8, CELL, 1);
+  },
+  minecart(g) {
+    shadow(g, 6); g.fillStyle = '#4b4f55'; rr(g, -17, -13, 34, 26, 3); g.fill(); noShadow(g);
+    g.fillStyle = '#2a2d31'; g.fillRect(-14, -10, 28, 20);
+    for (const [x, y, r] of [[-7, -3, 5], [2, -5, 4.5], [8, 3, 5], [-3, 5, 4]]) { g.fillStyle = '#6b6560'; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); g.fillStyle = '#c9a03a'; g.fillRect(x - 1, y - 1, 2, 2); }
+    g.fillStyle = '#7a7f86'; g.fillRect(-17, -2, 34, 3);
+  },
+  hammock(g) {
+    g.strokeStyle = '#5b3a1e'; g.lineWidth = 2; g.beginPath(); g.moveTo(-H + 1, 0); g.lineTo(-17, 0); g.moveTo(17, 0); g.lineTo(H - 1, 0); g.stroke();
+    shadow(g, 4); g.fillStyle = '#d6c7a1'; g.beginPath(); g.ellipse(0, 0, 18, 8, 0, 0, 7); g.fill(); noShadow(g);
+    g.strokeStyle = 'rgba(120,100,70,.5)'; g.lineWidth = 1; for (let x = -12; x <= 12; x += 6) { g.beginPath(); g.moveTo(x, -6); g.lineTo(x, 6); g.stroke(); }
+  },
+  anchor(g) {
+    shadow(g, 4); g.strokeStyle = '#3e4248'; g.lineWidth = 4; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(0, -16); g.lineTo(0, 14); g.moveTo(-8, -10); g.lineTo(8, -10); g.stroke();
+    g.beginPath(); g.arc(0, 2, 13, 0.25 * Math.PI, 0.75 * Math.PI); g.stroke(); noShadow(g);
+    circle(g, 0, -19, 4); g.lineWidth = 2.5; g.stroke(); g.lineCap = 'butt';
+  },
   crate(g) {
     shadow(g); g.fillStyle = '#9a6b3c'; g.fillRect(-16, -16, 32, 32); noShadow(g);
     g.strokeStyle = '#5b3a1c'; g.lineWidth = 3; g.strokeRect(-14.5, -14.5, 29, 29);

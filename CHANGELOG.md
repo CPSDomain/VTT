@@ -2,6 +2,21 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.11.0] - 2026-11-12
+
+### Added
+- **New kinds of places** in **Generate a map…**:
+  - **Ship:** a merchant ship, warship or longship at sea or at the docks: masts, cannons, the wheel, cargo, a boat alongside or a gangplank to the pier; sailors, pirates, sea raiders boarding or a ghost crew; and its **hold** below decks (cargo, hammocks, the brig) as a second floor.
+  - **Castle:** curtain walls with corner towers, a gatehouse with a portcullis over the moat, a courtyard with stables, barracks, a smithy and a well, and the keep with its great hall, the lord's chambers and an upper floor. Held, ruined or under siege.
+  - **Graveyard:** rows of graves round crossing paths, a chapel, a mausoleum with a **crypt** below, open graves, dead trees and lamps, at night in the fog, with restless dead.
+  - **City streets:** blocks of houses, shops, taverns and smithies round a plaza (a fountain, a market), in the market, noble, slums or docks district, with thieves, a cult or the watch.
+- **Dungeons:** two or three **levels** with stairs between them, **room size**, **twisty corridors**, how many **doors**, **clutter**, an **underground lake** in caves and **cart tracks** with mine carts in mines.
+- **Buildings** can have an **upstairs**, a **cellar** (a crypt under a temple) or both.
+- **Ready to play:** set the party's level and size and how hard the fights are, and the monsters come from the SRD, sized to the D&D 2024 XP budget, with hit points, initiative and stat blocks. **Treasure in chests** for the party's tier, and **room names & DM notes** in every room.
+- **Set the mood:** generated maps come with the lighting, time of day, weather and sound that suit them (dark dungeons with vision on, a foggy graveyard at night, waves for a ship, music for a tavern). The sound plays when you show the map.
+- New props: mast, cannon, ship's wheel, anchor, hammock, mine track and mine cart (Build mode → **Ships & mines**).
+- The description box understands the new places: *"a pirate ship at sea in a storm"*, *"ruined castle full of undead"*, *"dwarven mine with cart tracks, three levels deep"*.
+
 ## [1.10.0] - 2026-11-12
 
 ### Added

@@ -10,6 +10,34 @@ const RULES = {
     [/\b(large|big|huge|vast|sprawling|massive|enormous|grand)\b/, { size: 'large' }, 'Large'],
     [/\b(medium|mid-sized|average)\b/, { size: 'medium' }, 'Medium']
   ],
+  // 1.11: the party, and the new kinds of places
+  ready: [
+    [/\b(easy|gentle|light) (fights?|encounters?)\b/, { difficulty: 'easy' }, 'Easy fights'],
+    [/\b(hard|tough|brutal|deadly) (fights?|encounters?)\b/, { difficulty: 'hard' }, 'Hard fights'],
+    [/\b(no notes|without notes)\b/, { notes: false }, 'No DM notes']
+  ],
+  ship: [
+    [/\b(warship|man-o'?-war|frigate|navy)\b/, { kind: 'warship' }, 'Warship'], [/\b(longship|viking|drakkar)\b/, { kind: 'longship' }, 'Longship'], [/\b(merchant|trader|cargo)\b/, { kind: 'merchant' }, 'Merchant ship'],
+    [/\b(docked|docks?|harbou?r|port|pier|moored)\b/, { setting: 'docked' }, 'At the docks'], [/\b(at sea|open sea|ocean|sailing)\b/, { setting: 'sea' }, 'At sea'],
+    [/\b(pirates?|buccaneers?|corsairs?)\b/, { crew: 'pirates' }, 'Pirates'], [/\b(sahuagin|merrow|sea raiders|boarded|boarding)\b/, { crew: 'raid' }, 'Sea raiders'], [/\b(ghost ship|haunted|undead|drowned crew)\b/, { crew: 'ghost' }, 'Ghost ship'], [/\b(sailors|crew)\b/, { crew: 'sailors' }, 'Sailors'],
+    [/\b(storm|stormy|tempest|gale)\b/, { weather: 'storm' }, 'Storm'], [/\b(rain|rainy)\b/, { weather: 'rain' }, 'Rain'], [/\b(fog|foggy|mist|misty)\b/, { weather: 'fog' }, 'Fog'],
+    [/\b(no hold|deck only)\b/, { hold: false }, 'No hold']
+  ],
+  castle: [
+    [/\b(ruined|ruins|abandoned|crumbling)\b/, { condition: 'ruined' }, 'Ruined'], [/\b(siege|besieged|under attack)\b/, { condition: 'besieged' }, 'Under siege'],
+    [/\b(snow|snowy|winter|frozen)\b/, { setting: 'snowy' }, 'Snowy'], [/\b(desert|sand)\b/, { setting: 'desert' }, 'Desert'],
+    [/\b(undead|haunted|vampire|skeletons?)\b/, { occupants: 'undead' }, 'Undead'], [/\b(bandits?|brigands)\b/, { occupants: 'bandits' }, 'Bandits'], [/\b(cult|cultists)\b/, { occupants: 'cultists' }, 'Cultists'], [/\b(garrison|guards|soldiers|knights)\b/, { occupants: 'garrison' }, 'Garrison'], [/\b(empty|deserted)\b/, { occupants: 'none' }, 'Empty'],
+    [/\b(moat)\b/, { moat: true }, 'Moat']
+  ],
+  graveyard: [
+    [/\b(tended|well kept|neat)\b/, { age: 'tended' }, 'Tended'], [/\b(forgotten|overgrown|abandoned|ancient)\b/, { age: 'forgotten' }, 'Forgotten'],
+    [/\b(chapel|church)\b/, { chapel: true }, 'Chapel'], [/\b(mausoleum|crypt|tomb)\b/, { mausoleum: true }, 'Mausoleum and crypt'], [/\b(quiet|peaceful|no undead)\b/, { dead: false }, 'Quiet']
+  ],
+  city: [
+    [/\b(market|bazaar|merchants?)\b/, { district: 'market' }, 'Market'], [/\b(noble|rich|wealthy|upper)\b/, { district: 'noble' }, 'Noble district'], [/\b(slums?|poor|squalid|warrens)\b/, { district: 'slums' }, 'Slums'], [/\b(docks?|harbou?r|waterfront|wharf)\b/, { district: 'docks' }, 'Docks'],
+    [/\b(night|midnight)\b/, { time: 'night' }, 'Night'], [/\b(dusk|evening)\b/, { time: 'dusk' }, 'Dusk'],
+    [/\b(thieves|guild|cutpurses|thugs)\b/, { trouble: 'thieves' }, 'Thieves'], [/\b(cult|cultists)\b/, { trouble: 'cult' }, 'A cult'], [/\b(watch|guards|patrol)\b/, { trouble: 'watch' }, 'The watch']
+  ],
   village: [
     [/\b(snow|snowy|winter|wintry|frozen|icy|arctic|northern|frost)\b/, { setting: 'snowy' }, 'Snowy'],
     [/\b(desert|sand|sandy|arid|dunes?)\b/, { setting: 'desert' }, 'Desert'],
@@ -43,6 +71,10 @@ const RULES = {
     [/\b(undead|zombies?|skeletons?|ghouls?|haunted|plague)\b/, { raiders: 'undead', creatures: true }, 'Undead']
   ],
   dungeon: [
+    [/\b(three|3) (levels|floors)( deep)?\b/, { levels: '3' }, 'Three levels'], [/\b(two|2) (levels|floors)\b|\bstairs down\b/, { levels: '2' }, 'Two levels'],
+    [/\b(underground lake|lake)\b/, { lake: true }, 'Underground lake'], [/\b(cart tracks?|rails|mine ?carts?)\b/, { tracks: true }, 'Cart tracks'],
+    [/\b(twisty|winding passages|twisting passages)\b/, { corridors: 'twisty' }, 'Twisty corridors'], [/\b(big rooms|large rooms|huge rooms)\b/, { roomSize: 'large' }, 'Large rooms'], [/\b(small rooms|tiny rooms)\b/, { roomSize: 'small' }, 'Small rooms'],
+    [/\b(cluttered|messy|lots of clutter|debris)\b/, { clutter: 'lots' }, 'Lots of clutter'], [/\b(clean|bare|empty rooms)\b/, { clutter: 'none' }, 'No clutter'],
     [/\b(caves?|caverns?|grotto|natural|underground lake)\b/, { style: 'caves' }, 'Natural caves'],
     [/\b(crypt|tombs?|catacombs?|ossuary|necropolis|burial|mausoleum|barrow)\b/, { style: 'crypt' }, 'Crypt'],
     [/\b(mines?|mining|dwarven|dwarf|shafts?|quarry)\b/, { style: 'mine' }, 'Mine'],
@@ -116,6 +148,10 @@ const FIRST_WINS = new Set(['style', 'kind', 'setting', 'water']);
 
 // Which kind of map is being described.
 const TYPE_WORDS = {
+  ship: /\b(ship|galleon|sloop|longship|warship|frigate|vessel|pirate ship|deck|aboard|at sea)\b/,
+  castle: /\b(castle|citadel|keep|fortress|stronghold|ramparts|battlements|gatehouse)\b/,
+  graveyard: /\b(graveyard|cemetery|churchyard|necropolis|boneyard|burial ground)\b/,
+  city: /\b(city|streets?|alley|alleys|district|slums|quarter|ward|plaza)\b/,
   building: /\b(tavern|inn|pub|alehouse|manor|mansion|shop|store|emporium|guardhouse|guard house|barracks|jail|wizard'?s? tower|mage tower|interior|inside (a|an|the)|floor ?plan)\b/,
   dungeon: /\b(dungeon|lava|magma|sanctum|cult|cultists|crypt|tomb|catacombs?|caves?|caverns?|grotto|mines?|sewers?|vault|lair|labyrinth|maze|underground|undercity|ossuary|barrow|stronghold|warren|delve)\b/,
   village: /\b(village|town|hamlet|city|settlement|port|harbou?r|outpost|fishing village)\b/,
@@ -132,16 +168,16 @@ export function interpret(text, fallbackType = 'village', keepType = false) {
   // ties go to the more specific kind of place
   if (!keepType) {
     let best = 0;
-    for (const k of ['building', 'dungeon', 'village', 'wilderness']) {
+    for (const k of ['ship', 'castle', 'graveyard', 'building', 'dungeon', 'city', 'village', 'wilderness']) {
       const hits = new Set((t.match(new RegExp(TYPE_WORDS[k].source, 'g')) || []).map((w) => w.trim())).size;
       if (hits > best) { best = hits; type = k; }
     }
   }
 
   const firstAt = {}, labelFor = {};
-  const settings = {}, understood = [{ village: 'Village', dungeon: 'Dungeon', wilderness: 'Wilderness', building: 'Building' }[type]];
+  const settings = {}, understood = [{ village: 'Village', dungeon: 'Dungeon', wilderness: 'Wilderness', building: 'Building', ship: 'Ship', castle: 'Castle', graveyard: 'Graveyard', city: 'City streets' }[type]];
   // a 4th entry of true marks a general rule that mustn't overwrite something more specific
-  for (const [re, set, label, weak] of [...RULES.common, ...RULES[type]]) {
+  for (const [re, set, label, weak] of [...RULES.common, ...(RULES[type] || []), ...RULES.ready]) {
     const m = t.match(re);
     if (!m || (weak && Object.keys(set).every((k) => k in settings))) continue;
     // "no market", "without a temple": switch the feature off instead
@@ -183,5 +219,11 @@ export const EXAMPLES = [
   'Misty swamp with ancient ruins and a shrine',
   'Mountain pass with a cave and wolves',
   'A busy tavern called The Rusty Anchor',
-  'Abandoned wizard tower'
+  'Abandoned wizard tower',
+  'A pirate ship at sea in a storm',
+  'Ruined castle full of undead, with a moat',
+  'Forgotten graveyard with a mausoleum',
+  'City slums at night with a thieves\' guild',
+  'Dwarven mine with cart tracks, three levels deep',
+  'Caves with an underground lake'
 ];

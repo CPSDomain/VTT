@@ -5,6 +5,15 @@ import { rng } from './art.js';
 
 const yes = { type: 'bool' };
 const choice = (options, def) => ({ type: 'choice', options, def });
+// 1.11: monsters sized for the party, treasure, room names and DM notes, on every kind of map that has foes
+const LEVELS = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [String(i + 1), 'Level ' + (i + 1)]));
+const READY = {
+  partyLevel: { label: 'Party level', ...choice(LEVELS, '3') },
+  partySize: { label: 'Party size', ...choice({ 2: '2 players', 3: '3 players', 4: '4 players', 5: '5 players', 6: '6 players', 7: '7 players' }, '4') },
+  difficulty: { label: 'Fights', ...choice({ easy: 'Easy', medium: 'Medium', hard: 'Hard' }, 'medium') },
+  notes: { label: 'Room names & DM notes', ...yes, def: true },
+  loot: { label: 'Treasure in chests', ...yes, def: true }
+};
 
 export const SCHEMA = {
   village: {
@@ -33,12 +42,19 @@ export const SCHEMA = {
       size: { label: 'Size', ...choice({ small: 'Small', medium: 'Medium', large: 'Large' }, 'medium') },
       style: { label: 'Style', ...choice({ halls: 'Stone halls', caves: 'Natural caves', crypt: 'Crypt', mine: 'Mine', sewer: 'Sewer', temple: 'Temple', lava: 'Lava forge', flooded: 'Flooded' }, 'halls') },
       rooms: { label: 'Rooms', ...choice({ few: 'Few', normal: 'Normal', many: 'Many' }, 'normal') },
-      corridors: { label: 'Corridors', ...choice({ narrow: 'Narrow', wide: 'Wide' }, 'narrow') },
+      roomSize: { label: 'Room size', ...choice({ small: 'Small', normal: 'Normal', large: 'Large' }, 'normal') },
+      corridors: { label: 'Corridors', ...choice({ narrow: 'Narrow', wide: 'Wide', twisty: 'Twisty' }, 'narrow') },
+      doors: { label: 'Doors', ...choice({ few: 'Few', normal: 'Normal', many: 'Many' }, 'normal') },
+      clutter: { label: 'Clutter', ...choice({ none: 'None', some: 'Some', lots: 'Lots' }, 'some') },
+      levels: { label: 'Levels', ...choice({ 1: 'One', 2: 'Two (stairs down)', 3: 'Three' }, '1') },
       loops: { label: 'Layout', ...choice({ linear: 'Linear', branching: 'Branching', maze: 'Maze-like' }, 'branching') },
       traps: { label: 'Traps', ...choice({ none: 'None', some: 'Some', many: 'Many' }, 'some') },
       monsters: { label: 'Monsters', ...choice({ auto: 'Suit the style', none: 'None', goblinoid: 'Goblins', kobold: 'Kobolds', orcs: 'Orcs', undead: 'Undead', beasts: 'Beasts', cultists: 'Cultists', bandits: 'Bandits' }, 'auto') },
       secrets: { label: 'Secret doors', ...yes, def: true },
-      boss: { label: 'Boss room', ...yes, def: true }
+      boss: { label: 'Boss room', ...yes, def: true },
+      lake: { label: 'Underground lake (caves)', ...yes, def: false },
+      tracks: { label: 'Cart tracks (mines)', ...yes, def: true },
+      ...READY
     }
   },
   wilderness: {
@@ -63,8 +79,53 @@ export const SCHEMA = {
       kind: { label: 'Building', ...choice({ tavern: 'Tavern / inn', temple: 'Temple', manor: 'Manor house', shop: 'Shop', guardhouse: 'Guardhouse', tower: 'Wizard tower' }, 'tavern') },
       size: { label: 'Size', ...choice({ small: 'Small', medium: 'Medium', large: 'Large' }, 'medium') },
       condition: { label: 'Condition', ...choice({ normal: 'Lived in', abandoned: 'Abandoned' }, 'normal') },
+      floors: { label: 'Floors', ...choice({ none: 'Ground only', upstairs: 'Upstairs', cellar: 'Cellar', both: 'Upstairs & cellar' }, 'none') },
       yard: { label: 'Yard outside', ...yes, def: true },
       occupants: { label: 'People inside', ...yes, def: true }
+    }
+  },
+  ship: {
+    label: 'Ship', blurb: 'A sailing ship at sea or at the docks, with its hold below',
+    fields: {
+      kind: { label: 'Ship', ...choice({ merchant: 'Merchant ship', warship: 'Warship', longship: 'Longship' }, 'merchant') },
+      setting: { label: 'Where', ...choice({ sea: 'At sea', docked: 'At the docks' }, 'sea') },
+      crew: { label: 'Aboard', ...choice({ sailors: 'Sailors', pirates: 'Pirates', raid: 'Sea raiders boarding', ghost: 'Ghost ship', none: 'Nobody' }, 'pirates') },
+      weather: { label: 'Weather', ...choice({ calm: 'Calm', rain: 'Rain', storm: 'Storm', fog: 'Fog' }, 'calm') },
+      hold: { label: 'Hold below decks', ...yes, def: true },
+      ...READY
+    }
+  },
+  castle: {
+    label: 'Castle', blurb: 'Walls and towers, a gatehouse, courtyard and keep',
+    fields: {
+      size: { label: 'Size', ...choice({ small: 'Small', medium: 'Medium', large: 'Large' }, 'medium') },
+      setting: { label: 'Setting', ...choice({ temperate: 'Green', snowy: 'Snowy', desert: 'Desert' }, 'temperate') },
+      condition: { label: 'Condition', ...choice({ held: 'Held', ruined: 'Ruined', besieged: 'Under siege' }, 'held') },
+      occupants: { label: 'Inside', ...choice({ garrison: 'Garrison', bandits: 'Bandits', undead: 'Undead', cultists: 'Cultists', none: 'Nobody' }, 'garrison') },
+      moat: { label: 'Moat', ...yes, def: true },
+      keepFloors: { label: 'Keep with an upper floor', ...yes, def: true },
+      ...READY
+    }
+  },
+  graveyard: {
+    label: 'Graveyard', blurb: 'Graves, crypts and a chapel, at night in the fog',
+    fields: {
+      size: { label: 'Size', ...choice({ small: 'Small', medium: 'Medium', large: 'Large' }, 'medium') },
+      age: { label: 'Kept', ...choice({ tended: 'Tended', old: 'Old', forgotten: 'Forgotten' }, 'old') },
+      chapel: { label: 'Chapel', ...yes, def: true },
+      mausoleum: { label: 'Mausoleum (with a crypt below)', ...yes, def: true },
+      dead: { label: 'Restless dead', ...yes, def: true },
+      ...READY
+    }
+  },
+  city: {
+    label: 'City streets', blurb: 'Cobbled streets, blocks of houses and shops, a plaza',
+    fields: {
+      size: { label: 'Size', ...choice({ small: 'Small', medium: 'Medium', large: 'Large' }, 'medium') },
+      district: { label: 'District', ...choice({ market: 'Market', noble: 'Noble', slums: 'Slums', docks: 'Docks' }, 'market') },
+      time: { label: 'Time', ...choice({ day: 'Day', dusk: 'Dusk', night: 'Night' }, 'day') },
+      trouble: { label: 'Trouble', ...choice({ none: 'None', thieves: 'Thieves', cult: 'A cult', watch: 'The watch' }, 'thieves') },
+      ...READY
     }
   }
 };
@@ -149,7 +210,9 @@ function mirror(out, fx, fy) {
   const props = out.props.map((p) => ({ ...p, x: X(p.x), y: Y(p.y), rot: flipRot(p) }));
   const tokens = out.tokens.map((t) => ({ ...t, x: fx ? out.cols - t.x - (t.size || 1) : t.x, y: fy ? out.rows - t.y - (t.size || 1) : t.y }));
   const [a, b, c, d] = out.start;
-  return { ...out, tiles, props, tokens, start: [Math.min(X(a), X(c)), Math.min(Y(b), Y(d)), Math.max(X(a), X(c)), Math.max(Y(b), Y(d))] };
+  const labels = (out.labels || []).map((l) => ({ ...l, x: fx ? out.cols - l.x - 2 : l.x, y: fy ? out.rows - l.y : l.y }));
+  const down = out.down ? [X(out.down[0]), Y(out.down[1])] : out.down;
+  return { ...out, tiles, props, tokens, labels, down, start: [Math.min(X(a), X(c)), Math.min(Y(b), Y(d)), Math.max(X(a), X(c)), Math.max(Y(b), Y(d))] };
 }
 
 // ---------- monster groups ----------
@@ -165,6 +228,70 @@ const FOES = {
   goblins: { minions: ['Goblin', 'Goblin'], elite: ['Hobgoblin'], boss: 'Goblin Boss' }
 };
 const pickFoe = (M, set) => (M.chance(0.18) ? M.pick(set.elite) : M.pick(set.minions));
+
+// ---------- 1.11: ready to play ----------
+// SRD monsters by kind of foe (names as in public/monsters.json); the app passes them in as lib.__srd
+const FAMILY = {
+  goblinoid: ['Goblin', 'Hobgoblin', 'Bugbear', 'Worg'], kobold: ['Kobold', 'Giant Weasel', 'Red Dragon Wyrmling', 'Young Red Dragon'],
+  orcs: ['Orc', 'Berserker', 'Ogre', 'Troll'], undead: ['Skeleton', 'Zombie', 'Ghoul', 'Shadow', 'Specter', 'Ghast', 'Wight', 'Mummy', 'Wraith', 'Vampire Spawn', 'Ghost', 'Mummy Lord', 'Lich'],
+  beasts: ['Wolf', 'Giant Spider', 'Dire Wolf', 'Brown Bear', 'Ettercap', 'Ankheg', 'Owlbear', 'Giant Scorpion'],
+  cultists: ['Cultist', 'Cult Fanatic', 'Imp', 'Quasit', 'Priest', 'Hell Hound', 'Mage'], bandits: ['Bandit', 'Thug', 'Scout', 'Bandit Captain', 'Veteran', 'Gladiator', 'Assassin'],
+  wolves: ['Wolf', 'Dire Wolf', 'Winter Wolf'], goblins: ['Goblin', 'Hobgoblin', 'Bugbear'],
+  pirates: ['Bandit', 'Thug', 'Bandit Captain', 'Veteran', 'Berserker'], raiders: ['Sahuagin', 'Merrow', 'Giant Crab', 'Reef Shark', 'Sea Hag'],
+  garrison: ['Guard', 'Veteran', 'Knight', 'Priest', 'Mage'], sewer: ['Giant Rat', 'Swarm of Rats', 'Ghoul', 'Gray Ooze', 'Gelatinous Cube', 'Otyugh', 'Ochre Jelly'],
+  mine: ['Kobold', 'Duergar', 'Gray Ooze', 'Darkmantle', 'Grick', 'Rust Monster', 'Roper'], fire: ['Magma Mephit', 'Azer', 'Hell Hound', 'Salamander', 'Fire Elemental'],
+  water: ['Lizardfolk', 'Giant Toad', 'Crocodile', 'Swarm of Quippers', 'Chuul', 'Water Elemental'], city: ['Bandit', 'Thug', 'Spy', 'Cultist', 'Cult Fanatic', 'Veteran', 'Assassin', 'Doppelganger']
+};
+// XP a party can face per character, D&D 2024: low, moderate, high (the same table as the encounter builder)
+const XP_PC = [null, [50, 75, 100], [100, 150, 200], [150, 225, 400], [250, 375, 500], [500, 750, 1100], [600, 1000, 1400], [750, 1300, 1700], [1000, 1700, 2100], [1300, 2000, 2600], [1600, 2300, 3100],
+  [1900, 2900, 4100], [2200, 3700, 4700], [2600, 4200, 5400], [2900, 4900, 6200], [3300, 5400, 7800], [3800, 6100, 9800], [4500, 7200, 11700], [5000, 8700, 14200], [5500, 10700, 17200], [6400, 13200, 22000]];
+const srdEntry = (m) => ({ name: m.name, icon: m.token.icon, color: m.token.color, size: m.token.size, hp: m.hp, init: m.token.init, srd: m.id, xp: m.xp, cr: m.cr });
+function srdPool(lib, fam) { const all = lib && lib.__srd; if (!all || !FAMILY[fam]) return null; const p = FAMILY[fam].map((n) => all.find((m) => m.name === n)).filter(Boolean); return p.length ? p : null; }
+// a group of monsters worth about the party's budget for this kind of room ("boss" a step harder, "light" half)
+function stockMonsters(M, S, pool, kind = 'room', maxN = 6) {
+  if (!pool) return [];
+  const lvl = Math.max(1, Math.min(20, parseInt(S.partyLevel, 10) || 3)), size = Math.max(1, parseInt(S.partySize, 10) || 4), d = { easy: 0, medium: 1, hard: 2 }[S.difficulty] ?? 1;
+  let budget = XP_PC[lvl][kind === 'boss' ? Math.min(2, d + 1) : d] * size * (kind === 'light' ? 0.5 : kind === 'boss' ? 1.2 : 1);
+  const maxCr = kind === 'boss' ? lvl + 3 : Math.max(0.5, lvl + (d - 1));
+  const fits = pool.filter((m) => m.cr <= maxCr), picks = [];
+  if (!fits.length) return [];
+  if (kind === 'boss') { const lead = fits.filter((m) => m.xp <= budget).sort((a, b) => b.xp - a.xp)[0] || fits.sort((a, b) => a.xp - b.xp)[0]; picks.push(lead); budget -= lead.xp; }
+  for (let i = 0; i < 12 && picks.length < maxN; i++) {
+    const c = fits.filter((m) => m.xp <= budget).sort((a, b) => a.xp - b.xp); if (!c.length) break;
+    const m = c[Math.floor(M.r() * Math.max(1, Math.ceil(c.length * 0.6)))]; // mostly the weaker ones: a crowd, not a giant
+    picks.push(m); budget -= m.xp;
+  }
+  if (!picks.length) { const weakest = fits.sort((a, b) => a.xp - b.xp)[0]; if (weakest.xp <= budget * 2) picks.push(weakest); }
+  return picks.map(srdEntry);
+}
+// treasure for a chest, by the party's tier (a hoard for the boss)
+function rollLoot(M, S, hoard) {
+  const lvl = parseInt(S.partyLevel, 10) || 3, tier = lvl <= 4 ? 1 : lvl <= 10 ? 2 : lvl <= 16 ? 3 : 4;
+  const d = (n, sides) => { let t = 0; for (let i = 0; i < n; i++) t += M.int(1, sides); return t; };
+  const coins = [[`${d(hoard ? 6 : 3, 6) * 10} gp`, `${d(2, 6) * 10} sp`], [`${d(hoard ? 6 : 4, 6) * (hoard ? 50 : 20)} gp`, `${d(2, 6) * 10} pp`], [`${d(hoard ? 6 : 4, 6) * (hoard ? 200 : 100)} gp`, `${d(3, 6) * 50} pp`], [`${d(hoard ? 8 : 4, 6) * (hoard ? 1000 : 300)} gp`, `${d(4, 6) * 100} pp`]][tier - 1];
+  const items = [
+    ['Potion of Healing', 'Potion of Climbing', 'Spell scroll (cantrip)', 'Spell scroll (1st level)', 'Bag of Holding', 'Driftglobe', 'Potion of Healing ×2', 'Goggles of Night', 'Cloak of Protection', '+1 Shield'],
+    ['Potion of Greater Healing', 'Spell scroll (3rd level)', '+1 weapon', 'Boots of Elvenkind', 'Wand of Magic Missiles', 'Ring of Protection', 'Bracers of Archery', 'Cloak of Elvenkind', '+1 armor'],
+    ['Potion of Superior Healing', 'Spell scroll (5th level)', '+2 weapon', 'Flame Tongue', 'Ring of Spell Storing', 'Staff of Healing', '+2 armor', 'Belt of Hill Giant Strength'],
+    ['Potion of Supreme Healing', 'Spell scroll (7th level)', '+3 weapon', 'Ring of Regeneration', 'Staff of Power', '+3 armor', 'Cloak of Invisibility']
+  ][tier - 1];
+  const gems = [['10 gp', '50 gp'], ['50 gp', '100 gp'], ['100 gp', '500 gp'], ['1,000 gp', '5,000 gp']][tier - 1];
+  const out = [coins[0]];
+  if (M.chance(hoard ? 0.9 : 0.4)) out.push(coins[1]);
+  if (M.chance(hoard ? 0.8 : 0.3)) out.push(`${d(hoard ? 3 : 1, 4)} gems (${M.pick(gems)} each)`);
+  const n = hoard ? M.int(1, 3) : M.chance(0.35) ? 1 : 0;
+  for (let i = 0; i < n; i++) out.push(M.pick(items));
+  return out.join(', ');
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : /s$/.test(w) ? '' : 's'}`;
+function foesText(list) { const c = {}; for (const e of list) c[e.name] = (c[e.name] || 0) + 1; return Object.entries(c).map(([n, k]) => (k > 1 ? `${k} ${n.toLowerCase()}${/s$/.test(n) ? '' : 's'}` : `a ${n.toLowerCase()}`)).join(', '); }
+// a DM note in the top left of a room: its number and name, and what's in it
+function roomNote(labels, x, y, n, name, bits) {
+  const text = `${n}. ${name}` + (bits.filter(Boolean).length ? ' — ' + bits.filter(Boolean).join('; ') : '');
+  labels.push({ x: x + 0.15, y: y + 0.35, text: text.slice(0, 120), dmOnly: true, size: 's' });
+}
+// lighting, time of day, weather and sound that suit the place (the dialog's "Set the mood" box)
+const SOUND = (music, ...amb) => ({ music: music ? { id: music, vol: 0.55 } : null, amb: amb.map((id) => ({ id, vol: 0.7 })) });
 
 // ---------- buildings ----------
 function building(M, x0, y0, w, h, doorSide, floor) {
@@ -504,10 +631,10 @@ const DSTYLE = {
   halls: { floor: 'stone', corridor: 'cobble', themes: ['throne', 'crypt', 'storage', 'library', 'prison', 'shrine', 'treasure', 'barracks', 'pool', 'collapsed', 'lair'], roomW: [5, 11], roomH: [5, 9], names: ['Halls', 'Keep', 'Vault', 'Warrens'] },
   crypt: { floor: 'stone', corridor: 'stone', themes: ['crypt', 'crypt', 'crypt', 'shrine', 'prison', 'treasure', 'collapsed'], roomW: [4, 8], roomH: [4, 7], names: ['Crypt', 'Catacombs', 'Tomb', 'Ossuary'], monsters: 'undead', more: 1.3 },
   temple: { floor: 'marble', corridor: 'marble', themes: ['shrine', 'shrine', 'throne', 'library', 'barracks', 'treasure', 'pool'], roomW: [7, 13], roomH: [6, 10], names: ['Temple', 'Sanctum', 'Fane', 'Shrine'], monsters: 'cultists', pillars: true },
-  mine: { floor: 'dirt', corridor: 'dirt', themes: ['storage', 'storage', 'collapsed', 'lair', 'crystals', 'camp'], roomW: [5, 10], roomH: [4, 8], names: ['Mine', 'Delve', 'Diggings', 'Shafts'], monsters: 'kobold', jagged: true, wide: true },
-  sewer: { floor: 'cobble', corridor: 'cobble', themes: ['pool', 'storage', 'lair', 'collapsed', 'prison'], roomW: [5, 8], roomH: [5, 8], names: ['Sewers', 'Drains', 'Undercity', 'Cisterns'], monsters: 'beasts', channel: true, wide: true },
-  lava: { floor: 'stone', corridor: 'cobble', themes: ['forge', 'forge', 'lavapool', 'throne', 'storage', 'barracks', 'treasure'], roomW: [6, 11], roomH: [5, 9], names: ['Forge', 'Furnace', 'Cinderhold', 'Crucible'], monsters: 'orcs' },
-  flooded: { floor: 'stone', corridor: 'cobble', themes: ['pool', 'pool', 'crypt', 'collapsed', 'storage', 'shrine'], roomW: [5, 11], roomH: [5, 9], names: ['Drowned Halls', 'Sunken Vault', 'Flooded Keep'], monsters: 'undead', wet: true }
+  mine: { family: 'mine', floor: 'dirt', corridor: 'dirt', themes: ['storage', 'storage', 'collapsed', 'lair', 'crystals', 'camp'], roomW: [5, 10], roomH: [4, 8], names: ['Mine', 'Delve', 'Diggings', 'Shafts'], monsters: 'kobold', jagged: true, wide: true },
+  sewer: { family: 'sewer', floor: 'cobble', corridor: 'cobble', themes: ['pool', 'storage', 'lair', 'collapsed', 'prison'], roomW: [5, 8], roomH: [5, 8], names: ['Sewers', 'Drains', 'Undercity', 'Cisterns'], monsters: 'beasts', channel: true, wide: true },
+  lava: { family: 'fire', floor: 'stone', corridor: 'cobble', themes: ['forge', 'forge', 'lavapool', 'throne', 'storage', 'barracks', 'treasure'], roomW: [6, 11], roomH: [5, 9], names: ['Forge', 'Furnace', 'Cinderhold', 'Crucible'], monsters: 'orcs' },
+  flooded: { family: 'water', floor: 'stone', corridor: 'cobble', themes: ['pool', 'pool', 'crypt', 'collapsed', 'storage', 'shrine'], roomW: [5, 11], roomH: [5, 9], names: ['Drowned Halls', 'Sunken Vault', 'Flooded Keep'], monsters: 'undead', wet: true }
 };
 
 function dungeon(S, seed, lib) {
@@ -518,8 +645,10 @@ function dungeon(S, seed, lib) {
   const floor = new Uint8Array(cols * rows), at = (x, y) => (M.inb(x, y) ? floor[y * cols + x] : 0);
   const rooms = [];
   const target = Math.round({ small: 7, medium: 12, large: 20 }[S.size] * { few: 0.6, normal: 1, many: 1.5 }[S.rooms] * (st.more || 1));
+  const rs = { small: 0.7, normal: 1, large: 1.4 }[S.roomSize] || 1, rw = st.roomW.map((v) => Math.max(3, Math.round(v * rs))), rh = st.roomH.map((v) => Math.max(3, Math.round(v * rs)));
+  if (S.anchor) { const w = M.int(...rw), h = M.int(...rh), x = Math.max(2, Math.min(cols - w - 3, S.anchor[0] - (w >> 1))), y = Math.max(2, Math.min(rows - h - 3, S.anchor[1] - (h >> 1))); rooms.push({ x, y, w, h, cx: S.anchor[0], cy: S.anchor[1] }); }
   for (let tries = 0; tries < 1500 && rooms.length < target; tries++) {
-    const w = M.int(...st.roomW), h = M.int(...st.roomH), x = M.int(2, cols - w - 3), y = M.int(2, rows - h - 3);
+    const w = M.int(...rw), h = M.int(...rh), x = M.int(2, cols - w - 3), y = M.int(2, rows - h - 3);
     const gap = S.rooms === 'many' ? 2 : 3;
     if (rooms.some((o) => x < o.x + o.w + gap && x + w + gap > o.x && y < o.y + o.h + gap && y + h + gap > o.y)) continue;
     rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
@@ -538,6 +667,15 @@ function dungeon(S, seed, lib) {
   const carve = (x, y) => { if (!M.inb(x, y) || x < 1 || y < 1 || x > cols - 2 || y > rows - 2) return; if (!floor[y * cols + x]) { floor[y * cols + x] = 2; M.set(x, y, st.corridor); corridor.add(x + ',' + y); } };
   const dig = (a, b) => {
     let x = a.cx, y = a.cy; const hf = M.chance(.5);
+    if (S.corridors === 'twisty') { // wander there: mostly towards it, sometimes sideways
+      for (let i = 0; i < 4000 && (x !== b.cx || y !== b.cy); i++) {
+        const dx = Math.sign(b.cx - x), dy = Math.sign(b.cy - y), r = M.r();
+        if (r < 0.62) { if ((M.chance(.5) && dx) || !dy) x += dx; else y += dy; }
+        else if (r < 0.85) { if (dx) y += M.chance(.5) ? 1 : -1; else x += M.chance(.5) ? 1 : -1; }
+        x = Math.max(2, Math.min(cols - 3, x)); y = Math.max(2, Math.min(rows - 3, y)); carve(x, y);
+      }
+      return;
+    }
     const stepTo = (tx, ty) => { while (x !== tx || y !== ty) { const horiz = x !== tx && (hf || y === ty); if (horiz) x += Math.sign(tx - x); else y += Math.sign(ty - y); carve(x, y); if (wide) { if (horiz) carve(x, y + 1); else carve(x + 1, y); } } };
     if (hf) { stepTo(b.cx, a.cy); stepTo(b.cx, b.cy); } else { stepTo(a.cx, b.cy); stepTo(b.cx, b.cy); }
   };
@@ -573,7 +711,7 @@ function dungeon(S, seed, lib) {
     if (n.length !== 1) continue;
     const [dx] = n[0];
     const sideWalls = dx ? M.get(x, y - 1) === 'wall' && M.get(x, y + 1) === 'wall' : M.get(x - 1, y) === 'wall' && M.get(x + 1, y) === 'wall';
-    if (!sideWalls || !M.chance(.7)) continue;
+    if (!sideWalls || !M.chance({ few: 0.3, normal: 0.7, many: 1 }[S.doors] ?? 0.7)) continue;
     const roll = M.r();
     const kind = S.secrets && roll < .12 ? 'secretdoor' : roll < .2 ? 'portcullis' : roll < .3 ? 'archway' : 'door';
     if (kind === 'secretdoor') { M.set(x, y, 'wall'); secrets++; }
@@ -585,6 +723,8 @@ function dungeon(S, seed, lib) {
   const bossRoom = S.boss && rooms.length > 3 ? rooms.slice(1).reduce((a, o) => (dist(o, rooms[0]) > dist(a, rooms[0]) ? o : a), rooms[1]) : null;
   const foeKey = S.monsters === 'auto' ? (st.monsters || 'goblinoid') : S.monsters;
   const foes = FOES[foeKey === 'none' ? null : foeKey];
+  const pool = foeKey === 'none' ? null : srdPool(lib, S.monsters === 'auto' ? (st.family || foeKey) : foeKey), labels = [];
+  const THEME = { throne: 'Throne room', crypt: 'Crypt', storage: 'Storeroom', library: 'Library', prison: 'Cells', shrine: 'Shrine', treasure: 'Treasury', barracks: 'Barracks', pool: 'Flooded chamber', collapsed: 'Collapsed hall', lair: 'Lair', crystals: 'Crystal grotto', camp: 'Camp', forge: 'Forge', lavapool: 'Lava pool' };
 
   rooms.forEach((o, i) => {
     const cells = []; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (at(x, y) === 1) cells.push([x, y]);
@@ -594,8 +734,9 @@ function dungeon(S, seed, lib) {
     const rnd = () => M.pick(cells.filter((c) => !taken.has(c[0] + ',' + c[1]) && !doorAdj(c))) || cells[0];
     for (let k = 0; k < Math.max(1, Math.floor(wallSpots.length / 10)); k++) { const c = M.pick(wallSpots); if (c) put(st.floor === 'dirt' ? 'torch' : M.chance(.8) ? 'torch' : 'brazier', ...c); }
     if (st.pillars && o.w >= 7 && o.h >= 6) for (let x = o.x + 1; x < o.x + o.w - 1; x += 2) { put('pillar', x, o.y + 1); put('pillar', x, o.y + o.h - 2); }
-    if (i === 0) { put('stairs', o.cx, o.cy); return; }
+    if (i === 0) { put('stairs', o.cx, o.cy); if (S.notes) roomNote(labels, o.x, o.y, 1, S.anchor ? 'Stairs up' : 'Entrance', []); return; }
     const theme = o === bossRoom ? (st === DSTYLE.temple ? 'shrine' : 'throne') : M.pick(st.themes);
+    const before = M.tokens.length, chestsBefore = M.props.filter((p) => p.kind === 'chest').length;
     const T = {
       throne: () => { put('throne', o.cx, o.y + 1); put('rug', o.cx, o.y + 2); [[o.x + 1, o.y + 1], [o.x + o.w - 2, o.y + 1], [o.x + 1, o.y + o.h - 2], [o.x + o.w - 2, o.y + o.h - 2]].forEach((c) => put('pillar', ...c)); put('brazier', o.cx - 1, o.y + 1); put('brazier', o.cx + 1, o.y + 1); },
       crypt: () => { for (let k = 0; k < Math.min(6, cells.length / 4); k++) put('coffin', ...rnd()); put('bones', ...rnd()); put('candle', ...rnd()); },
@@ -614,14 +755,31 @@ function dungeon(S, seed, lib) {
       lavapool: () => { const y = o.cy; for (let x = o.x; x < o.x + o.w; x++) M.set(x, y, 'lava'); M.prop('bridge', o.cx, y, 1); taken.add(o.cx + ',' + y); put('brazier', ...rnd()); }
     };
     (T[theme] || T.storage)();
-    if (o === bossRoom) { put('chest', o.cx, o.y + o.h - 2); if (foes) M.token(lib[foes.boss], o.cx, o.cy, { hidden: true }); }
-    if (foes) {
+    if (o === bossRoom) { put('chest', o.cx, o.y + o.h - 2); if (foes && !pool) M.token(lib[foes.boss], o.cx, o.cy, { hidden: true }); }
+    if (pool) { // SRD monsters sized for the party: about four rooms in ten are empty
+      if (o === bossRoom || M.chance(0.5)) for (const e of stockMonsters(M, S, pool, o === bossRoom ? 'boss' : M.chance(0.5) ? 'light' : 'room', Math.max(1, Math.min(o === bossRoom ? 6 : 4, Math.floor(cells.length / 8))))) { const c = rnd(); if (!c) break; M.token(e, c[0], c[1], { hidden: true, srd: e.srd }); taken.add(c[0] + ',' + c[1]); }
+    } else if (foes) {
       const n = M.int(o === bossRoom ? 2 : 0, Math.min(o === bossRoom ? 5 : 4, Math.floor(cells.length / 12)));
       for (let k = 0; k < n; k++) { const c = rnd(); M.token(lib[pickFoe(M, foes)], c[0], c[1], { hidden: true }); taken.add(c[0] + ',' + c[1]); }
     }
+    // clutter
+    const clutter = { none: 0, some: 1, lots: 3 }[S.clutter] ?? 1;
+    for (let k = 0; k < clutter * Math.ceil(cells.length / 25); k++) { const c = rnd(); if (c) put(M.pick(st.clutter || ['rubble', 'bones', 'barrel', 'crate', 'sack', 'rubble']), ...c, M.int(0, 3)); }
+    if (S.notes) {
+      const chests = M.props.filter((p) => p.kind === 'chest').length - chestsBefore;
+      const loot = S.loot && chests ? `chest${chests > 1 ? 's' : ''}: ${rollLoot(M, S, o === bossRoom)}` : chests ? plural(chests, 'chest') : '';
+      roomNote(labels, o.x, o.y, i + 1, (o === bossRoom ? 'Boss: ' : '') + (THEME[theme] || 'Room'), [M.tokens.length > before ? foesText(M.tokens.slice(before).map((t) => ({ name: t.label }))) : '', loot]);
+    }
   });
-  if (rooms.length > 3 && !bossRoom) put('stairs', rooms[rooms.length - 1].cx, rooms[rooms.length - 1].cy, 2);
-  const cor = [...corridor];
+  let down = null;
+  if (S.down) { const o = rooms.slice(1).filter((r) => r !== bossRoom).reduce((a, r) => (dist(r, rooms[0]) > dist(a, rooms[0]) ? r : a), rooms[rooms.length - 1]); taken.delete(o.cx + ',' + o.cy); for (let i = M.props.length - 1; i >= 0; i--) if (M.props[i].x === o.cx && M.props[i].y === o.cy) M.props.splice(i, 1); M.prop('stairs', o.cx, o.cy, 2); taken.add(o.cx + ',' + o.cy); down = [o.cx, o.cy]; if (S.notes) labels.push({ x: o.cx + 1, y: o.cy + 0.5, text: 'Stairs down', dmOnly: true, size: 's' }); }
+  else if (rooms.length > 3 && !bossRoom) put('stairs', rooms[rooms.length - 1].cx, rooms[rooms.length - 1].cy, 2);
+  // mines: cart tracks along the passages, and a cart or two
+  if (st.jagged && S.tracks) {
+    for (const k of corridor) { const [x, y] = k.split(',').map(Number); if (taken.has(k)) continue; const h = corridor.has((x - 1) + ',' + y) || corridor.has((x + 1) + ',' + y), v = corridor.has(x + ',' + (y - 1)) || corridor.has(x + ',' + (y + 1)); if (h !== v) put('rails', x, y, h ? 0 : 1); }
+    for (let k = 0; k < Math.max(1, rooms.length / 3); k++) { const r = M.pick(rooms); put('minecart', r.cx + 1, r.cy); }
+  }
+  const cor = [...corridor].filter((k) => !taken.has(k));
   const nTraps = Math.floor(cor.length / { none: Infinity, some: 25, many: 10 }[S.traps]);
   for (let k = 0; k < nTraps; k++) { const [x, y] = M.pick(cor).split(',').map(Number); put('trap', x, y); }
   if (st.channel) for (let k = 0; k < cor.length / 30; k++) { const [x, y] = M.pick(cor).split(',').map(Number); put(M.pick(['bars', 'rubble', 'bones']), x, y); }
@@ -630,7 +788,8 @@ function dungeon(S, seed, lib) {
   const e = rooms[0];
   const styleName = { halls: 'Stone halls', crypt: 'Crypt', temple: 'Temple', mine: 'Mine', sewer: 'Sewer', lava: 'Lava forge', flooded: 'Flooded dungeon' }[S.style] || 'Dungeon';
   const summary = [styleName, `${rooms.length} rooms`, foes ? `${M.tokens.length} ${foeKey === 'goblinoid' ? 'goblins' : foeKey}` : 'no monsters', nTraps ? `${nTraps} traps` : '', secrets ? `${secrets} secret doors` : '', bossRoom ? 'boss room' : ''].filter(Boolean).join(' · ');
-  return mirror({ name, summary, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [e.x - 1, e.y - 1, e.x + e.w, e.y + e.h] }, M.chance(.5), M.chance(.5));
+  const out = { name, summary, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, down, start: [e.x - 1, e.y - 1, e.x + e.w, e.y + e.h] };
+  return S.noMirror ? out : mirror(out, M.chance(.5), M.chance(.5));
 }
 
 // Natural caves: cellular automata, keep the biggest open area.
@@ -662,6 +821,16 @@ function caves(S, M, lib) {
     if (open(x, y)) { M.set(x, y, M.chance(.15) ? 'stone' : 'dirt'); cells.push([x, y]); }
     else { let near = false; for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (open(x + dx, y + dy)) { near = true; break; } if (near) M.set(x, y, 'wall'); }
   }
+  // an underground lake in the widest part of the cave, with an island and a boat
+  let lakeAt = null;
+  if (S.lake) {
+    const roomy = cells.filter(([x, y]) => { let n = 0; for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (open(x + dx, y + dy)) n++; return n >= 45 && x > cols * 0.3; });
+    if (roomy.length) {
+      const [lx, ly] = roomy[Math.floor(roomy.length / 2)], rx = Math.max(3, Math.round(cols / 9)), ry = Math.max(3, Math.round(rows / 8)); lakeAt = [lx, ly];
+      blob(M, lx, ly, rx, ry, (x, y, d) => { if (open(x, y)) M.set(x, y, d < 0.12 && rx > 4 ? 'sand' : 'water'); });
+      M.prop('boat', lx - rx + 1, ly, 0); M.prop('reeds', lx - rx, ly + 1);
+    }
+  }
   // pools, rocks, mushrooms, crystals
   for (let i = 0; i < cells.length / 400; i++) { const [x, y] = M.pick(cells); blob(M, x, y, M.int(1, 3), M.int(1, 2), (xx, yy) => { if (open(xx, yy)) M.set(xx, yy, 'water'); }); }
   const taken = new Set(), put = (k, x, y) => { if (!taken.has(x + ',' + y) && open(x, y)) { M.prop(k, x, y, M.int(0, 3)); taken.add(x + ',' + y); } };
@@ -670,13 +839,24 @@ function caves(S, M, lib) {
   const entry = cells.reduce((a, c) => (c[0] < a[0] ? c : a), cells[0]);
   put('stairs', ...entry);
   const foes = FOES[S.monsters === 'auto' ? 'beasts' : S.monsters === 'none' ? null : S.monsters];
+  const pool = S.monsters === 'none' ? null : srdPool(lib, S.monsters === 'auto' ? (S.lake ? 'water' : 'beasts') : S.monsters), labels = [];
+  const dry = cells.filter(([x, y]) => M.get(x, y) !== 'water');
   const far = cells.reduce((a, c) => (Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) > Math.abs(a[0] - entry[0]) + Math.abs(a[1] - entry[1]) ? c : a), cells[0]);
-  if (S.boss) { put('chest', far[0], far[1]); put('bones', far[0] + 1, far[1]); if (foes) M.token(lib[foes.boss], far[0], far[1] - 1, { hidden: true }); }
-  if (foes) for (let i = 0; i < Math.round(cells.length / 90); i++) { const c = M.pick(cells); if (Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) > 10 && !taken.has(c[0] + ',' + c[1])) { M.token(lib[pickFoe(M, foes)], c[0], c[1], { hidden: true }); taken.add(c[0] + ',' + c[1]); } }
+  if (S.boss) { put('chest', far[0], far[1]); put('bones', far[0] + 1, far[1]); if (foes && !pool) M.token(lib[foes.boss], far[0], far[1] - 1, { hidden: true }); }
+  if (pool) { // groups of SRD monsters sized for the party, spread through the caves, the strongest at the far end
+    const spots = [far, ...Array.from({ length: Math.max(2, Math.round(cells.length / 260)) }, () => M.pick(dry))];
+    spots.forEach((c, i) => {
+      if (!c || Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) < 10) return;
+      const group = stockMonsters(M, S, pool, i === 0 && S.boss ? 'boss' : M.chance(0.5) ? 'light' : 'room'), placed = [];
+      for (const e of group) { const near = dry.filter(([x, y]) => Math.abs(x - c[0]) <= 2 && Math.abs(y - c[1]) <= 2 && !taken.has(x + ',' + y)); const q = near.length ? M.pick(near) : c; M.token(e, q[0], q[1], { hidden: true, srd: e.srd }); taken.add(q[0] + ',' + q[1]); placed.push(e); }
+      if (S.notes && placed.length) labels.push({ x: c[0] + 1, y: c[1] - 1, text: ((i === 0 && S.boss ? 'Lair: ' : '') + foesText(placed) + (i === 0 && S.boss && S.loot ? '; chest: ' + rollLoot(M, S, true) : '')).slice(0, 120), dmOnly: true, size: 's' });
+    });
+  } else if (foes) for (let i = 0; i < Math.round(cells.length / 90); i++) { const c = M.pick(cells); if (Math.abs(c[0] - entry[0]) + Math.abs(c[1] - entry[1]) > 10 && !taken.has(c[0] + ',' + c[1])) { M.token(lib[pickFoe(M, foes)], c[0], c[1], { hidden: true }); taken.add(c[0] + ',' + c[1]); } }
   const nTraps = S.traps === 'none' ? 0 : S.traps === 'many' ? 8 : 3;
   for (let i = 0; i < nTraps; i++) put('trap', ...M.pick(cells));
   const name = M.pick(['The Dripping', 'The Echoing', 'The Black', 'Wyrm', 'Bat', 'The Glittering']) + ' ' + M.pick(['Caves', 'Caverns', 'Grotto', 'Hollows']);
-  return { wallStyle: 'rock', name, summary: `Natural caves · ${foes ? M.tokens.length + ' creatures' : 'no monsters'}${nTraps ? ` · ${nTraps} traps` : ''}${S.boss ? ' · lair at the far end' : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [entry[0] - 5, entry[1] - 5, entry[0] + 5, entry[1] + 5] };
+  if (S.notes) { labels.push({ x: entry[0] + 1, y: entry[1] + 0.5, text: 'Entrance', dmOnly: true, size: 's' }); if (lakeAt) labels.push({ x: lakeAt[0] - 2, y: lakeAt[1] - 3, text: 'Underground lake: cold, deep and dark', dmOnly: true, size: 's' }); }
+  return { labels, wallStyle: 'rock', name, summary: `Natural caves${lakeAt ? ' with a lake' : ''} · ${foes ? M.tokens.length + ' creatures' : 'no monsters'}${nTraps ? ` · ${nTraps} traps` : ''}${S.boss ? ' · lair at the far end' : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [entry[0] - 5, entry[1] - 5, entry[0] + 5, entry[1] + 5] };
 }
 
 // =========================================================================================
@@ -785,15 +965,21 @@ const ROOMS = {
   guardhouse: ['barracks', 'armory', 'cells', 'office', 'kitchen', 'storage', 'cells'],
   tower: ['lab', 'library', 'bedroom', 'storage', 'study', 'lab']
 };
-const ROOM_NAMES = { common: 'common room', kitchen: 'kitchen', storage: 'storeroom', bedroom: 'bedroom', nave: 'nave', vestry: 'vestry', library: 'library', hall: 'great hall', dining: 'dining room', study: 'study', shopfloor: 'shop floor', barracks: 'barracks', armory: 'armoury', cells: 'cells', office: 'office', lab: 'laboratory' };
+const ROOM_NAMES = { cellar: 'cellar', crypt: 'crypt', common: 'common room', kitchen: 'kitchen', storage: 'storeroom', bedroom: 'bedroom', nave: 'nave', vestry: 'vestry', library: 'library', hall: 'great hall', dining: 'dining room', study: 'study', shopfloor: 'shop floor', barracks: 'barracks', armory: 'armoury', cells: 'cells', office: 'office', lab: 'laboratory' };
 
+// floors above and below (1.11): the same outline, other rooms; the stairs in the same square on every floor
+const UPPER = { tavern: ['bedroom', 'bedroom', 'bedroom', 'bedroom', 'storage', 'bedroom'], temple: ['library', 'vestry', 'bedroom', 'bedroom'], manor: ['bedroom', 'study', 'library', 'bedroom', 'bedroom', 'storage'], shop: ['bedroom', 'storage', 'study'], guardhouse: ['barracks', 'armory', 'office'], tower: ['lab', 'library', 'bedroom', 'storage'] };
+const CELLAR = { tavern: ['cellar', 'cellar', 'storage'], temple: ['crypt', 'crypt', 'storage'], manor: ['cellar', 'storage', 'cells'], shop: ['cellar', 'storage'], guardhouse: ['cells', 'cells', 'storage'], tower: ['lab', 'storage', 'cells'] };
 function buildingMap(S, seed, lib) {
+  const story = S.story || 'ground';
   const dims = { small: [14, 10], medium: [20, 14], large: [28, 18] }[S.size];
-  const pad = S.yard ? 5 : 2;
+  const pad = story === 'ground' ? (S.yard ? 5 : 2) : S.pad;
   const cols = dims[0] + pad * 2, rows = dims[1] + pad * 2;
   const M = makeMap(cols, rows, seed);
-  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) M.set(x, y, 'grass');
-  for (let i = 0; i < cols * rows / 60; i++) M.set(M.int(0, cols), M.int(0, rows), 'dirt');
+  if (story === 'ground') {
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) M.set(x, y, 'grass');
+    for (let i = 0; i < cols * rows / 60; i++) M.set(M.int(0, cols), M.int(0, rows), 'dirt');
+  }
   const X0 = pad, Y0 = pad, W = dims[0], H = dims[1];
   const abandoned = S.condition === 'abandoned';
 
@@ -809,17 +995,20 @@ function buildingMap(S, seed, lib) {
   };
   // the main room keeps a big share: carve it off first
   const inner = { x: X0 + 1, y: Y0 + 1, w: W - 2, h: H - 2 };
-  const mainW = Math.max(6, Math.round(inner.w * (S.kind === 'shop' ? 0.4 : S.kind === 'tower' ? 0.42 : 0.5)));
-  const mainRoom = { x: inner.x, y: inner.y, w: mainW, h: inner.h };
-  walls.push({ x: inner.x + mainW, y: inner.y, w: 1, h: inner.h, vert: true });
-  leaves.push(mainRoom);
-  split({ x: inner.x + mainW + 1, y: inner.y, w: inner.w - mainW - 1, h: inner.h }, 0);
+  let mainRoom;
+  if (story === 'ground') {
+    const mainW = Math.max(6, Math.round(inner.w * (S.kind === 'shop' ? 0.4 : S.kind === 'tower' ? 0.42 : 0.5)));
+    mainRoom = { x: inner.x, y: inner.y, w: mainW, h: inner.h };
+    walls.push({ x: inner.x + mainW, y: inner.y, w: 1, h: inner.h, vert: true });
+    leaves.push(mainRoom);
+    split({ x: inner.x + mainW + 1, y: inner.y, w: inner.w - mainW - 1, h: inner.h }, 0);
+  } else { split(inner, 0); mainRoom = leaves.reduce((a, r) => (r.w * r.h > a.w * a.h ? r : a), leaves[0]); }
 
   // draw: outer walls, inner walls, floors
-  const floorFor = { kitchen: 'stone', storage: 'stone', nave: 'marble', cells: 'stone', armory: 'stone', hall: S.kind === 'manor' ? 'marble' : 'wood', lab: 'stone', barracks: 'wood' };
+  const floorFor = story === 'cellar' ? new Proxy({}, { get: () => 'stone' }) : { kitchen: 'stone', storage: 'stone', nave: 'marble', cells: 'stone', armory: 'stone', hall: S.kind === 'manor' ? 'marble' : 'wood', lab: 'stone', barracks: 'wood' };
   for (let y = Y0; y < Y0 + H; y++) for (let x = X0; x < X0 + W; x++) M.set(x, y, x === X0 || y === Y0 || x === X0 + W - 1 || y === Y0 + H - 1 ? 'wall' : 'wood');
   for (const w of walls) for (let y = w.y; y < w.y + w.h; y++) for (let x = w.x; x < w.x + w.w; x++) M.set(x, y, 'wall');
-  const purposes = ROOMS[S.kind];
+  const purposes = story === 'upper' ? UPPER[S.kind] : story === 'cellar' ? CELLAR[S.kind] : ROOMS[S.kind];
   const order = [mainRoom, ...leaves.filter((l) => l !== mainRoom).sort((a, b) => b.w * b.h - a.w * a.h)];
   order.forEach((r, i) => { r.purpose = purposes[Math.min(i, purposes.length - 1)] || 'storage'; if (i >= purposes.length) r.purpose = M.pick(['storage', 'bedroom']); });
   for (const r of order) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) M.set(x, y, floorFor[r.purpose] || 'wood');
@@ -844,9 +1033,9 @@ function buildingMap(S, seed, lib) {
   }
   // front door on the main room's outer wall, facing the yard
   const fy = mainRoom.y + Math.floor(mainRoom.h / 2);
-  M.set(X0, fy, 'wood'); M.prop(abandoned ? 'dooropen' : 'doubledoor', X0, fy, 1);
-  // windows on the outer walls
-  for (let x = X0 + 2; x < X0 + W - 2; x += 3) for (const y of [Y0, Y0 + H - 1]) if (M.get(x, y) === 'wall' && M.get(x, y === Y0 ? y + 1 : y - 1) !== 'wall') M.prop('window', x, y, 0);
+  if (story === 'ground') { M.set(X0, fy, 'wood'); M.prop(abandoned ? 'dooropen' : 'doubledoor', X0, fy, 1); }
+  // windows on the outer walls (none in a cellar)
+  if (story !== 'cellar') for (let x = X0 + 2; x < X0 + W - 2; x += 3) for (const y of [Y0, Y0 + H - 1]) if (M.get(x, y) === 'wall' && M.get(x, y === Y0 ? y + 1 : y - 1) !== 'wall') M.prop('window', x, y, 0);
   for (let y = Y0 + 2; y < Y0 + H - 2; y += 3) for (const x of [X0, X0 + W - 1]) if (y !== fy && M.get(x, y) === 'wall' && M.get(x === X0 ? x + 1 : x - 1, y) !== 'wall') M.prop('window', x, y, 1);
 
   // furnish each room
@@ -882,15 +1071,20 @@ function buildingMap(S, seed, lib) {
       armory() { edge.forEach((c, i) => put(i % 3 ? 'weaponrack' : 'crate', ...c, (c[0] === r.x || c[0] === r.x + r.w - 1) ? 1 : 0)); },
       cells() { for (let y = r.y; y < r.y + r.h; y++) put('bars', cx, y, 1); put('bones', ...any()); put('bed', ...(edge[0] || any())); },
       office() { put('desk', cx, cy); put('chair', cx, cy + 1); put('chest', ...(edge[0] || any())); if (top.length) put('bookshelf', ...top[0]); people.push([lib.Knight, [cx + 1, cy]]); },
+      cellar() { edge.forEach((c, i) => put(i % 3 === 2 ? 'sack' : 'barrel', ...c)); put('crate', ...any()); put('candle', ...any()); },
+      crypt() { for (let k = 0; k < Math.min(4, Math.floor(mid.length / 4)); k++) put('coffin', ...any()); put('candle', ...any()); put('statue', ...(edge[0] || any())); },
       lab() { put('cauldron', cx, cy); put('crystal', ...any()); put('desk', ...any()); if (top.length) put('bookshelf', ...top[0]); put('candle', ...any()); people.push([lib.Mage, [cx + 1, cy + 1]]); }
     };
     (F[r.purpose] || F.storage)();
   }
-  // stairs up in a corner room for bigger buildings
-  if (S.size !== 'small') { const r = order[order.length - 1]; put('stairs', r.x, r.y); }
+  // stairs: in a corner of the last room (or the square the floor below put them in)
+  let stairsAt = null;
+  const stairsHere = (x, y) => { for (let i = M.props.length - 1; i >= 0; i--) if (M.props[i].x === x && M.props[i].y === y) M.props.splice(i, 1); M.set(x, y, story === 'cellar' ? 'stone' : floorFor[(roomAt(x, y) || {}).purpose] || 'wood'); M.prop('stairs', x, y, story === 'cellar' ? 2 : 0); taken.add(x + ',' + y); stairsAt = [x, y]; };
+  if (story !== 'ground' && S.stairsAt) stairsHere(...S.stairsAt);
+  else if (S.size !== 'small' || (S.floors && S.floors !== 'none')) { const r = order[order.length - 1]; stairsHere(r.x, r.y); }
 
   // yard: path to the door, trees, maybe a well and a cart
-  if (S.yard) {
+  if (S.yard && story === 'ground') {
     for (let x = 0; x < X0; x++) M.set(x, fy, 'path');
     M.prop('signpost', X0 - 2, fy - 2); M.prop('lamppost', X0 - 1, fy + 2);
     if (S.kind === 'tavern' || S.kind === 'manor') M.prop('well', X0 - 3, fy + 4);
@@ -909,7 +1103,7 @@ function buildingMap(S, seed, lib) {
     for (const r of order) for (let k = 0; k < 2; k++) { const x = r.x + M.int(0, r.w - 1), y = r.y + M.int(0, r.h - 1); if (!M.propAt(x, y)) M.prop(M.pick(['rubble', 'bones', 'rubble']), x, y); }
     for (const [x, y] of [[X0, Y0 + 3], [X0 + W - 1, Y0 + H - 4]]) { M.set(x, y, 'dirt'); M.prop('rubble', x, y); }
   }
-  if (S.occupants && !abandoned) for (const [e, [x, y]] of people) if (e && M.get(x, y) !== 'wall') M.token(e, x, y);
+  if (S.occupants && !abandoned && story === 'ground') for (const [e, [x, y]] of people) if (e && M.get(x, y) !== 'wall') M.token(e, x, y);
   if (S.occupants && abandoned) { const set = FOES[M.pick(['undead', 'beasts', 'bandits'])]; for (let k = 0; k < 4; k++) { const r = M.pick(order); M.token(lib[pickFoe(M, set)], r.x + M.int(0, r.w - 1), r.y + M.int(0, r.h - 1), { hidden: true }); } }
 
   const names = {
@@ -921,12 +1115,246 @@ function buildingMap(S, seed, lib) {
     tower: () => `${M.pick(['Azure', 'Crooked', 'Ivory', 'Whispering'])} Tower`
   };
   const roomList = [...new Set(order.map((r) => ROOM_NAMES[r.purpose]))].slice(0, 5).join(', ');
-  return { name: (abandoned ? 'Abandoned ' : '') + names[S.kind](), summary: `${SCHEMA.building.fields.kind.options[S.kind]} · ${order.length} rooms (${roomList}${order.length > 5 ? '…' : ''})`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, start: [0, fy - 4, X0 + 3, fy + 4] };
+  const labels = [];
+  if (S.notes !== false) order.forEach((r, i) => roomNote(labels, r.x, r.y, i + 1, (ROOM_NAMES[r.purpose] || r.purpose).replace(/^./, (c) => c.toUpperCase()), [S.loot !== false && M.props.some((p) => p.kind === 'chest' && p.x >= r.x && p.y >= r.y && p.x < r.x + r.w && p.y < r.y + r.h) ? 'chest: ' + rollLoot(M, { partyLevel: S.partyLevel || 3 }, false) : '']));
+  if (story !== 'ground') return { cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, start: stairsAt ? [stairsAt[0] - 4, stairsAt[1] - 4, stairsAt[0] + 4, stairsAt[1] + 4] : [X0, Y0, X0 + W, Y0 + H], rooms: order.length };
+  return { name: (abandoned ? 'Abandoned ' : '') + names[S.kind](), summary: `${SCHEMA.building.fields.kind.options[S.kind]} · ${order.length} rooms (${roomList}${order.length > 5 ? '…' : ''})`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, stairsAt, pad, start: [0, fy - 4, X0 + 3, fy + 4] };
+}
+
+// =========================================================================================
+// SHIP (1.11): a hull on the water, masts, cannons, the wheel; the hold below as its own floor
+// =========================================================================================
+function shipMap(S, seed, lib) {
+  const L = { merchant: 30, warship: 40, longship: 26 }[S.kind] || 30, B = { merchant: 9, warship: 11, longship: 7 }[S.kind] || 9;
+  const cols = L + 16, rows = B + 14, M = makeMap(cols, rows, seed), x0 = 7, cy = Math.floor(rows / 2), labels = [];
+  const docked = S.setting === 'docked', hold = S.story === 'hold';
+  // the outline: square stern on the left, pointed bow on the right
+  const half = (x) => { const u = (x - x0) / L; return u < 0.08 ? (B / 2) * (0.75 + u * 3) : u > 0.72 ? (B / 2) * Math.max(0.15, 1 - ((u - 0.72) / 0.28) ** 1.6) : B / 2; };
+  const deck = (x, y) => x >= x0 && x < x0 + L && Math.abs(y + 0.5 - cy) <= half(x + 0.5);
+  if (!hold) for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) M.set(x, y, 'water');
+  if (docked && !hold) { for (let y = 0; y < 4; y++) for (let x = 0; x < cols; x++) M.set(x, y, y < 2 ? 'cobble' : 'wood'); for (let x = 2; x < cols - 2; x += 5) M.prop('barrel', x, 1); M.prop('crate', 4, 0); M.prop('lamppost', 12, 1); }
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (deck(x, y)) {
+    const rim = !deck(x - 1, y) || !deck(x + 1, y) || !deck(x, y - 1) || !deck(x, y + 1);
+    if (hold) M.set(x, y, rim ? 'wall' : 'wood');
+    else { M.set(x, y, 'wood'); if (rim) M.prop('fence', x, y, !deck(x, y - 1) || !deck(x, y + 1) ? 0 : 1); } // the deck's rail
+  }
+  const free = (x, y) => M.get(x, y) === 'wood' && !M.propAt(x, y);
+  const unrail = (x, y) => { for (let i = M.props.length - 1; i >= 0; i--) if (M.props[i].x === x && M.props[i].y === y && M.props[i].kind === 'fence') M.props.splice(i, 1); };
+  const put = (k, x, y, r = 0) => { if (free(x, y)) { M.prop(k, x, y, r); return true; } return false; };
+  const masts = { merchant: [0.3, 0.6], warship: [0.22, 0.45, 0.68], longship: [0.5] }[S.kind] || [0.45];
+  const holdAt = [x0 + Math.round(L * 0.4), cy];
+  if (!hold) {
+    for (const u of masts) put('mast', x0 + Math.round(L * u), cy, 1);
+    put('helm', x0 + 3, cy); put('lamppost', x0 + 2, cy - 2); put('lamppost', x0 + 2, cy + 2);
+    put('anchor', x0 + L - 5, cy - 1);
+    if (S.kind === 'warship') for (let x = x0 + 5; x < x0 + L - 8; x += 3) { put('cannon', x, cy - Math.floor(B / 2) + 1, 3); put('cannon', x, cy + Math.floor(B / 2) - 1, 1); }
+    if (S.kind === 'longship') for (let x = x0 + 3; x < x0 + L - 5; x += 2) { put('bench', x, cy - 1, 1); put('bench', x, cy + 1, 1); }
+    for (let i = 0; i < 6; i++) put(M.pick(['crate', 'barrel', 'barrel', 'sack']), M.int(x0 + 4, x0 + L - 6), M.int(cy - 2, cy + 2));
+    if (S.story !== 'none' && S.hold) { M.set(...holdAt, 'wood'); M.prop('trapdoor', ...holdAt); }
+    // a boat or two alongside, or the gangplank to the pier
+    if (docked) { const gx = holdAt[0] + 3; for (let y = 2; y <= cy; y++) { if (deck(gx, y) && !deck(gx, y - 1)) { unrail(gx, y); break; } if (!deck(gx, y)) M.prop('bridge', gx, y, 1); } }
+    else M.prop('boat', x0 + L - 4, cy + Math.ceil(B / 2) + 2, 0);
+  } else {
+    // the hold: cargo, hammocks, the brig
+    for (let x = x0 + 3; x < x0 + L - 4; x++) for (const y of [cy - Math.floor(B / 2) + 1, cy + Math.floor(B / 2) - 1]) if (M.chance(0.6)) put(M.pick(['crate', 'barrel', 'sack', 'crate']), x, y);
+    for (let x = x0 + 4; x < x0 + 10; x += 2) put('hammock', x, cy - 1, 1);
+    const bx = x0 + L - 9; for (let y = cy - 2; y <= cy + 2; y++) M.prop('bars', bx, y, 1);
+    put('chest', bx + 2, cy); put('lamppost', x0 + 2, cy);
+    M.set(...holdAt, 'wood'); for (let i = M.props.length - 1; i >= 0; i--) if (M.props[i].x === holdAt[0] && M.props[i].y === holdAt[1]) M.props.splice(i, 1); M.prop('ladder', ...holdAt);
+  }
+  // who's aboard
+  const fam = { sailors: null, pirates: 'pirates', raid: 'raiders', ghost: 'undead', none: null }[S.crew];
+  const pool = fam && srdPool(lib, fam), deckCells = []; for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (deck(x, y) && free(x, y)) deckCells.push([x, y]);
+  const crew = [];
+  if (S.crew === 'sailors' && !hold) for (let i = 0; i < 5; i++) { const c = M.pick(deckCells); M.token(lib[M.pick(['Commoner', 'Fisher', 'Commoner'])] || lib.Commoner, c[0], c[1]); }
+  else if (pool) for (const e of stockMonsters(M, S, pool, hold ? 'light' : 'room')) { const c = M.pick(deckCells); if (!c) break; M.token(e, c[0], c[1], { hidden: S.crew !== 'raid', srd: e.srd }); crew.push(e); }
+  if (S.notes) { roomNote(labels, x0 + 1, cy - Math.floor(B / 2) - 1.4, 1, hold ? 'The hold' : 'Main deck', [crew.length ? foesText(crew) : '', hold && S.loot ? 'chest in the brig: ' + rollLoot(M, S, true) : '']); }
+  const name = `The ${M.pick(['Salt', 'Black', 'Grey', 'Crimson', 'Silver', 'Drowned', 'Lucky'])} ${M.pick(['Gull', 'Maiden', 'Serpent', 'Wind', 'Marlin', 'Kraken', 'Star'])}`;
+  return { name, summary: `${SCHEMA.ship.fields.kind.options[S.kind]} · ${docked ? 'at the docks' : 'at sea'} · ${crew.length ? foesText(crew) : S.crew}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, stairsAt: holdAt, start: docked ? [0, 0, cols, cy] : [x0, cy - B, x0 + 10, cy + B] };
+}
+
+// =========================================================================================
+// CASTLE (1.11): curtain wall with towers, gatehouse over a moat, courtyard buildings, the keep
+// =========================================================================================
+function castleMap(S, seed, lib) {
+  const [cols, rows] = { small: [44, 34], medium: [58, 44], large: [76, 56] }[S.size] || [58, 44];
+  const M = makeMap(cols, rows, seed), labels = []; fillGround(M, S.setting);
+  const ruined = S.condition === 'ruined', m = S.moat ? 3 : 1, x0 = 3 + m, y0 = 3 + m, x1 = cols - 4 - m, y1 = rows - 4 - m;
+  if (S.moat) for (let y = y0 - 2; y <= y1 + 2; y++) for (let x = x0 - 2; x <= x1 + 2; x++) if (x < x0 - 0 || x > x1 || y < y0 || y > y1) if (x <= x0 - 1 && x >= x0 - 2 || x >= x1 + 1 && x <= x1 + 2 || y <= y0 - 1 && y >= y0 - 2 || y >= y1 + 1 && y <= y1 + 2) M.set(x, y, 'water');
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const edge = x === x0 || x === x1 || y === y0 || y === y1; M.set(x, y, edge ? 'wall' : M.chance(0.12) ? 'dirt' : 'cobble'); M.mark(x, y, edge ? 3 : 0); }
+  // towers at the corners: 4×4 blocks with a room inside
+  for (const [tx, ty] of [[x0 - 1, y0 - 1], [x1 - 2, y0 - 1], [x0 - 1, y1 - 2], [x1 - 2, y1 - 2]]) { for (let y = ty; y < ty + 4; y++) for (let x = tx; x < tx + 4; x++) { const e = x === tx || y === ty || x === tx + 3 || y === ty + 3; M.set(x, y, e ? 'wall' : 'stone'); M.mark(x, y, 3); } M.prop('torch', tx + 1, ty + 1); }
+  // gatehouse in the south wall
+  const gx = (x0 + x1) >> 1;
+  for (let x = gx - 2; x <= gx + 2; x++) for (let y = y1 - 1; y <= y1 + 1; y++) { M.set(x, y, Math.abs(x - gx) === 2 ? 'wall' : 'cobble'); M.mark(x, y, 3); }
+  M.prop(ruined ? 'rubble' : 'portcullis', gx, y1, 0); M.prop('torch', gx - 1, y1 - 1); M.prop('torch', gx + 1, y1 - 1);
+  for (let y = y1 + 2; y < rows; y++) { M.set(gx - 1, y, 'path'); M.set(gx, y, 'path'); M.set(gx + 1, y, 'path'); }
+  if (S.moat) for (let y = y1 + 1; y <= y1 + 2; y++) for (let x = gx - 1; x <= gx + 1; x++) M.prop('bridge', x, y, 1);
+  // the keep at the back, with rooms inside (the great hall the biggest)
+  const kw = Math.round((x1 - x0) * 0.5), kh = Math.round((y1 - y0) * 0.4), kx = gx - (kw >> 1), ky = y0 + 3;
+  const keep = building(M, kx, ky, kw, kh, 's', 'stone');
+  const hallW = Math.max(6, Math.round((kw - 2) * 0.55));
+  for (let y = ky + 1; y < ky + kh - 1; y++) M.set(kx + 1 + hallW, y, 'wall');
+  const door = [kx + 1 + hallW, ky + (kh >> 1)]; M.set(...door, 'stone'); M.prop('door', ...door, 1);
+  for (let x = kx + 1; x < kx + 1 + hallW; x++) for (let y = ky + 1; y < ky + kh - 1; y++) M.set(x, y, 'marble');
+  const hcx = kx + 1 + (hallW >> 1);
+  M.prop('throne', hcx, ky + 1); M.prop('rug', hcx, ky + 2); M.prop('rug', hcx, ky + 3); for (let x = kx + 2; x < kx + hallW; x += 3) { M.prop('pillar', x, ky + 2); M.prop('pillar', x, ky + kh - 3); }
+  M.prop('fireplace', kx + 1, ky + (kh >> 1)); M.prop('brazier', hcx - 2, ky + 1); M.prop('brazier', hcx + 2, ky + 1);
+  const sx = kx + kw - 3, sy = ky + 1; M.prop('stairs', sx, sy, 0); // up the keep
+  M.prop('bed', kx + kw - 2, ky + kh - 3); M.prop('chest', kx + kw - 3, ky + kh - 2); M.prop('desk', kx + hallW + 3, ky + (kh >> 1)); M.prop('bookshelf', kx + hallW + 2, ky + 1);
+  // courtyard: a well, stables and barracks along the walls, a smithy
+  M.prop('well', gx + 4, y1 - 5);
+  const side = (bx, by, w, h, door, kind) => { if (!M.free(bx, by, w, h)) return null; const b = building(M, bx, by, w, h, door, kind === 'stable' ? 'dirt' : 'wood'); const f = FURNISH[kind === 'barracks' ? 'guardhouse' : kind]; return f ? f(M, b, lib) : []; };
+  side(x0 + 1, y1 - 8, 8, 7, 'e', 'stable'); side(x1 - 9, y1 - 8, 9, 7, 'w', 'barracks'); side(x0 + 1, ky + 1, 7, 6, 'e', 'smithy');
+  for (let i = 0; i < 6; i++) { const x = M.int(x0 + 2, x1 - 2), y = M.int(y0 + kh + 4, y1 - 2); if (!M.use(x, y) && !M.propAt(x, y)) M.prop(M.pick(['cart', 'barrel', 'crate', 'haystack', 'weaponrack']), x, y, M.int(0, 3)); }
+  if (ruined) { for (let i = 0; i < (cols + rows) * 1.5; i++) { const x = M.int(x0, x1), y = M.int(y0, y1); if (M.get(x, y) === 'wall' && M.chance(0.4)) { M.set(x, y, 'dirt'); M.prop('rubble', x, y); } else if (M.chance(0.08) && !M.propAt(x, y)) M.prop(M.pick(['rubble', 'bones', 'bush', 'deadtree']), x, y); } }
+  if (S.condition === 'besieged') { for (let i = 0; i < 6; i++) M.prop(M.pick(['tent', 'campfire', 'cart', 'weaponrack']), M.int(2, cols - 3), M.int(y1 + 4, rows - 2)); }
+  // the people in it
+  const fam = { garrison: 'garrison', bandits: 'bandits', undead: 'undead', cultists: 'cultists', none: null }[S.occupants];
+  const pool = fam && srdPool(lib, fam), placed = { hall: [], yard: [] };
+  if (pool) {
+    for (const e of stockMonsters(M, S, pool, 'boss')) { const x = M.int(kx + 2, kx + hallW - 1), y = M.int(ky + 2, ky + kh - 3); M.token(e, x, y, { hidden: fam !== 'garrison', srd: e.srd }); placed.hall.push(e); }
+    for (const e of stockMonsters(M, S, pool, 'room')) { const x = M.int(gx - 4, gx + 4), y = M.int(y1 - 6, y1 - 2); M.token(e, x, y, { hidden: fam !== 'garrison', srd: e.srd }); placed.yard.push(e); }
+  }
+  if (S.notes) {
+    roomNote(labels, kx + 1, ky + 1, 1, 'Great hall', [foesText(placed.hall)]);
+    roomNote(labels, kx + hallW + 2, ky + 1, 2, 'Lord’s chambers', [S.loot ? 'chest: ' + rollLoot(M, S, true) : '']);
+    roomNote(labels, gx - 2, y1 - 3, 3, 'Gatehouse & courtyard', [foesText(placed.yard)]);
+  }
+  const name = `${M.pick(['Castle', 'Fort', 'Keep of'])} ${M.pick(['Ravenmoor', 'Highwatch', 'Greystone', 'Blackthorn', 'Stormhold', 'Dunmere', 'Ashcliff'])}`;
+  return { name, summary: `${S.size} castle · ${S.condition === 'held' ? 'held' : S.condition === 'ruined' ? 'in ruins' : 'under siege'} · ${placed.hall.length + placed.yard.length ? foesText([...placed.hall, ...placed.yard]) : 'empty'}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, keep: { x: kx, y: ky, w: kw, h: kh, stairs: [sx, sy] }, start: [gx - 6, y1 - 4, gx + 6, rows - 1] };
+}
+// the keep's upper floor: bedrooms, a chapel and the battlements' stairs
+function keepUpper(S, seed, lib, base) {
+  const M = makeMap(base.cols, base.rows, seed), k = base.keep, labels = [];
+  for (let y = k.y; y < k.y + k.h; y++) for (let x = k.x; x < k.x + k.w; x++) M.set(x, y, x === k.x || y === k.y || x === k.x + k.w - 1 || y === k.y + k.h - 1 ? 'wall' : 'wood');
+  const mid = k.x + (k.w >> 1); for (let y = k.y + 1; y < k.y + k.h - 1; y++) M.set(mid, y, 'wall'); M.set(mid, k.y + (k.h >> 1), 'wood'); M.prop('door', mid, k.y + (k.h >> 1), 1);
+  for (let x = k.x + 2; x < mid - 1; x += 3) { M.prop('bed', x, k.y + 1); M.prop('chest', x, k.y + k.h - 2); }
+  M.prop('altar', mid + ((k.x + k.w - mid) >> 1), k.y + 1); for (let x = mid + 2; x < k.x + k.w - 2; x += 2) M.prop('bench', x, k.y + (k.h >> 1) + 1, 0);
+  M.prop('stairs', ...k.stairs, 2); M.prop('window', k.x + 3, k.y, 0); M.prop('window', k.x + k.w - 4, k.y, 0);
+  if (S.notes) { roomNote(labels, k.x + 1, k.y + 1, 4, 'Bedchambers', []); roomNote(labels, mid + 1, k.y + 1, 5, 'Chapel', []); }
+  return { cols: base.cols, rows: base.rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, start: [k.x, k.y, k.x + k.w, k.y + k.h] };
+}
+
+// =========================================================================================
+// GRAVEYARD (1.11): a walled field of graves, paths, a chapel, a mausoleum with a crypt below
+// =========================================================================================
+function graveyardMap(S, seed, lib) {
+  const [cols, rows] = { small: [34, 26], medium: [46, 34], large: [60, 44] }[S.size] || [46, 34];
+  const M = makeMap(cols, rows, seed), labels = []; fillGround(M, 'temperate');
+  const wild = { tended: 0.05, old: 0.25, forgotten: 0.5 }[S.age] ?? 0.25;
+  for (let x = 1; x < cols - 1; x++) for (const y of [1, rows - 2]) if (!(S.age === 'forgotten' && M.chance(0.25))) M.prop('fence', x, y, 0);
+  for (let y = 2; y < rows - 2; y++) for (const x of [1, cols - 2]) if (!(S.age === 'forgotten' && M.chance(0.25))) M.prop('fence', x, y, 1);
+  const gx = cols >> 1; for (let y = 0; y < rows - 1; y++) { M.set(gx, y, 'path'); M.set(gx + 1, y, 'path'); M.mark(gx, y, 1); M.mark(gx + 1, y, 1); }
+  for (let i = M.props.length - 1; i >= 0; i--) if (M.props[i].y === rows - 2 && Math.abs(M.props[i].x - gx) <= 1) M.props.splice(i, 1);
+  const cy = rows >> 1; for (let x = 2; x < cols - 2; x++) { M.set(x, cy, 'path'); M.mark(x, cy, 1); }
+  let crypt = null;
+  if (S.chapel) { const b = building(M, gx - 4, 3, 10, 7, 's', 'stone'); FURNISH.temple(M, b, {}); }
+  if (S.mausoleum) { const mx = cols - 11, my = rows - 10; const b = building(M, mx, my, 7, 6, 'w', 'marble'); for (const p of M.props) if (p.x === b.door[0] && p.y === b.door[1]) p.kind = 'portcullis'; M.prop('statue', mx + 2, my + 1); M.prop('statue', mx + 4, my + 1); crypt = [mx + 4, my + 3]; M.prop('stairs', ...crypt, 2); M.prop('coffin', mx + 2, my + 4); }
+  // rows of graves either side of the paths
+  for (let y = 3; y < rows - 3; y += 2) for (let x = 3; x < cols - 3; x += 2) {
+    if (M.use(x, y) || M.propAt(x, y) || Math.abs(y - cy) < 1 || Math.abs(x - gx) < 2) continue;
+    if (M.chance(0.78)) { M.prop(M.chance(0.12) ? 'statue' : 'grave', x, y, 0); if (M.chance(wild)) M.set(x, y, 'dirt'); }
+  }
+  for (let i = 0; i < (cols * rows) / 70; i++) { const x = M.int(2, cols - 3), y = M.int(2, rows - 3); if (!M.use(x, y) && !M.propAt(x, y)) M.prop(M.pick(['deadtree', 'deadtree', 'bush', 'rock', 'mushrooms', 'bones']), x, y, M.int(0, 3)); }
+  for (const [x, y] of [[gx - 1, rows - 3], [gx + 2, rows - 3], [gx - 1, cy - 1], [gx + 2, cy + 1]]) if (!M.propAt(x, y)) M.prop('lamppost', x, y);
+  // an open grave or two, and the dead
+  for (let k = 0; k < 2; k++) { const x = M.int(4, cols - 5), y = M.int(4, rows - 5); if (!M.use(x, y)) { M.set(x, y, 'pit'); M.prop('rubble', x + 1, y); } }
+  const pool = S.dead ? srdPool(lib, 'undead') : null, dead = [];
+  if (pool) for (const e of stockMonsters(M, S, pool, 'room')) { const x = M.int(3, cols - 4), y = M.int(3, rows - 4); M.token(e, x, y, { hidden: true, srd: e.srd }); dead.push(e); }
+  if (S.notes) { labels.push({ x: gx + 2.2, y: rows - 3, text: 'Lychgate', dmOnly: true, size: 's' }); if (dead.length) labels.push({ x: 3, y: 3, text: 'Restless dead: ' + foesText(dead), dmOnly: true, size: 's' }); if (crypt) labels.push({ x: crypt[0] - 4, y: crypt[1] + 2.5, text: 'Mausoleum: stairs down to the crypt', dmOnly: true, size: 's' }); }
+  const name = `${M.pick(['Old', 'Saint', 'Hollow', 'Raven', 'Mourning', 'Black'])} ${M.pick(['Hill', 'Aldric’s', 'Vale', 'Barrow', 'Yew'])} Graveyard`;
+  return { name, summary: `Graveyard · ${S.age} · ${dead.length ? foesText(dead) : 'quiet'}${crypt ? ' · crypt below' : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, crypt, start: [gx - 5, rows - 8, gx + 6, rows - 1] };
+}
+
+// =========================================================================================
+// CITY STREETS (1.11): cobbled streets around blocks of houses and shops, a plaza in the middle
+// =========================================================================================
+function cityMap(S, seed, lib) {
+  const [cols, rows] = SIZES[S.size] || SIZES.medium, M = makeMap(cols, rows, seed), labels = [];
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) M.set(x, y, 'cobble');
+  const docks = S.district === 'docks', slums = S.district === 'slums', noble = S.district === 'noble';
+  if (docks) for (let y = rows - 7; y < rows; y++) for (let x = 0; x < cols; x++) M.set(x, y, y < rows - 5 ? 'wood' : 'water');
+  const pcx = cols >> 1, pcy = (docks ? rows - 7 : rows) >> 1;
+  // blocks between streets
+  const streetsX = [], streetsY = []; for (let x = 2; x < cols - 3; x += M.int(10, 14)) streetsX.push(x); for (let y = 2; y < (docks ? rows - 8 : rows) - 3; y += M.int(9, 12)) streetsY.push(y);
+  const blocks = [], used = new Set(), people = [];
+  for (let i = 0; i < streetsX.length - 1; i++) for (let j = 0; j < streetsY.length - 1; j++) {
+    const bx = streetsX[i] + 2, by = streetsY[j] + 2, bw = streetsX[i + 1] - streetsX[i] - 3, bh = streetsY[j + 1] - streetsY[j] - 3;
+    if (Math.abs(bx + bw / 2 - pcx) < 8 && Math.abs(by + bh / 2 - pcy) < 6) { // the plaza
+      M.prop(noble ? 'statue' : 'fountain', pcx, pcy); for (const [dx, dy] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) M.prop(slums ? 'barrel' : 'lamppost', pcx + dx, pcy + dy);
+      if (S.district === 'market') for (let k = 0; k < 6; k++) M.prop('stall', pcx - 5 + k * 2, pcy + 4);
+      continue;
+    }
+    // one or two buildings per block
+    const two = bw >= 11, w1 = two ? (bw >> 1) - 1 : bw, kinds = docks ? ['store', 'house', 'tavern'] : noble ? ['house', 'house', 'temple', 'store'] : slums ? ['house', 'house', 'house', 'tavern'] : ['store', 'house', 'tavern', 'smithy', 'house'];
+    for (const [x, w] of two ? [[bx, w1], [bx + w1 + 2, bw - w1 - 2]] : [[bx, w1]]) {
+      if (w < 5 || bh < 5) continue;
+      const kind = M.pick(kinds), b = building(M, x, by, w, bh, M.pick(['n', 's']), kind === 'temple' ? 'marble' : 'wood');
+      const who = (FURNISH[kind] || FURNISH.house)(M, b, lib) || []; people.push(...who);
+      blocks.push({ x, y: by, kind });
+      if (slums) ruin(M, b);
+    }
+  }
+  for (let i = 0; i < (cols + rows) / 2; i++) { const x = M.int(1, cols - 2), y = M.int(1, rows - 2); if (!M.use(x, y) && !M.propAt(x, y) && M.get(x, y) === 'cobble') M.prop(M.pick(slums ? ['rubble', 'barrel', 'crate', 'bones', 'sack'] : ['barrel', 'crate', 'cart', 'lamppost', 'sack', 'signpost']), x, y, M.int(0, 3)); }
+  if (docks) { for (let x = 3; x < cols - 3; x += 8) M.prop('boat', x, rows - 3, 0); for (let x = 6; x < cols - 6; x += 8) for (let y = rows - 5; y < rows - 1; y++) M.prop('bridge', x, y, 1); }
+  for (const [e, [x, y]] of people) if (e && M.chance(0.6)) M.token(e, x, y);
+  const fam = { thieves: 'bandits', cult: 'cultists', watch: 'garrison', none: null }[S.trouble], pool = fam && srdPool(lib, fam === 'bandits' ? 'city' : fam), trouble = [];
+  if (pool) for (const e of stockMonsters(M, S, pool, 'room')) { const x = M.int(2, cols - 3), y = M.int(2, rows - 3); if (M.get(x, y) === 'cobble') { M.token(e, x, y, { hidden: fam !== 'garrison', srd: e.srd }); trouble.push(e); } }
+  if (S.notes) { labels.push({ x: pcx + 1.5, y: pcy - 1, text: S.district === 'market' ? 'Market square' : 'Plaza', dmOnly: true, size: 's' }); if (trouble.length) labels.push({ x: 2, y: 1, text: 'Trouble: ' + foesText(trouble), dmOnly: true, size: 's' }); }
+  const name = `${M.pick(['Copper', 'Lantern', 'Old', 'Silver', 'Rook', 'Gull', 'Mason'])} ${M.pick(['Lane', 'Row', 'Street', 'Ward', 'Quarter'])}`;
+  return { name, summary: `${SCHEMA.city.fields.district.options[S.district]} district · ${blocks.length} buildings${trouble.length ? ' · ' + foesText(trouble) : ''}`, cols, rows, tiles: M.tiles, props: M.props, tokens: M.tokens, labels, start: [pcx - 6, pcy - 5, pcx + 6, pcy + 5] };
+}
+
+// ---------- the mood that suits each place ----------
+function moodFor(type, S, out) {
+  const night = { time: 'night' };
+  switch (type) {
+    case 'dungeon': {
+      const st = S.style, amb = st === 'temple' || st === 'lava' ? 'dim' : 'dark';
+      return { vision: { on: true, ambient: amb }, atmo: { sound: SOUND(st === 'crypt' ? 'music-dungeon' : null, st === 'lava' ? 'campfire' : st === 'sewer' || st === 'flooded' ? 'river' : 'cave'), auto: true } };
+    }
+    case 'building': return S.kind === 'tavern' && S.condition !== 'abandoned' ? { atmo: { sound: SOUND('music-tavern', 'campfire'), auto: true } } : S.condition === 'abandoned' ? { vision: { on: true, ambient: 'dim' }, atmo: { sound: SOUND(null, 'wind'), auto: true } } : null;
+    case 'village': return { atmo: { sound: SOUND('music-exploration'), auto: true } };
+    case 'wilderness': return { atmo: { weather: S.kind === 'swamp' ? 'fog' : S.kind === 'snowy' ? 'snow' : 'none', level: 1, sound: SOUND('music-exploration', S.kind === 'river' ? 'river' : S.kind === 'coast' ? 'ocean' : S.kind === 'pass' || S.kind === 'snowy' ? 'wind' : 'night'), auto: true } };
+    case 'ship': return { atmo: { weather: { calm: 'none', rain: 'rain', storm: 'storm', fog: 'fog' }[S.weather] || 'none', level: 2, sound: SOUND(S.crew === 'pirates' || S.crew === 'raid' ? 'music-battle' : null, S.weather === 'storm' ? 'thunderstorm' : 'ocean', 'wind'), auto: true } };
+    case 'castle': return { atmo: { time: S.condition === 'ruined' ? 'dusk' : 'day', sound: SOUND(S.condition === 'besieged' ? 'music-battle' : 'music-exploration', 'wind'), auto: true } };
+    case 'graveyard': return { vision: { on: true, ambient: 'dim' }, atmo: { ...night, weather: 'fog', level: 2, sound: SOUND('music-dungeon', 'night', 'wind'), auto: true } };
+    case 'city': return { atmo: { time: S.time, sound: SOUND(S.district === 'market' || S.district === 'docks' ? 'music-tavern' : null, S.district === 'docks' ? 'ocean' : null), auto: true }, ...(S.time === 'night' ? { vision: { on: true, ambient: 'dim' } } : {}) };
+  }
+  return null;
 }
 
 // ---------- entry point ----------
-const GEN = { village, dungeon, wilderness, building: buildingMap };
+const GEN = { village, dungeon, wilderness, building: buildingMap, ship: shipMap, castle: castleMap, graveyard: graveyardMap, city: cityMap };
 export function generate(type, settings, seed, lib = {}) {
   const S = { ...defaults(type), ...settings };
-  return { ...GEN[type](S, seed >>> 0, lib), seed: seed >>> 0 };
+  seed = seed >>> 0;
+  let out, floors = [];
+  if (type === 'dungeon' && S.style !== 'caves' && +S.levels > 1) { // several levels, each with stairs down into the next
+    const n = Math.min(3, +S.levels);
+    out = dungeon({ ...S, noMirror: true, down: true, boss: false }, seed, lib);
+    let prev = out;
+    for (let k = 1; k < n && prev.down; k++) {
+      const last = k === n - 1, lv = dungeon({ ...S, noMirror: true, anchor: prev.down, down: !last, boss: last && S.boss }, seed + k * 7919, lib);
+      floors.push({ ...lv, floor: `Level ${k + 1}`, level: -k }); prev = lv;
+    }
+    out.floorName = 'Level 1'; out.summary += ` · ${n} levels`;
+  } else if (type === 'building' && S.floors && S.floors !== 'none') {
+    out = buildingMap(S, seed, lib);
+    if (S.floors === 'upstairs' || S.floors === 'both') floors.push({ ...buildingMap({ ...S, story: 'upper', pad: out.pad, stairsAt: out.stairsAt }, seed + 101, lib), floor: 'Upper floor', level: 1 });
+    if (S.floors === 'cellar' || S.floors === 'both') floors.push({ ...buildingMap({ ...S, story: 'cellar', pad: out.pad, stairsAt: out.stairsAt }, seed + 202, lib), floor: S.kind === 'temple' ? 'Crypt' : 'Cellar', level: -1 });
+    out.summary += ' · ' + floors.map((f) => f.floor.toLowerCase()).join(' and ');
+  } else if (type === 'ship' && S.hold) {
+    out = shipMap(S, seed, lib);
+    floors.push({ ...shipMap({ ...S, story: 'hold' }, seed + 31, lib), floor: 'Hold', level: -1 }); out.floorName = 'Deck';
+  } else if (type === 'castle' && S.keepFloors) {
+    out = castleMap(S, seed, lib); floors.push({ ...keepUpper(S, seed + 41, lib, out), floor: 'Keep, upper floor', level: 1 });
+  } else if (type === 'graveyard' && S.mausoleum) {
+    out = graveyardMap(S, seed, lib);
+    if (out.crypt) { const c = dungeon({ ...defaults('dungeon'), ...S, size: S.size === 'small' ? 'small' : 'medium', rooms: 'few', style: 'crypt', monsters: S.dead ? 'undead' : 'none', levels: '1', noMirror: true, anchor: out.crypt, down: false, boss: true }, seed + 53, lib); floors.push({ ...c, floor: 'Crypt', level: -1 }); }
+  } else out = GEN[type](S, seed, lib);
+  out.mood = moodFor(type, S, out);
+  if (floors.length) out.floors = floors.map((f) => ({ floor: f.floor, level: f.level, cols: f.cols || out.cols, rows: f.rows || out.rows, tiles: f.tiles, props: f.props, tokens: f.tokens, labels: f.labels || [], start: f.start, mood: type === 'dungeon' || f.floor === 'Crypt' || f.floor === 'Hold' || f.floor === 'Cellar' ? { vision: { on: true, ambient: 'dark' }, atmo: { sound: SOUND(null, 'cave'), auto: true } } : out.mood }));
+  return { ...out, seed };
 }

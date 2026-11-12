@@ -244,7 +244,7 @@ function details(g, sc, R) {
 }
 
 // ---------- props: shaded, with a contact shadow ----------
-const FLAT = new Set(['rug', 'trap', 'trapdoor', 'lilypad', 'flowers', 'bones', 'stairs', 'mushrooms', 'reeds', 'grave', 'bridge', 'door', 'doubledoor', 'dooropen', 'secretdoor', 'window', 'archway', 'portcullis', 'bars', 'lever', 'rubble']);
+const FLAT = new Set(['rails', 'rug', 'trap', 'trapdoor', 'lilypad', 'flowers', 'bones', 'stairs', 'mushrooms', 'reeds', 'grave', 'bridge', 'door', 'doubledoor', 'dooropen', 'secretdoor', 'window', 'archway', 'portcullis', 'bars', 'lever', 'rubble']);
 const spriteCache = new Map();
 function propSprite(kind, rot, R) {
   const key = kind + rot + '@' + R; if (spriteCache.has(key)) return spriteCache.get(key);

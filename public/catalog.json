@@ -1,94 +1,462 @@
 {
   "terrains": [
-    { "id": "stone", "name": "Stone floor", "key": "1" },
-    { "id": "cobble", "name": "Cobblestone", "key": "2" },
-    { "id": "wood", "name": "Wood planks", "key": "3" },
-    { "id": "dirt", "name": "Dirt", "key": "4" },
-    { "id": "grass", "name": "Grass", "key": "5" },
-    { "id": "sand", "name": "Sand", "key": "6" },
-    { "id": "water", "name": "Water", "key": "7" },
-    { "id": "lava", "name": "Lava", "key": "8" },
-    { "id": "pit", "name": "Pit / chasm", "key": "9" },
-    { "id": "wall", "name": "Wall", "key": "0" },
-    { "id": "marble", "name": "Marble tiles" },
-    { "id": "path", "name": "Gravel path" },
-    { "id": "farm", "name": "Farmland" },
-    { "id": "snow", "name": "Snow" }
+    {
+      "id": "stone",
+      "name": "Stone floor",
+      "key": "1"
+    },
+    {
+      "id": "cobble",
+      "name": "Cobblestone",
+      "key": "2"
+    },
+    {
+      "id": "wood",
+      "name": "Wood planks",
+      "key": "3"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "key": "4"
+    },
+    {
+      "id": "grass",
+      "name": "Grass",
+      "key": "5"
+    },
+    {
+      "id": "sand",
+      "name": "Sand",
+      "key": "6"
+    },
+    {
+      "id": "water",
+      "name": "Water",
+      "key": "7"
+    },
+    {
+      "id": "lava",
+      "name": "Lava",
+      "key": "8"
+    },
+    {
+      "id": "pit",
+      "name": "Pit / chasm",
+      "key": "9"
+    },
+    {
+      "id": "wall",
+      "name": "Wall",
+      "key": "0"
+    },
+    {
+      "id": "marble",
+      "name": "Marble tiles"
+    },
+    {
+      "id": "path",
+      "name": "Gravel path"
+    },
+    {
+      "id": "farm",
+      "name": "Farmland"
+    },
+    {
+      "id": "snow",
+      "name": "Snow"
+    }
   ],
-  "propCats": ["Doors & windows", "Furniture", "Dungeon", "Village", "Nature"],
+  "propCats": [
+    "Doors & windows",
+    "Furniture",
+    "Dungeon",
+    "Village",
+    "Nature",
+    "Ships & mines"
+  ],
   "props": [
-    { "id": "door", "name": "Door", "cat": "Doors & windows" },
-    { "id": "doubledoor", "name": "Double door", "cat": "Doors & windows" },
-    { "id": "dooropen", "name": "Open door", "cat": "Doors & windows" },
-    { "id": "secretdoor", "name": "Secret door (DM only)", "cat": "Doors & windows", "dmOnly": true },
-    { "id": "portcullis", "name": "Portcullis", "cat": "Doors & windows" },
-    { "id": "archway", "name": "Archway", "cat": "Doors & windows" },
-    { "id": "window", "name": "Window", "cat": "Doors & windows" },
-    { "id": "bars", "name": "Bars / cell door", "cat": "Doors & windows" },
-
-    { "id": "table", "name": "Table", "cat": "Furniture" },
-    { "id": "roundtable", "name": "Round table", "cat": "Furniture" },
-    { "id": "chair", "name": "Chair", "cat": "Furniture" },
-    { "id": "bench", "name": "Bench", "cat": "Furniture" },
-    { "id": "bed", "name": "Bed", "cat": "Furniture" },
-    { "id": "bookshelf", "name": "Bookshelf", "cat": "Furniture" },
-    { "id": "wardrobe", "name": "Wardrobe", "cat": "Furniture" },
-    { "id": "desk", "name": "Desk", "cat": "Furniture" },
-    { "id": "fireplace", "name": "Fireplace", "cat": "Furniture" },
-    { "id": "bar", "name": "Bar counter", "cat": "Furniture" },
-    { "id": "rug", "name": "Rug", "cat": "Furniture" },
-    { "id": "chest", "name": "Chest", "cat": "Furniture" },
-    { "id": "crate", "name": "Crate", "cat": "Furniture" },
-    { "id": "barrel", "name": "Barrel", "cat": "Furniture" },
-    { "id": "sack", "name": "Sacks", "cat": "Furniture" },
-    { "id": "throne", "name": "Throne", "cat": "Furniture" },
-    { "id": "candle", "name": "Candelabra", "cat": "Furniture" },
-    { "id": "cauldron", "name": "Cauldron", "cat": "Furniture" },
-
-    { "id": "pillar", "name": "Pillar", "cat": "Dungeon" },
-    { "id": "brokenpillar", "name": "Broken pillar", "cat": "Dungeon" },
-    { "id": "stairs", "name": "Stairs", "cat": "Dungeon" },
-    { "id": "ladder", "name": "Ladder", "cat": "Dungeon" },
-    { "id": "trapdoor", "name": "Trapdoor", "cat": "Dungeon" },
-    { "id": "altar", "name": "Altar", "cat": "Dungeon" },
-    { "id": "statue", "name": "Statue", "cat": "Dungeon" },
-    { "id": "coffin", "name": "Coffin", "cat": "Dungeon" },
-    { "id": "bones", "name": "Bones", "cat": "Dungeon" },
-    { "id": "rubble", "name": "Rubble", "cat": "Dungeon" },
-    { "id": "cage", "name": "Cage", "cat": "Dungeon" },
-    { "id": "weaponrack", "name": "Weapon rack", "cat": "Dungeon" },
-    { "id": "brazier", "name": "Brazier", "cat": "Dungeon" },
-    { "id": "torch", "name": "Wall torch", "cat": "Dungeon" },
-    { "id": "crystal", "name": "Crystals", "cat": "Dungeon" },
-    { "id": "lever", "name": "Lever", "cat": "Dungeon" },
-    { "id": "trap", "name": "Trap (DM only)", "cat": "Dungeon", "dmOnly": true },
-
-    { "id": "well", "name": "Well", "cat": "Village" },
-    { "id": "fountain", "name": "Fountain", "cat": "Village" },
-    { "id": "cart", "name": "Cart", "cat": "Village" },
-    { "id": "haystack", "name": "Haystack", "cat": "Village" },
-    { "id": "fence", "name": "Fence", "cat": "Village" },
-    { "id": "signpost", "name": "Signpost", "cat": "Village" },
-    { "id": "lamppost", "name": "Lamp post", "cat": "Village" },
-    { "id": "stall", "name": "Market stall", "cat": "Village" },
-    { "id": "tent", "name": "Tent", "cat": "Village" },
-    { "id": "campfire", "name": "Campfire", "cat": "Village" },
-    { "id": "anvil", "name": "Anvil", "cat": "Village" },
-    { "id": "grave", "name": "Gravestone", "cat": "Village" },
-    { "id": "logs", "name": "Log pile", "cat": "Village" },
-    { "id": "bridge", "name": "Bridge planks", "cat": "Village" },
-    { "id": "boat", "name": "Rowing boat", "cat": "Village" },
-
-    { "id": "tree", "name": "Tree", "cat": "Nature" },
-    { "id": "pine", "name": "Pine tree", "cat": "Nature" },
-    { "id": "deadtree", "name": "Dead tree", "cat": "Nature" },
-    { "id": "bush", "name": "Bush", "cat": "Nature" },
-    { "id": "rock", "name": "Boulder", "cat": "Nature" },
-    { "id": "flowers", "name": "Flowers", "cat": "Nature" },
-    { "id": "stump", "name": "Stump", "cat": "Nature" },
-    { "id": "log", "name": "Fallen log", "cat": "Nature" },
-    { "id": "mushrooms", "name": "Mushrooms", "cat": "Nature" },
-    { "id": "reeds", "name": "Reeds", "cat": "Nature" },
-    { "id": "lilypad", "name": "Lily pads", "cat": "Nature" }
+    {
+      "id": "door",
+      "name": "Door",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "doubledoor",
+      "name": "Double door",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "dooropen",
+      "name": "Open door",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "secretdoor",
+      "name": "Secret door (DM only)",
+      "cat": "Doors & windows",
+      "dmOnly": true
+    },
+    {
+      "id": "portcullis",
+      "name": "Portcullis",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "archway",
+      "name": "Archway",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "window",
+      "name": "Window",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "bars",
+      "name": "Bars / cell door",
+      "cat": "Doors & windows"
+    },
+    {
+      "id": "table",
+      "name": "Table",
+      "cat": "Furniture"
+    },
+    {
+      "id": "roundtable",
+      "name": "Round table",
+      "cat": "Furniture"
+    },
+    {
+      "id": "chair",
+      "name": "Chair",
+      "cat": "Furniture"
+    },
+    {
+      "id": "bench",
+      "name": "Bench",
+      "cat": "Furniture"
+    },
+    {
+      "id": "bed",
+      "name": "Bed",
+      "cat": "Furniture"
+    },
+    {
+      "id": "bookshelf",
+      "name": "Bookshelf",
+      "cat": "Furniture"
+    },
+    {
+      "id": "wardrobe",
+      "name": "Wardrobe",
+      "cat": "Furniture"
+    },
+    {
+      "id": "desk",
+      "name": "Desk",
+      "cat": "Furniture"
+    },
+    {
+      "id": "fireplace",
+      "name": "Fireplace",
+      "cat": "Furniture"
+    },
+    {
+      "id": "bar",
+      "name": "Bar counter",
+      "cat": "Furniture"
+    },
+    {
+      "id": "rug",
+      "name": "Rug",
+      "cat": "Furniture"
+    },
+    {
+      "id": "chest",
+      "name": "Chest",
+      "cat": "Furniture"
+    },
+    {
+      "id": "crate",
+      "name": "Crate",
+      "cat": "Furniture"
+    },
+    {
+      "id": "barrel",
+      "name": "Barrel",
+      "cat": "Furniture"
+    },
+    {
+      "id": "sack",
+      "name": "Sacks",
+      "cat": "Furniture"
+    },
+    {
+      "id": "throne",
+      "name": "Throne",
+      "cat": "Furniture"
+    },
+    {
+      "id": "candle",
+      "name": "Candelabra",
+      "cat": "Furniture"
+    },
+    {
+      "id": "cauldron",
+      "name": "Cauldron",
+      "cat": "Furniture"
+    },
+    {
+      "id": "pillar",
+      "name": "Pillar",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "brokenpillar",
+      "name": "Broken pillar",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "stairs",
+      "name": "Stairs",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "ladder",
+      "name": "Ladder",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "trapdoor",
+      "name": "Trapdoor",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "altar",
+      "name": "Altar",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "statue",
+      "name": "Statue",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "coffin",
+      "name": "Coffin",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "bones",
+      "name": "Bones",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "rubble",
+      "name": "Rubble",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "cage",
+      "name": "Cage",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "weaponrack",
+      "name": "Weapon rack",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "brazier",
+      "name": "Brazier",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "torch",
+      "name": "Wall torch",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "crystal",
+      "name": "Crystals",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "lever",
+      "name": "Lever",
+      "cat": "Dungeon"
+    },
+    {
+      "id": "trap",
+      "name": "Trap (DM only)",
+      "cat": "Dungeon",
+      "dmOnly": true
+    },
+    {
+      "id": "well",
+      "name": "Well",
+      "cat": "Village"
+    },
+    {
+      "id": "fountain",
+      "name": "Fountain",
+      "cat": "Village"
+    },
+    {
+      "id": "cart",
+      "name": "Cart",
+      "cat": "Village"
+    },
+    {
+      "id": "haystack",
+      "name": "Haystack",
+      "cat": "Village"
+    },
+    {
+      "id": "fence",
+      "name": "Fence",
+      "cat": "Village"
+    },
+    {
+      "id": "signpost",
+      "name": "Signpost",
+      "cat": "Village"
+    },
+    {
+      "id": "lamppost",
+      "name": "Lamp post",
+      "cat": "Village"
+    },
+    {
+      "id": "stall",
+      "name": "Market stall",
+      "cat": "Village"
+    },
+    {
+      "id": "tent",
+      "name": "Tent",
+      "cat": "Village"
+    },
+    {
+      "id": "campfire",
+      "name": "Campfire",
+      "cat": "Village"
+    },
+    {
+      "id": "anvil",
+      "name": "Anvil",
+      "cat": "Village"
+    },
+    {
+      "id": "grave",
+      "name": "Gravestone",
+      "cat": "Village"
+    },
+    {
+      "id": "logs",
+      "name": "Log pile",
+      "cat": "Village"
+    },
+    {
+      "id": "bridge",
+      "name": "Bridge planks",
+      "cat": "Village"
+    },
+    {
+      "id": "boat",
+      "name": "Rowing boat",
+      "cat": "Village"
+    },
+    {
+      "id": "tree",
+      "name": "Tree",
+      "cat": "Nature"
+    },
+    {
+      "id": "pine",
+      "name": "Pine tree",
+      "cat": "Nature"
+    },
+    {
+      "id": "deadtree",
+      "name": "Dead tree",
+      "cat": "Nature"
+    },
+    {
+      "id": "bush",
+      "name": "Bush",
+      "cat": "Nature"
+    },
+    {
+      "id": "rock",
+      "name": "Boulder",
+      "cat": "Nature"
+    },
+    {
+      "id": "flowers",
+      "name": "Flowers",
+      "cat": "Nature"
+    },
+    {
+      "id": "stump",
+      "name": "Stump",
+      "cat": "Nature"
+    },
+    {
+      "id": "log",
+      "name": "Fallen log",
+      "cat": "Nature"
+    },
+    {
+      "id": "mushrooms",
+      "name": "Mushrooms",
+      "cat": "Nature"
+    },
+    {
+      "id": "reeds",
+      "name": "Reeds",
+      "cat": "Nature"
+    },
+    {
+      "id": "lilypad",
+      "name": "Lily pads",
+      "cat": "Nature"
+    },
+    {
+      "id": "mast",
+      "name": "Mast",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "cannon",
+      "name": "Cannon",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "helm",
+      "name": "Ship's wheel",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "rails",
+      "name": "Mine track",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "minecart",
+      "name": "Mine cart",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "hammock",
+      "name": "Hammock",
+      "cat": "Ships & mines"
+    },
+    {
+      "id": "anchor",
+      "name": "Anchor",
+      "cat": "Ships & mines"
+    }
   ]
 }

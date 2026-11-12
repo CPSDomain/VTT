@@ -74,7 +74,7 @@ function onMessage(msg) {
       $('privLabel').textContent = me.isDM ? 'Show this roll to the players' : 'Roll privately (only the DM sees it)';
       mySkin = st.diceSkin || null; renderMyDice();
       myChar = st.character || null; renderChar();
-      snd.resume(); // the apps may play sound straight away; a browser waits for the first click
+      if (/Electron/.test(navigator.userAgent)) snd.resume(); // the apps may play sound straight away; elsewhere it waits for the first click
       $('status').style.display = 'none';
       $('log').innerHTML = ''; st.log.forEach((e) => addLog(e, false));
       macros = st.myMacros || []; renderMacros();
@@ -2820,10 +2820,11 @@ $('genPrompt').oninput = () => {
 };
 let exampleIx = Math.floor(Math.random() * EXAMPLES.length);
 $('genExample').onclick = () => { $('genPrompt').value = EXAMPLES[exampleIx++ % EXAMPLES.length]; $('genPrompt').oninput(); };
-function runGenerator(replace) {
+async function runGenerator(replace) {
   const typed = parseInt($('genSeed').value, 10);
   const seed = Number.isFinite(typed) ? typed >>> 0 : (Math.random() * 2 ** 31) >>> 0;
-  const out = generate(genType, genSettings, seed, libByName());
+  try { await loadMonsters(); } catch { /* the old monster lists then */ }
+  const out = generate(genType, genSettings, seed, { ...libByName(), __srd: monsters || null });
   if (genName) out.name = genName;
   $('genLast').textContent = `Last map's seed: ${seed}`;
   toast(`${out.name}: ${out.summary}`, 6000);
@@ -2832,16 +2833,26 @@ function runGenerator(replace) {
   // number repeated names so initiative and the map can tell them apart: Goblin 1, Goblin 2…
   const counts = {}, seen = {};
   out.tokens.forEach((t) => { counts[t.label] = (counts[t.label] || 0) + 1; });
-  const numbered = out.tokens.map((t) => (counts[t.label] > 1 ? { ...t, label: `${t.label} ${(seen[t.label] = (seen[t.label] || 0) + 1)}` } : t));
-  const tokens = fog ? numbered.map((t) => ({ ...t, hidden: false })) : numbered;
-  const content = { tiles: out.tiles, props: out.props, tokens, fog: { on: fog, reveal: out.start ? [out.start] : [] }, wallStyle: out.wallStyle || 'built' };
+  const mood = $('genMood').checked;
+  const contentOf = (o) => {
+    const c2 = {}, s2 = {};
+    o.tokens.forEach((t) => { c2[t.label] = (c2[t.label] || 0) + 1; });
+    const num = o.tokens.map((t) => (c2[t.label] > 1 ? { ...t, label: `${t.label} ${(s2[t.label] = (s2[t.label] || 0) + 1)}` } : t));
+    const c = { tiles: o.tiles, props: o.props, tokens: fog ? num.map((t) => ({ ...t, hidden: false })) : num, labels: o.labels || [], fog: { on: fog, reveal: o.start ? [o.start] : [] }, wallStyle: o.wallStyle || out.wallStyle || 'built' };
+    const m = mood && (o.mood || out.mood);
+    if (m && m.vision) c.vision = { on: true, ambient: m.vision.ambient || 'dark', shared: true, explore: true };
+    if (m && m.atmo) c.atmo = m.atmo;
+    return c;
+  };
+  const content = contentOf(out);
+  const floors = (out.floors || []).map((f) => ({ floor: f.floor, level: f.level, cols: f.cols, rows: f.rows, content: contentOf(f) }));
   if (replace) {
     sendMsg({ type: 'sceneReplace', sceneId: editing, name: out.name, cols: out.cols, rows: out.rows, content });
     undoStack.length = redoStack.length = 0; updateUndo();
     setTimeout(fitView, 200);
   } else {
     pendingNewScene = true;
-    sendMsg({ type: 'sceneCreate', name: out.name, cols: out.cols, rows: out.rows, content });
+    sendMsg({ type: 'sceneCreate', name: out.name, cols: out.cols, rows: out.rows, content, floors, floorName: out.floorName });
   }
   $('genModal').hidden = true;
 }

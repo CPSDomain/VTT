@@ -111,7 +111,7 @@ Click **Build map**, then **Generate a map…**.
 ![Generate a map](images/generate-dialog.jpg)
 
 1. **Describe the map** in the box at the top, in plain words: *"a snowy fishing village on the coast with a lighthouse"*, *"flooded crypt full of zombies with secret doors"*, *"bandit ambush on a forest road"*, *"a busy tavern called The Rusty Anchor"*. Under the box, **Understood** shows what it picked up, and the matching settings below light up. Stuck for ideas? Click **Example**.
-2. **Adjust anything** below: the type (Village, Dungeon, Wilderness, Building) and every setting. Typing in the description again re-reads it from scratch.
+2. **Adjust anything** below: the type (Village, Dungeon, Wilderness, Building, Ship, Castle, Graveyard, City streets) and every setting. Typing in the description again re-reads it from scratch.
 3. Click **Create new map**. It opens privately, and a message sums it up. Not right? **Reroll** makes a new one in place.
 
 The description box reads key words (snowy, coast, walled, ruined, crypt, kobolds, swamp, tavern…) rather than whole sentences, and works without internet. Add *"called …"* to name the map.
@@ -119,9 +119,19 @@ The description box reads key words (snowy, coast, walled, ruined, crypt, kobold
 | Type | Settings |
 | --- | --- |
 | Village | Setting (green, snowy, desert, swamp) · water (river, lake, coast) · layout (crossroads, one street, hamlet, walled town) · buildings · condition (thriving, lived in, ruined, with raiders) · trees · market, temple and graveyard, farms, mill, watchtower or lighthouse, docks, villagers |
-| Dungeon | Style (stone halls, natural caves, crypt, mine, sewer, temple, lava forge, flooded) · rooms · corridor width · linear, branching or maze-like · traps · secret doors · boss room · monsters (goblins, kobolds, orcs, undead, beasts, cultists, bandits, or to suit the style) |
+| Dungeon | Style (stone halls, natural caves, crypt, mine, sewer, temple, lava forge, flooded) · rooms and room size · narrow, wide or twisty corridors · doors · clutter · one, two or three levels · linear, branching or maze-like · traps · secret doors · boss room · underground lake (caves) · cart tracks (mines) · monsters (or to suit the style) |
 | Wilderness | Forest road, clearing, swamp, river crossing, mountain pass, desert oasis, snowy woods or coastline · cover · road · campsite, ruins, pond, cave entrance, shrine, wagon wreck · creatures |
-| Building | Tavern or inn, temple, manor house, shop, guardhouse, wizard tower · size · lived in or abandoned · yard · people inside |
+| Building | Tavern or inn, temple, manor house, shop, guardhouse, wizard tower · size · lived in or abandoned · floors (upstairs, cellar or both) · yard · people inside |
+| Ship | Merchant ship, warship or longship · at sea or at the docks · sailors, pirates, sea raiders boarding, a ghost ship or nobody · weather · the hold below decks |
+| Castle | Size · setting · held, ruined or under siege · garrison, bandits, undead, cultists or nobody · moat · the keep's upper floor |
+| Graveyard | Size · tended, old or forgotten · chapel · mausoleum with a crypt below · restless dead |
+| City streets | Size · market, noble, slums or docks · day, dusk or night · thieves, a cult, the watch or no trouble |
+
+**Ready to play** (dungeons, ships, castles, graveyards, city streets): set the **party level**, **party size** and how hard the **fights** should be. Monsters come from the SRD, sized to the D&D 2024 XP budget for that party, with their hit points, initiative bonus and stat blocks: a crowd of weaker foes in most rooms, about half the rooms empty, and a stronger group in the boss room. **Treasure in chests** rolls coins, gems and magic items for the party's tier. **Room names & DM notes** puts a yellow note (only you see it) in each room: *"7. Barracks — 3 hobgoblins; chest: 120 gp, Potion of Healing"*.
+
+**Floors:** a dungeon with two or three levels, a building with an upstairs or cellar, a ship's hold, a castle keep's upper floor and a graveyard's crypt are made together as one building with floors: the stairs sit in the same square on each floor, so tokens on the stairs can go up and down (see Buildings with floors).
+
+**Set the mood** (on by default): the map comes with lighting, time of day, weather and sound to suit it. Dungeons and crypts are dark with vision on, a graveyard is foggy at night, a ship at sea gets waves and wind (and a storm if you picked one), a tavern its music and fire. The sound plays when you show players the map.
 
 **Seeds:** after generating, the dialog shows the map's seed. Type that seed (with the same settings) to make exactly the same map again, for example to rebuild a map you deleted.
 
