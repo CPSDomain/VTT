@@ -8,8 +8,9 @@ const crypto = require('crypto');
 const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
+const ddb = require('./ddb');
 
-const VERSION = '1.8.2';
+const VERSION = '1.9.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -78,10 +79,11 @@ function loadState(file) {
     s.audio = Array.isArray(s.audio) ? s.audio : [];
     s.sound = s.sound && typeof s.sound === 'object' ? s.sound : { music: null, amb: [] };
     s.diceSkins = s.diceSkins && typeof s.diceSkins === 'object' ? s.diceSkins : {};
+    s.characters = s.characters && typeof s.characters === 'object' ? s.characters : {};
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] }, diceSkins: {} };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] }, diceSkins: {}, characters: {} };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -461,11 +463,33 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (sc.combat && sc.combat.active && sc.combat.entries.some((e) => e.id === tok.id) && (!before || tokVisible(sc, before, {}) !== tokVisible(sc, tok, {}) || before.x !== tok.x || before.y !== tok.y || before.hidden !== tok.hidden)) sendCombat(sc);
   }
   const skinOf = (name) => state.diceSkins[String(name).toLowerCase()] || null;
+  const charOf = (name) => state.characters[String(name).toLowerCase()] || null;
   function viewFor(u) {
-    const base = { diceSkin: skinOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
+    const base = { diceSkin: skinOf(u.name), character: u.isDM ? null : charOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
     if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
     u.view = viewOf(u);
     return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
+  }
+
+  // D&D Beyond: fetch the character, keep its portrait here, and remember the sheet for this player
+  async function importCharacter(u, link) {
+    const ch = await ddb.fetchCharacter(link);
+    try { fs.mkdirSync(path.join(dataDir, 'dndbeyond'), { recursive: true }); fs.writeFileSync(path.join(dataDir, 'dndbeyond', ch.id + '.json'), JSON.stringify(ch.raw, null, 1)); } catch { /* only for looking into problems */ }
+    delete ch.raw;
+    ch.img = null;
+    if (ch.avatar) try { // the portrait, as an upload, so everyone's screen can show it without going online
+      const r = await fetch(ch.avatar, { signal: AbortSignal.timeout(15000) });
+      const type = (r.headers.get('content-type') || '').split(';')[0].toLowerCase(), ext = IMAGE_EXT[type];
+      if (r.ok && ext) {
+        const buf = Buffer.from(await r.arrayBuffer());
+        if (buf.length < 8 * 1024 * 1024) { const name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + ext; fs.mkdirSync(uploads, { recursive: true }); fs.writeFileSync(path.join(uploads, name), buf); ch.img = '/uploads/' + name; }
+      }
+    } catch { /* no portrait then */ }
+    const perception = ch.skills.find((s) => s.name === 'Perception');
+    ch.pp = 10 + (perception ? perception.bonus : 0);
+    ch.at = Date.now(); ch.player = u.name;
+    state.characters[u.name.toLowerCase()] = ch; save();
+    return ch;
   }
 
   // Validated token fields shared by add, update and generated maps.
@@ -486,6 +510,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (m.initBonus !== undefined) t.initBonus = clamp(int(m.initBonus, 0), -10, 30);
     if (m.light !== undefined) t.light = Array.isArray(m.light) && int(m.light[1], 0) > 0 ? [clamp(int(m.light[0], 0), 0, 300), clamp(int(m.light[1], 0), 0, 600)] : null;
     if (m.darkvision !== undefined) t.darkvision = clamp(int(m.darkvision, 0), 0, 300);
+    if (m.ac !== undefined) t.ac = m.ac === null || m.ac === '' ? null : clamp(int(m.ac, 10), 0, 40);
+    if (m.speed !== undefined) t.speed = m.speed === null ? null : clamp(int(m.speed, 30), 0, 300);
+    if (m.pp !== undefined) t.pp = m.pp === null ? null : clamp(int(m.pp, 10), 0, 40);
     if (m.srd !== undefined) t.srd = typeof m.srd === 'string' && /^[a-z0-9-]{1,60}$/.test(m.srd) ? m.srd : null;
     if (m.ddb !== undefined) t.ddb = typeof m.ddb === 'string' && DDB.test(m.ddb.trim()) ? m.ddb.trim() : null;
     if (m.conditions !== undefined) t.conditions = Array.isArray(m.conditions) ? [...new Set(m.conditions.filter((c) => CONDITIONS.has(c)))].slice(0, 24) : [];
@@ -1198,6 +1225,40 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (u.isDM && msg.narrate && !entry.to) { entry.narrate = true; delete entry.as; } // read aloud to the table
         state.log.push(entry); state.log = state.log.slice(-200);
         clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'chat', entry }));
+        save();
+        break;
+      }
+      case 'ddbImport': { // a player brings in their character from D&D Beyond (the DM's PC fetches it)
+        if (u.isDM) return;
+        if (u.importing) return send(ws, { type: 'error', message: 'Still reading your character…' });
+        u.importing = true; send(ws, { type: 'characterBusy', on: true });
+        importCharacter(u, String(msg.link || '').slice(0, 300))
+          .then((ch) => { send(ws, { type: 'character', character: ch }); toDMs({ type: 'note', text: `${u.name} brought in ${ch.name} from D&D Beyond` }); })
+          .catch((e) => send(ws, { type: 'error', message: e.message }))
+          .finally(() => { u.importing = false; send(ws, { type: 'characterBusy', on: false }); });
+        break;
+      }
+      case 'charForget': { if (u.isDM) return; delete state.characters[u.name.toLowerCase()]; send(ws, { type: 'character', character: null }); save(); break; }
+      case 'charToken': { // a player puts their character's token on the map they're on (or updates the one that's there)
+        if (u.isDM || !sc) return;
+        const ch = charOf(u.name); if (!ch) return send(ws, { type: 'error', message: 'Bring in your character from D&D Beyond first' });
+        const f = { label: ch.name.split(' ')[0].slice(0, 24), owner: u.name, img: ch.img || null, maxHp: ch.maxHp, initBonus: ch.init, darkvision: ch.darkvision, ac: ch.ac, speed: ch.speed, pp: ch.pp, ddb: ch.link };
+        let t = Object.values(sc.tokens).find((x) => x.owner === u.name && (x.ddb === ch.link || sameName(x.label, f.label)));
+        if (t) { // keep where it is and how hurt it is; refresh the rest
+          const before = { ...t };
+          Object.assign(t, tokenFields(f, sc, t)); if (t.hp == null || t.hp > t.maxHp) t.hp = Math.min(t.hp ?? ch.hp, t.maxHp);
+          tokenChanged(sc, t, before);
+        } else {
+          if (Object.keys(sc.tokens).length >= 500) return;
+          const want = [clamp(int(msg.x, 1), 0, sc.cols - 1), clamp(int(msg.y, 1), 0, sc.rows - 1)], used = new Set(Object.values(sc.tokens).map((x) => x.x + ',' + x.y));
+          let spot = want;
+          for (let r = 0; r < 12 && used.has(spot[0] + ',' + spot[1]); r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) { const x = want[0] + dx, y = want[1] + dy; if (inside(x, y) && !used.has(x + ',' + y) && used.has(spot[0] + ',' + spot[1])) spot = [x, y]; }
+          const id = uid();
+          sc.tokens[id] = { id, ...tokenFields({ color: '#2563eb', size: 1, ...f, hp: ch.hp, x: spot[0], y: spot[1] }, sc) };
+          tokenChanged(sc, sc.tokens[id], null);
+          if (sc.group) refreshViews();
+        }
+        if (visionOn(sc)) scheduleVision(sc);
         save();
         break;
       }

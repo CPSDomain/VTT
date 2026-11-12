@@ -71,6 +71,7 @@ function onMessage(msg) {
       $('me').textContent = me.isDM ? '' : `Playing as ${me.name}` + (msg.pinSet ? ' 🔑' : '');
       $('privLabel').textContent = me.isDM ? 'Show this roll to the players' : 'Roll privately (only the DM sees it)';
       mySkin = st.diceSkin || null; renderMyDice();
+      myChar = st.character || null; renderChar();
       snd.resume(); // the apps may play sound straight away; a browser waits for the first click
       $('status').style.display = 'none';
       $('log').innerHTML = ''; st.log.forEach((e) => addLog(e, false));
@@ -100,7 +101,7 @@ function onMessage(msg) {
     case 'network': netInfo = msg.network; if (!$('netChip')) fetch('/api/info?key=' + encodeURIComponent(dmKey)).then((r) => r.json()).then(showConn).catch(() => {}); else renderNet(); break;
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
-    case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
+    case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (myChar && msg.token.ddb === myChar.link) renderChar(); if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
     case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); } } break;
     case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); renderInit(); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
@@ -156,6 +157,9 @@ function onMessage(msg) {
     case 'active': active = msg.sceneId; renderSceneBar(); break;
     case 'roll': addLog(msg.entry, true); showRoll(msg.entry); break;
     case 'diceSkin': mySkin = msg.skin; renderMyDice(); renderSkins(); break;
+    case 'character': { const first = !myChar; myChar = msg.character; charBusy = false; renderChar(); if (myChar) toast(first ? `${myChar.name} is here. Put your token on the map when you're ready.` : `${myChar.name} is up to date`); break; }
+    case 'characterBusy': charBusy = msg.on; renderChar(); break;
+    case 'note': toast(msg.text, 5000); break;
     case 'chat': {
       addLog(msg.entry, true); if (msg.entry.narrate) narrate(msg.entry.text); else speechBubble(msg.entry);
       const e = msg.entry;
@@ -1828,6 +1832,8 @@ function renderEditor() {
   if (keep !== $('eLight')) { $('eLight').value = lv; if ($('eLight').value !== lv) { const o = document.createElement('option'); o.value = lv; o.textContent = `${t.light[0]} / ${t.light[1]} ft`; $('eLight').appendChild(o); $('eLight').value = lv; } }
   setv('eDark', String(t.darkvision || 0)); setv('eDdb', t.ddb || '');
   $('eDdbOpen').disabled = !t.ddb;
+  const sheet = [t.ac != null ? 'AC ' + t.ac : '', t.pp != null ? 'Passive Perception ' + t.pp : '', t.speed != null ? 'Speed ' + t.speed + ' ft' : ''].filter(Boolean).join(' · ');
+  $('eSheet').hidden = !sheet; $('eSheet').textContent = sheet ? '📜 ' + sheet + ' (from D&D Beyond)' : '';
   $('eStatRow').classList.toggle('off', !(me.isDM && monsterOf(t)));
   const floors = floorList(sc());
   $('eFloorRow').classList.toggle('off', !(me.isDM && floors.length > 1));
@@ -2915,6 +2921,48 @@ function mapSounds() {
   snd.setSpatial(list);
 }
 setInterval(mapSounds, 500);
+// ---------- my character, from D&D Beyond ----------
+let myChar = null, charBusy = false;
+const sgn = (n) => (n >= 0 ? '+' + n : String(n));
+function renderChar() {
+  const sec = $('charSec'); sec.hidden = me.isDM; if (me.isDM) return;
+  const box = $('charBody'); box.innerHTML = '';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  if (!myChar) {
+    box.append(el('div', 'hint', 'Bring in your character from D&D Beyond: your token, hit points, AC and every roll on your sheet.'));
+    const row = el('div', 'row'), inp = el('input'); inp.id = 'charLink'; inp.placeholder = 'Paste your D&D Beyond character link';
+    const go = el('button', 'fixed primary', charBusy ? 'Reading…' : 'Bring in'); go.disabled = charBusy;
+    go.onclick = () => { const v = inp.value.trim(); if (!v) return toast('Paste the link to your character first'); charBusy = true; renderChar(); sendMsg({ type: 'ddbImport', link: v }); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') go.onclick(); };
+    row.append(inp, go); box.append(row);
+    box.append(el('div', 'hint', 'On D&D Beyond: open your character, Manage → Character Settings → Character Privacy → Public. Then click Share and copy the link.'));
+    return;
+  }
+  const c = myChar, head = el('div', 'chead');
+  if (c.img) { const im = el('img'); im.src = c.img; im.alt = ''; head.append(im); }
+  const who = el('div'); who.append(el('div', 'nm', c.name), el('div', 'sub', [c.race, c.classes].filter(Boolean).join(' · ')));
+  head.append(who); box.append(head);
+  const stats = el('div', 'stats');
+  const onMap = sc() && Object.values(sc().tokens).find((t) => t.ddb === c.link && t.owner && sameName(t.owner, me.name)); // in play, the token's HP is the one that counts
+  for (const [v, k] of [[`${onMap && onMap.hp != null ? onMap.hp : c.hp}/${c.maxHp}`, 'HP'], [c.ac, 'AC'], [c.speed + ' ft', 'Speed'], [sgn(c.init), 'Init'], [c.darkvision ? c.darkvision + ' ft' : '—', 'Dark']]) { const d = el('div'); d.append(el('b', '', v), el('span', '', k)); stats.append(d); }
+  box.append(stats);
+  const actions = el('div', 'row'), place = el('button', 'primary', '📍 Put my token on the map'); place.title = 'Your token appears in the middle of your view (or is updated if it is already on this map)';
+  place.onclick = () => { const s = sc(); if (!s) return; const r = canvas.getBoundingClientRect(); sendMsg({ type: 'charToken', x: Math.floor((r.width / 2 - view.x) / view.zoom / CELL), y: Math.floor((r.height / 2 - view.y) / view.zoom / CELL) }); };
+  const init = el('button', 'fixed', '🎲 Init'); init.title = 'Roll initiative: 1d20' + sgn(c.init); init.onclick = (ev) => rollWith('1d20' + sgn(c.init), 'Initiative', ev);
+  actions.append(place, init); box.append(actions);
+  const section = (title, open, fill) => { const d = el('details'); d.open = open; d.append(el('summary', '', title)); fill(d); box.append(d); };
+  const rollBtn2 = (label, bonus, what, pro) => { const b = el('button', pro ? 'pro' : ''); b.append(el('span', '', label), el('b', '', sgn(bonus))); b.title = `${what}: 1d20${sgn(bonus)} (Shift: advantage, Alt: disadvantage)`; b.onclick = (ev) => rollWith('1d20' + sgn(bonus), what, ev); return b; };
+  if (c.attacks.length) section('Attacks', true, (d) => { for (const a of c.attacks) { const row = el('div', 'atk'); row.append(el('span', '', a.name + (a.dc ? ` (save DC ${a.dc})` : ''))); const h = el('button', '', 'Hit ' + a.hit.replace('1d20', '')); h.onclick = (ev) => rollWith(a.hit, a.name.slice(0, 22) + ' hit', ev); row.append(h); if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
+  section('Ability checks', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.abilities) g.append(rollBtn2(a.name, a.mod, a.name + ' check')); d.append(g); });
+  section('Saving throws', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.saves) g.append(rollBtn2(a.name, a.bonus, a.name + ' save', a.bonus !== (c.abilities.find((x) => x.name === a.name) || {}).mod)); d.append(g); });
+  section('Skills', false, (d) => { const g = el('div', 'rolls'); for (const k of c.skills) g.append(rollBtn2(k.name, k.bonus, k.name, k.prof > 0)); d.append(g); });
+  const foot = el('div', 'row'); foot.style.marginTop = '8px';
+  const refresh = el('button', '', charBusy ? 'Reading…' : '↻ Update from D&D Beyond'); refresh.disabled = charBusy; refresh.title = 'After levelling up or changing gear. Your token on this map is updated too when you click Put my token on the map.';
+  refresh.onclick = () => { charBusy = true; renderChar(); sendMsg({ type: 'ddbImport', link: c.link }); };
+  const forget = el('button', 'fixed danger', '✕'); forget.title = 'Use a different character';
+  forget.onclick = () => { if (forget.dataset.armed) return sendMsg({ type: 'charForget' }); forget.dataset.armed = 1; forget.textContent = 'Sure?'; setTimeout(() => { delete forget.dataset.armed; forget.textContent = '✕'; }, 3000); };
+  foot.append(refresh, forget); box.append(foot);
+}
 // ---------- the scene and the story ----------
 // a player's screen fades to black and names the new place, then fades in on it
 let titleTimer = 0;

@@ -180,6 +180,12 @@ A quick dungeon by hand: the Room tool for each chamber, Rectangle with cobblest
 
 Ctrl+Z undoes, Ctrl+Y redoes. Pan with right-drag or Space+drag, zoom with the mouse wheel, press Home to fit the map.
 
+## Players' characters from D&D Beyond
+
+Players can bring in their own characters: under **My character** in Tabletop Player they paste their D&D Beyond link, and **📍 Put my token on the map** places their token with portrait, hit points, initiative bonus and darkvision. Their sheet's rolls become buttons on their screen. Your PC fetches the character, so it needs the internet, and the character must be public on D&D Beyond. You see the character's AC, passive Perception and speed when you select its token. You can still move, edit or delete their tokens as usual.
+
+If a character comes in wrong (a number that doesn't match D&D Beyond), what D&D Beyond sent is saved in the `dndbeyond` folder inside the data folder (**File → Open data folder**): send that file along with the report.
+
 ## Tokens
 
 Click **Token library…** in the right-hand panel: 215 ready-made tokens in categories, searchable by name. Click one, then **Add to map** (it lands in the middle of your view) or use the Token tool to click it into place. Each comes at a sensible size (dragons are Huge). Names count up by themselves: Goblin 1, Goblin 2…

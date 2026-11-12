@@ -46,6 +46,10 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ## Features
 
+**Characters from D&D Beyond**
+- Players paste their D&D Beyond link and get their portrait, hit points, AC and every roll on their sheet as a button
+- They place their own token on the map; the DM sees its AC and passive Perception
+
 **Map building**
 - **Describe it, and it's generated:** type *"snowy fishing village on the coast with a lighthouse"* or *"kobold mine with a dragon's lair"* and the generator picks the settings, which you can adjust. Villages (green, snowy, desert or swamp; river, lake or coast; walled towns, hamlets, ruins), dungeons (stone halls, caves, crypts, mines, sewers, temples, lava forges, flooded halls), wilderness (forests, swamps, river crossings, mountain passes, oases, coastlines) and building interiors (taverns, temples, manors, shops, guardhouses, wizard towers). Seeds let you make the same map again.
 - Tools: paint, rectangle, room (floor plus walls in one drag), bucket fill, erase, props, tokens, with undo and redo

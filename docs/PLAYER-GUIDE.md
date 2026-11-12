@@ -26,6 +26,18 @@ The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) g
 - **Spells:** with the **Spell** tool, pick an effect (fire, lightning, cold…) before placing a template and it goes off for everyone. Select one of yours and click **Cast** to set it off again.
 - **Sound:** you hear the map from where your character stands: torches, water, doors, footsteps and blows. Under **🔊**, **Map sounds** sets how loud the torches, fires, water and lava are (0 turns them off), and **Effects** the dice, doors, blows and footsteps.
 
+## Your character from D&D Beyond
+
+1. On D&D Beyond, open your character and make it public: **Manage → Character Settings → Character Privacy → Public**.
+2. Click **Share** on your character sheet and copy the link.
+3. In Tabletop, paste it under **My character** and click **Bring in**.
+
+You get your portrait, hit points, AC, speed, initiative and darkvision, and a button for every roll on your sheet: attacks (to hit and damage), ability checks, saving throws and skills. Shift-click rolls with advantage, Alt-click with disadvantage.
+
+- **📍 Put my token on the map** places your token in the middle of your view. Click it again on another map to bring your character there, or after an update to refresh your token.
+- **↻ Update from D&D Beyond** after you level up or change gear.
+- Hit points you lose at the table stay at the table: they don't go back to D&D Beyond.
+
 ## Table tools
 
 The bar on the left of the map:

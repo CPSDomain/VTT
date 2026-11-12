@@ -2,6 +2,16 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.9.0] - 2026-11-12
+
+### Added
+- **Bring in your character from D&D Beyond.** In Tabletop Player, **My character** takes your character's link and fills in your name, portrait, level, race and class, hit points, AC, speed, initiative and darkvision.
+  - **📍 Put my token on the map** places your token (with your portrait, hit points, initiative bonus and darkvision) in the middle of your view, or updates it if it's already there. No more waiting for the DM to make it.
+  - **Every roll on your sheet** is a button: attacks (to hit and damage, magic weapons included), spell attack and save DC, ability checks, saving throws and all 18 skills. Shift-click for advantage, Alt-click for disadvantage. **🎲 Init** rolls initiative.
+  - **↻ Update from D&D Beyond** after levelling up or changing gear.
+  - The DM sees the character's AC, passive Perception and speed on its token.
+  - The character must be public on D&D Beyond, and the DM's PC needs the internet to fetch it. D&D Beyond has no official way for apps to do this, so Tabletop reads the same data its character sheet uses; if D&D Beyond changes it, this may need an update. Damage taken in Tabletop doesn't go back to D&D Beyond.
+
 ## [1.8.2] - 2026-11-12
 
 ### Fixed
