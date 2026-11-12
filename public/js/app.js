@@ -7,6 +7,8 @@ import { createSound } from './audio.js';
 import { createWeather, TINT, MATCH } from './weather.js';
 import { createLighting } from './lighting.js';
 import { buildChunk, drawTokenRing } from './art2.js';
+import { createDice, SKINS, skinById, defaultSkin } from './dice3d.js';
+import { createFx, SPELLS, LIVE_CONDITIONS } from './fx.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c'), ctx = canvas.getContext('2d');
@@ -67,7 +69,8 @@ function onMessage(msg) {
         scenes = st.scene ? { [st.scene.id]: st.scene } : {}; order = Object.keys(scenes); editing = active;
       }
       $('me').textContent = me.isDM ? '' : `Playing as ${me.name}` + (msg.pinSet ? ' 🔑' : '');
-      $('privLabel').textContent = me.isDM ? 'Roll privately (players won\'t see it)' : 'Roll privately (only the DM sees it)';
+      $('privLabel').textContent = me.isDM ? 'Show this roll to the players' : 'Roll privately (only the DM sees it)';
+      mySkin = st.diceSkin || null; renderMyDice();
       $('status').style.display = 'none';
       $('log').innerHTML = ''; st.log.forEach((e) => addLog(e, false));
       macros = st.myMacros || []; renderMacros();
@@ -79,6 +82,7 @@ function onMessage(msg) {
     case 'doors': if (s) { s.doors = msg.doors; } break;
     case 'doorFlash': pings.push({ sceneId: msg.sceneId, x: msg.x, y: msg.y, who: msg.open ? 'Door opened' : 'Door closed', dm: false, t0: performance.now() }); break;
     case 'handouts': handouts = msg.handouts; renderHandouts(); break;
+    case 'sfx': if (s && msg.sceneId === editing) { const at = hear(s, msg.x, msg.y, 20, 0.15); snd.effect(msg.name, { vol: at.vol, pan: at.pan, rate: 0.95 + Math.random() * 0.1 }); } break;
     case 'sound': soundNow = msg.sound; snd.apply(msg.sound, msg.now); renderSound(); break;
     case 'audio': audioLib = msg.audio; renderSound(); break;
     case 'encounters': encounters = msg.encounters; renderEncLoad(); break;
@@ -95,7 +99,7 @@ function onMessage(msg) {
     case 'network': netInfo = msg.network; if (!$('netChip')) fetch('/api/info?key=' + encodeURIComponent(dmKey)).then((r) => r.json()).then(showConn).catch(() => {}); else renderNet(); break;
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
-    case 'token': if (s) { s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
+    case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
     case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); } } break;
     case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); renderInit(); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
@@ -120,7 +124,7 @@ function onMessage(msg) {
       }
       break;
     case 'propRemove': if (s) delete s.props[msg.propId]; break;
-    case 'template': if (s) { (s.templates = s.templates || {})[msg.tpl.id] = msg.tpl; } break;
+    case 'template': if (s) { const old = (s.templates = s.templates || {})[msg.tpl.id]; s.templates[msg.tpl.id] = msg.tpl; if (msg.tpl.fx && (msg.tpl.cast || 0) > ((old && old.cast) || 0) && msg.sceneId === editing) castSpell(s, msg.tpl); } break;
     case 'templateRemove': if (s && s.templates) { msg.ids.forEach((id) => delete s.templates[id]); if (msg.ids.includes(selTpl)) selTpl = null; } break;
     case 'label': if (s) { (s.labels = s.labels || {})[msg.label.id] = msg.label; } break;
     case 'labelRemove': if (s && s.labels) { delete s.labels[msg.id]; if (labelEdit && labelEdit.id === msg.id) closeLabelEditor(); } break;
@@ -135,7 +139,7 @@ function onMessage(msg) {
     }
     case 'sceneMeta': if (s) { Object.assign(s, msg.patch); if (msg.patch.vision && !me.isDM) { s.sight = null; visionMask = null; } if (msg.sceneId === editing) sceneChanged(false); } break;
     case 'sceneFull':
-      if (msg.active) { const switched = active !== msg.scene.id; scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(switched); }
+      if (msg.active) { const switched = active !== msg.scene.id; if (switched && active) titleCard(msg.scene.name); scenes = { [msg.scene.id]: msg.scene }; order = [msg.scene.id]; active = editing = msg.scene.id; sceneChanged(switched); }
       else { scenes[msg.scene.id] = msg.scene; if (msg.scene.id === editing) sceneChanged(false); }
       break;
     case 'sceneAdded':
@@ -149,9 +153,10 @@ function onMessage(msg) {
       break;
     case 'order': order = msg.order; renderSceneBar(); break;
     case 'active': active = msg.sceneId; renderSceneBar(); break;
-    case 'roll': addLog(msg.entry, true); break;
+    case 'roll': addLog(msg.entry, true); showRoll(msg.entry); break;
+    case 'diceSkin': mySkin = msg.skin; renderMyDice(); renderSkins(); break;
     case 'chat': {
-      addLog(msg.entry, true); speechBubble(msg.entry);
+      addLog(msg.entry, true); if (msg.entry.narrate) narrate(msg.entry.text); else speechBubble(msg.entry);
       const e = msg.entry;
       if (e.to && !sameName(e.who, me.name) && e.to.some((n) => sameName(n, me.name) || (me.isDM && sameName(n, 'DM')))) toast(`Whisper from ${e.as || e.who}: ${e.text.slice(0, 80)}`, 5000);
       break;
@@ -418,6 +423,7 @@ const staticLayer = document.createElement('canvas');
 function draw() { mapRev++; if (!frame) frame = requestAnimationFrame(render); }
 function tick() { animTimer = 0; if (!frame) frame = requestAnimationFrame(render); }
 const lighting = createLighting({ CELL, VIS: window.TabletopVision });
+const efx = createFx({ CELL }); // spells, hits, heals and condition looks
 const fxMode = () => (prefs.fx === 'still' || prefs.fx === 'off' ? prefs.fx : 'full');
 // the parts of the map that don't move, for the current view: drawn again only after a change
 // ---------- the 1.7 map art, in blocks of 16×16 squares (see art2.js) ----------
@@ -650,30 +656,33 @@ function render() {
   // tokens (hidden ones only ever reach the DM, drawn faded)
   const turnId = s.combat && s.combat.active ? s.combat.turnId : null;
   for (const t of Object.values(s.tokens)) {
-    const pos = drag && drag.id === t.id ? drag.pos : { x: t.x * CELL, y: t.y * CELL };
+    const base = drag && drag.id === t.id ? drag.pos : { x: t.x * CELL, y: t.y * CELL }, [ox, oy] = efx.offset(t), pos = { x: base.x + ox, y: base.y + oy };
     const rad = (t.size * CELL) / 2, cx = pos.x + rad, cy = pos.y + rad;
+    const pct0 = hpFraction(t), down = efx.lying(t, pct0 === 0);
+    if (!t.hidden) { if (pct0 === 0 || (t.conditions || []).includes('dead')) efx.pool(ctx, t, cx, cy, rad); efx.under(ctx, t, cx, cy, rad); }
     if (t.id === turnId) { // whose turn it is: a glowing gold ring
       ctx.save(); ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 18; ctx.lineWidth = 5; ctx.strokeStyle = '#fbbf24';
       ctx.beginPath(); ctx.arc(cx, cy, rad - 1, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
     }
     const unseen = previewSight && !(t.owner && t.owner !== '') && !tokenSeen(s, t, previewSight);
-    ctx.globalAlpha = t.hidden || unseen ? (unseen ? 0.3 : 0.5) : 1;
+    ctx.globalAlpha = (t.hidden || unseen ? (unseen ? 0.3 : 0.5) : 1) * efx.tokenAlpha(t);
     const tl = lit ? lighting.tokenLight(s, cx, cy, amb) : null;
     if (tl) { // a soft shadow cast away from the light it stands in
       const k = tl.shadow.k, sx = cx + tl.shadow.dx * k, sy = cy + tl.shadow.dy * k, sg = ctx.createRadialGradient(sx, sy, rad * 0.35, sx, sy, rad * 1.15);
       sg.addColorStop(0, 'rgba(0,0,0,.5)'); sg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, rad * 1.15, 0, Math.PI * 2); ctx.fill();
     }
+    if (down) { ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 2); ctx.translate(-cx, -cy); } // lying on the ground
     drawTokenArt(ctx, t, cx, cy, rad - 4, draw);
+    if (down) ctx.restore();
+    efx.over(ctx, t, cx, cy, rad);
     if (tl && tl.tint) { // shaded by that light, but never so dark it can't be made out
       const m = (v) => Math.round(255 * Math.min(1, 0.42 + 0.58 * v));
       ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgb(${m(tl.tint[0])},${m(tl.tint[1])},${m(tl.tint[2])})`;
       ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill(); ctx.restore();
     }
     const pct = hpFraction(t);
-    if (pct === 0) { // down: darken and cross out
-      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'rgba(220,38,38,.9)'; ctx.lineWidth = Math.max(3, rad * 0.12); const d = rad * 0.45;
-      ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); ctx.stroke();
+    if (pct === 0) { // down: fallen over (above), in a pool, darkened
+      ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.arc(cx, cy, rad - 4, 0, Math.PI * 2); ctx.fill();
     }
     if (lit && !t.hidden) { // 1.7: a metal rim, gold for player characters
       drawTokenRing(ctx, cx, cy, rad - 4, !!(t.owner && t.owner !== '*'));
@@ -710,11 +719,13 @@ function render() {
     }
   }
 
+  efx.draw(ctx); // spells going off
+  efx.drawFloats(ctx, (id) => { const t = s.tokens[id]; if (!t) return null; const r = (t.size * CELL) / 2; return [t.x * CELL + r, t.y * CELL + r, r]; }, view.zoom);
   drawOverlays(s);
   drawToolPreview(s);
   weather.update();
   // fire flickers and water moves: keep drawing, about 30 times a second, while there's some in view
-  if (moving && !animTimer && lighting.animating(s, cells)) animTimer = setTimeout(tick, 33);
+  if (!animTimer && (efx.active() || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
 }
 
 function drawSelection(s) {
@@ -1179,7 +1190,7 @@ function richText(p, text, roll) {
   }
   p.append(text.slice(last));
 }
-const rollWithPrivacy = (expr, label) => sendMsg({ type: 'roll', expr, label: label.slice(0, 30), private: $('sbPrivate').checked });
+const rollWithPrivacy = (expr, label) => sendMsg({ type: 'roll', expr, label: label.slice(0, 30), show: $('sbPrivate').checked }); // the stat block is the DM's: hidden unless shown
 
 $('openEnc').onclick = () => openEncounters().catch((e) => toast('Couldn\'t load the monsters: ' + e.message));
 $('encSearch').oninput = () => renderEncList();
@@ -1507,12 +1518,21 @@ function aimAt(origin, q, minSize, shape) {
 function newTemplate(p) {
   const q = toSq(p), o = { x: Math.round(q.x), y: Math.round(q.y) }; // spells start on a grid corner
   tplDraft = { shape: tplShape, x: o.x, y: o.y, angle: tplShape === 'cube' ? Math.PI / 4 : 0, size: Number($('tplSize').value) || tplSizes[tplShape], width: Number($('tplWidth').value) || 5,
-    color: personColour(me.name, me.isDM), dragged: false };
+    color: $('tplFx').value ? SPELLS[$('tplFx').value].col : personColour(me.name, me.isDM), dragged: false };
+}
+// a spell going off over its template, with its sound from where it is
+function castSpell(s, t) {
+  const cells = tplCells(s, t); if (!cells.length) return;
+  efx.spell(t.fx, { cells, ox: t.x, oy: t.y, shape: t.shape, angle: t.angle, clip: () => tplOutline(t) });
+  const [cx, cy] = cells.reduce((a, [x, y]) => [a[0] + x + 0.5, a[1] + y + 0.5], [0, 0]).map((v) => v / cells.length), at = hear(s, cx, cy, 30, 0.3);
+  snd.effect(t.fx === 'healing' ? 'heal' : 'spell-' + t.fx, { vol: at.vol, pan: at.pan });
+  draw();
 }
 function finishTemplate() {
   const d = tplDraft; tplDraft = null;
   const id = uid();
-  sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id, shape: d.shape, x: d.x, y: d.y, angle: d.angle, size: d.size, width: d.width, color: d.color } });
+  const fxk = $('tplFx').value;
+  sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id, shape: d.shape, x: d.x, y: d.y, angle: d.angle, size: d.size, width: d.width, color: d.color, fx: fxk, cast: !!fxk } });
   tplSizes[d.shape] = d.size; $('tplSize').value = d.size;
   selTpl = id;
 }
@@ -1536,6 +1556,8 @@ document.querySelectorAll('#tplPop [data-shape]').forEach((b) => b.onclick = () 
 $('tplSize').onchange = () => { const v = Math.max(5, Math.round(Number($('tplSize').value) / 5) * 5 || 5); $('tplSize').value = v; tplSizes[tplShape] = v;
   const t = selTpl && (sc().templates || {})[selTpl]; if (t && t.shape === tplShape && canEditTpl(t)) sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, size: v } }); };
 $('tplWidth').onchange = () => { const t = selTpl && (sc().templates || {})[selTpl]; if (t && t.shape === 'line' && canEditTpl(t)) sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, width: $('tplWidth').value } }); };
+$('tplCast').onclick = () => { const t = selTpl && (sc().templates || {})[selTpl]; if (!t) return toast('Click a template first, then Cast'); if (!canEditTpl(t)) return toast('That template isn\'t yours'); const k = $('tplFx').value || t.fx; if (!k) return toast('Pick an effect first'); sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, fx: k, color: SPELLS[k].col, cast: true } }); };
+$('tplFx').onchange = () => { const t = selTpl && (sc().templates || {})[selTpl]; if (t && canEditTpl(t) && $('tplFx').value) sendMsg({ type: 'templateSet', sceneId: editing, tpl: { id: t.id, fx: $('tplFx').value, color: SPELLS[$('tplFx').value].col } }); };
 $('tplClearMine').onclick = () => { sendMsg({ type: 'templateRemove', sceneId: editing, mine: true }); selTpl = null; };
 $('tplClearAll').onclick = () => { sendMsg({ type: 'templateRemove', sceneId: editing, all: true }); selTpl = null; };
 
@@ -2800,11 +2822,12 @@ let macros = [];
 const sameName = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 function addChat(e, fresh) {
   const div = document.createElement('div');
-  div.className = 'entry chat' + (e.to ? ' whisper' : '') + (e.as ? ' npc' : '') + (fresh ? ' fresh' : '');
+  div.className = 'entry chat' + (e.to ? ' whisper' : '') + (e.as ? ' npc' : '') + (e.narrate ? ' narrate' : '') + (fresh ? ' fresh' : '');
   const head = document.createElement('div'), b = document.createElement('b');
   b.textContent = e.as || e.who; head.appendChild(b);
   const to = document.createElement('span'); to.className = 'to';
-  if (e.to) to.textContent = ' → ' + e.to.join(', ') + ' (whisper)';
+  if (e.narrate) to.textContent = ' reads aloud';
+  else if (e.to) to.textContent = ' → ' + e.to.join(', ') + ' (whisper)';
   else if (e.as && me.isDM) to.textContent = ' (you, as an NPC)';
   head.appendChild(to);
   const say = document.createElement('div'); say.className = 'say'; say.textContent = e.text;
@@ -2833,8 +2856,133 @@ function addLog(e, fresh) {
 function rollWith(expr, label, ev) {
   let x = expr;
   if (ev && /(^|[+-])1?d20(?!\d)/.test(x) && !/(adv|dis)$/.test(x)) { if (ev.shiftKey) x += 'adv'; else if (ev.altKey) x += 'dis'; }
-  sendMsg({ type: 'roll', expr: x, label, private: $('private').checked });
+  sendMsg({ type: 'roll', expr: x, label, private: $('private').checked, show: $('private').checked }); // the box means "private" for players, "show" for the DM
 }
+// ---------- sounds from the map, and what happens on it ----------
+// where this screen listens from: a player hears from their character, the DM from the middle of their view
+function listener(s) {
+  if (!me.isDM) {
+    const mine = Object.values(s.tokens).filter((t) => t.owner && sameName(t.owner, me.name));
+    const t = mine.find((x) => x.id === selected) || mine[0];
+    if (t) return [t.x + t.size / 2, t.y + t.size / 2];
+  }
+  const r = canvas.getBoundingClientRect();
+  return [(r.width / 2 - view.x) / view.zoom / CELL, (r.height / 2 - view.y) / view.zoom / CELL];
+}
+function hear(s, x, y, range = 18, floor = 0.12) {
+  const [lx, ly] = listener(s), d = Math.hypot(x - lx, y - ly);
+  return { vol: Math.max(floor, Math.pow(Math.max(0, 1 - d / range), 1.2)), pan: Math.max(-0.8, Math.min(0.8, (x - lx) / 10)), d };
+}
+const STEP = { stone: 'stone', cobble: 'stone', marble: 'stone', wall: 'stone', lava: 'stone', wood: 'wood', grass: 'grass', snow: 'dirt', dirt: 'dirt', path: 'dirt', sand: 'dirt', farm: 'dirt', pit: 'dirt', water: 'water' };
+function reactTo(s, a, b) {
+  // hurt or healed
+  const hpA = a.hp != null ? a.hp : a.hpPct, hpB = b.hp != null ? b.hp : b.hpPct;
+  if (hpA != null && hpB != null && hpA !== hpB && !b.hidden) {
+    const amount = a.hp != null && b.hp != null ? Math.abs(b.hp - a.hp) : null, at = hear(s, b.x + b.size / 2, b.y + b.size / 2, 22, 0.25);
+    if (hpB < hpA) { efx.hit(b.id, amount); snd.effect('hit-' + (1 + Math.floor(Math.random() * 3)), { vol: at.vol * 0.9, pan: at.pan, rate: 0.92 + Math.random() * 0.16 }); }
+    else { efx.heal(b.id, amount); snd.effect('heal', { vol: at.vol * 0.7, pan: at.pan }); }
+  }
+  // footsteps along the way
+  const n = Math.round(Math.hypot(b.x - a.x, b.y - a.y));
+  if (n && n <= 12 && !b.hidden && (!drag || drag.id !== b.id)) {
+    const k = Math.min(n * 2, 8);
+    for (let i = 1; i <= k; i++) {
+      const x = a.x + (b.x - a.x) * (i / k) + b.size / 2, y = a.y + (b.y - a.y) * (i / k) + b.size / 2, at = hear(s, x, y, 16, 0);
+      if (at.vol < 0.04) continue;
+      const kind = STEP[s.tiles[Math.floor(x) + ',' + Math.floor(y)]] || 'stone';
+      snd.effect(`step-${kind}-${1 + Math.floor(Math.random() * 3)}`, { vol: at.vol * 0.8, pan: at.pan, rate: (b.size > 1 ? 0.82 : 1) * (0.94 + Math.random() * 0.12), delay: (i - 1) * 0.27 });
+    }
+  }
+}
+// torches, fires, water and lava near the listener, every half second
+const LOOPS = { torch: { name: 'loop-torch', range: 6, vol: 0.55 }, brazier: { name: 'loop-torch', range: 8, vol: 0.8, rate: 0.85 }, campfire: { url: '/audio/campfire.mp3', range: 10, vol: 0.7 }, fireplace: { url: '/audio/campfire.mp3', range: 9, vol: 0.6 } };
+function mapSounds() {
+  const s = sc();
+  if (!s || prefs.mute || !snd.running() || document.hidden) { snd.setSpatial([]); return; }
+  const [lx, ly] = listener(s), list = [];
+  for (const p of Object.values(s.props)) {
+    const L = LOOPS[p.kind]; if (!L || p.off) continue;
+    const d = Math.hypot(p.x + 0.5 - lx, p.y + 0.5 - ly); if (d > L.range) continue;
+    list.push({ key: 'p:' + p.id, name: L.name, url: L.url, rate: L.rate, d, vol: L.vol * Math.pow(1 - d / L.range, 1.5), pan: Math.max(-0.8, Math.min(0.8, (p.x + 0.5 - lx) / 8)) });
+  }
+  list.sort((a, b) => a.d - b.d); list.length = Math.min(list.length, 6);
+  for (const [tile, L] of [['water', { url: '/audio/river.mp3', range: 10, vol: 0.5 }], ['lava', { name: 'loop-lava', range: 9, vol: 0.75 }]]) {
+    let best = null;
+    for (let y = Math.floor(ly - L.range); y <= ly + L.range; y++) for (let x = Math.floor(lx - L.range); x <= lx + L.range; x++) if (s.tiles[x + ',' + y] === tile) { const d = Math.hypot(x + 0.5 - lx, y + 0.5 - ly); if (!best || d < best.d) best = { d, x: x + 0.5 }; }
+    if (best && best.d <= L.range) list.push({ key: tile, name: L.name, url: L.url, vol: L.vol * Math.pow(1 - best.d / L.range, 1.3), pan: Math.max(-0.7, Math.min(0.7, (best.x - lx) / 8)) });
+  }
+  snd.setSpatial(list);
+}
+setInterval(mapSounds, 500);
+// ---------- the scene and the story ----------
+// a player's screen fades to black and names the new place, then fades in on it
+let titleTimer = 0;
+function titleCard(name) {
+  const el = $('titleCard'); clearTimeout(titleTimer);
+  el.querySelector('.tc-name').textContent = name || '';
+  el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  snd.effect('transition', { vol: 0.8 }); efx.clear(); dice3d.clear();
+  titleTimer = setTimeout(() => { el.classList.remove('show'); titleTimer = setTimeout(() => { el.hidden = true; }, 800); }, 2900);
+}
+let narrTimer = 0;
+function narrate(text) {
+  const el = $('narration'); clearTimeout(narrTimer);
+  el.querySelector('.nr-text').textContent = text;
+  el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); el.scrollTop = 0;
+  snd.effect('page', { vol: 0.8 });
+  const words = text.split(/\s+/).length;
+  narrTimer = setTimeout(closeNarration, Math.min(60000, 6000 + words * 380)); // long enough to read
+}
+function closeNarration() { const el = $('narration'); clearTimeout(narrTimer); el.classList.remove('show'); narrTimer = setTimeout(() => { el.hidden = true; }, 650); }
+$('narration').onclick = closeNarration;
+$('chatRead').onclick = () => { const text = $('chatText').value.trim(); if (!text) return toast('Type the text to read aloud first'); sendMsg({ type: 'chat', text, narrate: true }); $('chatText').value = ''; };
+// ---------- dice on screen ----------
+let mySkin = null, lastHit = 0;
+const dice3d = createDice($('diceLayer'), { onHit: (v) => { const now = performance.now(); if (now - lastHit < 28) return; lastHit = now; snd.effect('dice-' + (1 + Math.floor(Math.random() * 4)), { vol: 0.2 + v * 0.8, rate: 0.9 + Math.random() * 0.25, pan: Math.random() * 0.6 - 0.3 }); } });
+function showRoll(e) {
+  if (!e.dice || !e.dice.length || prefs.dice === false || document.hidden) return;
+  const mine = sameName(e.who, me.name);
+  const note = !e.private ? '' : me.isDM && mine ? '🔒 only you' : mine ? '🔒 you and the DM' : '🔒 private';
+  dice3d.roll(e, { note });
+  if (e.crit) setTimeout(() => snd.effect(e.crit === 'nat20' ? 'nat20' : 'nat1', { vol: 0.8 }), 1350);
+}
+const skinLook = (sk, who) => (sk && sk.img ? { img: sk.img, ink: sk.ink || '#fff' } : (sk && skinById(sk.id)) || defaultSkin(who));
+function renderMyDice() {
+  const c = $('myDicePrev'); if (!c) return;
+  if (!dice3d.preview(c, skinLook(mySkin, me.name))) setTimeout(renderMyDice, 300); // a picture still loading
+}
+function renderSkins() {
+  if ($('skinModal').hidden) return;
+  const grid = $('skinGrid'); grid.innerHTML = '';
+  const cur = mySkin && mySkin.img ? 'img' : mySkin && mySkin.id ? mySkin.id : defaultSkin(me.name).id;
+  const tiles = SKINS.map((k) => ({ key: k.id, name: k.name, look: k, pick: () => sendMsg({ type: 'diceSkin', skin: { id: k.id } }) }));
+  if (mySkin && mySkin.img) tiles.unshift({ key: 'img', name: 'My picture', look: skinLook(mySkin), pick: () => {} });
+  for (const t of tiles) {
+    const d = document.createElement('div'); d.className = 'tile' + (t.key === cur ? ' on' : ''); d.title = t.name;
+    const c = document.createElement('canvas'); c.width = c.height = 120; const sp = document.createElement('span'); sp.textContent = t.name;
+    d.append(c, sp); d.onclick = t.pick; grid.append(d);
+    const paint = () => { if (!dice3d.preview(c, t.look)) setTimeout(paint, 300); }; paint();
+  }
+  $('skinShow').checked = prefs.dice !== false;
+  if (mySkin && mySkin.ink) $('skinInk').value = mySkin.ink;
+}
+$('openSkins').onclick = () => { $('skinModal').hidden = false; renderSkins(); };
+$('myDicePrev').onclick = $('openSkins').onclick;
+$('skinShow').onchange = () => { prefs.dice = $('skinShow').checked; savePrefs(); if (!prefs.dice) dice3d.clear(); };
+$('skinImgBtn').onclick = () => $('skinImgIn').click();
+$('skinInk').onchange = () => { if (mySkin && mySkin.img) sendSkinImage(null); };
+let skinSrc = null;
+function sendSkinImage(file) {
+  const go = (img) => {
+    const n = 256, c = document.createElement('canvas'); c.width = c.height = n; const s = Math.min(img.naturalWidth, img.naturalHeight);
+    c.getContext('2d').drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, n, n);
+    sendMsg({ type: 'diceSkin', skin: { img: c.toDataURL('image/jpeg', 0.86), ink: $('skinInk').value } });
+  };
+  if (file) { const url = URL.createObjectURL(file), img = new Image(); img.onload = () => { skinSrc = img; go(img); URL.revokeObjectURL(url); }; img.onerror = () => toast('That picture could not be read'); img.src = url; }
+  else if (skinSrc) go(skinSrc);
+  else if (mySkin && mySkin.img) { const img = new Image(); img.onload = () => { skinSrc = img; go(img); }; img.src = mySkin.img; }
+}
+$('skinImgIn').onchange = () => { const f = $('skinImgIn').files[0]; $('skinImgIn').value = ''; if (f) sendSkinImage(f); };
 function renderMacros() {
   const box = $('macros'); box.innerHTML = '';
   macros.forEach((m, i) => {
@@ -2861,7 +3009,7 @@ $('macroForm').onsubmit = (e) => {
 // ---------- sound: music and ambience ----------
 // The DM picks what plays; everyone's screen plays it (see audio.js). Each person sets their own volume.
 let audioLib = [], soundNow = { music: null, amb: [] }, builtinSounds = [], sdKind = 'music', sdRename = null, sdDelete = null;
-const prefs = { master: 1, music: 1, amb: 1, mute: false, wx: true };
+const prefs = { master: 1, music: 1, amb: 1, sfx: 1, mute: false, wx: true, dice: true };
 try { Object.assign(prefs, JSON.parse(tryGet('tt-sound') || '{}')); } catch { /* defaults */ }
 const snd = createSound({ onState: (st) => { $('soundBlocked').hidden = !st.blocked; $('soundBtn').classList.toggle('playing', st.playing); } });
 snd.setLevels(prefs);
@@ -2890,7 +3038,7 @@ function renderSound() {
   $('soundBtn').textContent = prefs.mute ? '🔇' : '🔊';
   $('soundBtn').classList.toggle('playing', !!(soundNow.music || soundNow.amb.length));
   $('soundBtn').classList.toggle('open', !$('soundPop').hidden);
-  for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
+  for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
   $('vMute').checked = !!prefs.mute; $('vWx').checked = prefs.wx !== false; $('vFx').value = fxMode();
   if ($('soundPop').hidden) return;
   // playing now
@@ -2985,14 +3133,14 @@ $('sdSaveMap').onclick = () => { setAtmo({ sound: cleanNow(soundNow) }); toast('
 $('sdPlayMap').onclick = () => { const a = atmoOf(sc()); if (a.sound) sendSound(a.sound); };
 $('sdClearMap').onclick = () => setAtmo({ sound: null, auto: false });
 $('sdAuto').onchange = () => setAtmo({ auto: $('sdAuto').checked });
-for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
+for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
 $('vMute').onchange = () => { prefs.mute = $('vMute').checked; savePrefs(); };
 $('vWx').onchange = () => { prefs.wx = $('vWx').checked; savePrefs(); draw(); };
 $('vFx').onchange = () => { prefs.fx = $('vFx').value; savePrefs(); draw(); };
 $('soundBlocked').onclick = () => snd.resume();
 // browsers keep sound off until the first click or key press on the page
-addEventListener('pointerdown', () => { if (snd.blocked()) snd.resume(); }, true);
-addEventListener('keydown', () => { if (snd.blocked()) snd.resume(); }, true);
+addEventListener('pointerdown', () => { if (!snd.running()) snd.resume(); }, true); // effects and map sounds need the sound running too
+addEventListener('keydown', () => { if (!snd.running()) snd.resume(); }, true);
 
 // ---------- weather and time of day ----------
 const weather = createWeather($('wx'), () => {
@@ -3035,7 +3183,7 @@ function start(name) {
 }
 
 setTerrain('stone'); setPropKind('door'); setTool('select'); updateUndo(); resize();
-window.tabletop = { view, sound: snd, chunksPending: () => chunkWant.length + chunkJobs.size + (chunkTimer ? 1 : 0), chunkInfo: () => ({ built: chunks.size, workers: (chunkWorkers || []).length, fx: fxMode() }), renderTime: () => { mapRev++; const t0 = performance.now(); render(); return performance.now() - t0; }, frameTime: () => { const t0 = performance.now(); render(); return performance.now() - t0; }, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
+window.tabletop = { view, sound: snd, diceBusy: () => dice3d.busy(), chunksPending: () => chunkWant.length + chunkJobs.size + (chunkTimer ? 1 : 0), chunkInfo: () => ({ built: chunks.size, workers: (chunkWorkers || []).length, fx: fxMode() }), renderTime: () => { mapRev++; const t0 = performance.now(); render(); return performance.now() - t0; }, frameTime: () => { const t0 = performance.now(); render(); return performance.now() - t0; }, scene: () => sc(), cellToScreen: (x, y) => { const r = canvas.getBoundingClientRect(); return [r.left + view.x + (x + 0.5) * CELL * view.zoom, r.top + view.y + (y + 0.5) * CELL * view.zoom]; } };
 const preset = params.get('name') || (dmKey ? 'DM' : '');
 if (preset) start(preset);
 else {

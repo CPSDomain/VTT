@@ -8,7 +8,7 @@ function rollDice(expr) {
   const body = clean.replace(/(adv|dis)$/, '');
   const terms = body.match(/[+-]?[^+-]+/g);
   if (!terms) throw new Error('Bad expression');
-  let total = 0, natural = null; const parts = [];
+  let total = 0, natural = null; const parts = [], dice = [];
   for (const raw of terms) {
     const sign = raw[0] === '-' ? -1 : 1;
     const t = raw.replace(/^[+-]/, '');
@@ -26,6 +26,9 @@ function rollDice(expr) {
         kept = [adv ? Math.max(...rolls) : Math.min(...rolls)];
       }
       if (sides === 20 && kept.length === 1 && natural === null) natural = kept[0];
+      // each die, for the dice that roll on screen (kept: false = dropped by advantage, kh/kl)
+      const keep = kept.slice();
+      for (const v of rolls) { const i = keep.indexOf(v); dice.push({ s: sides, v, k: i >= 0 }); if (i >= 0) keep.splice(i, 1); }
       const sum = kept.reduce((a, b) => a + b, 0);
       total += sign * sum;
       parts.push(`${sign < 0 ? '-' : ''}${n}d${sides}[${rolls.join(',')}]${kept.length !== rolls.length ? '→' + kept.join(',') : ''}`);
@@ -34,7 +37,7 @@ function rollDice(expr) {
     } else throw new Error('Bad term: ' + t);
   }
   const crit = natural === 20 ? 'nat20' : natural === 1 ? 'nat1' : null;
-  return { total, crit, detail: parts.join(' ') + (adv ? ' (adv)' : dis ? ' (dis)' : '') };
+  return { total, crit, detail: parts.join(' ') + (adv ? ' (adv)' : dis ? ' (dis)' : ''), dice };
 }
 
 module.exports = { rollDice };

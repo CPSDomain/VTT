@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.7.2';
+const VERSION = '1.8.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -18,6 +18,7 @@ const PROPS = CATALOG.props.map((p) => p.id);
 const DM_ONLY = new Set(CATALOG.props.filter((p) => p.dmOnly).map((p) => p.id)); // secret doors, traps
 const TOKENS_JSON = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'tokens.json'), 'utf8'));
 const ICONS = new Set(Object.keys(TOKENS_JSON.icons));
+const SPELL_FX = ['fire', 'lightning', 'cold', 'acid', 'thunder', 'necrotic', 'radiant', 'poison', 'force', 'psychic', 'healing'];
 const CONDITIONS = new Set((TOKENS_JSON.conditions || []).map((c) => c.id));
 const HP_SHOW = ['numbers', 'bar', 'none'];
 const UPLOAD_URL = /^\/uploads\/[a-f0-9]{16}\.(png|jpg|webp|gif)$/;
@@ -76,10 +77,11 @@ function loadState(file) {
     s.encounters = Array.isArray(s.encounters) ? s.encounters : [];
     s.audio = Array.isArray(s.audio) ? s.audio : [];
     s.sound = s.sound && typeof s.sound === 'object' ? s.sound : { music: null, amb: [] };
+    s.diceSkins = s.diceSkins && typeof s.diceSkins === 'object' ? s.diceSkins : {};
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] } };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] }, diceSkins: {} };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -458,8 +460,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     // a combatant stepping in or out of sight changes the players' initiative list
     if (sc.combat && sc.combat.active && sc.combat.entries.some((e) => e.id === tok.id) && (!before || tokVisible(sc, before, {}) !== tokVisible(sc, tok, {}) || before.x !== tok.x || before.y !== tok.y || before.hidden !== tok.hidden)) sendCombat(sc);
   }
+  const skinOf = (name) => state.diceSkins[String(name).toLowerCase()] || null;
   function viewFor(u) {
-    const base = { activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
+    const base = { diceSkin: skinOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
     if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
     u.view = viewOf(u);
     return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
@@ -500,6 +503,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     t.size = clamp(Math.round(num(m.size, t.size ?? 20) / 5) * 5, 5, 500);
     if (t.shape === 'line') t.width = clamp(Math.round(num(m.width, t.width ?? 5) / 5) * 5, 5, 60);
     t.color = color(m.color, t.color || '#e8390e');
+    if (m.fx !== undefined) t.fx = SPELL_FX.includes(m.fx) ? m.fx : '';
+    if (m.cast) t.cast = (t.cast || 0) + 1; // cast (again): everyone sees it go off
     return t;
   }
   // Map labels (everyone sees them) and notes (only the DM sees them).
@@ -989,6 +994,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           if (!canSeeAt(cx, cy)) return;
           prop.open = !prop.open;
           toScene(sc.id, { type: 'prop', sceneId: sc.id, prop });
+          toScene(sc.id, { type: 'sfx', sceneId: sc.id, name: prop.open ? 'door-open' : 'door-close', x: prop.x + 0.5, y: prop.y + 0.5 });
         } else {
           let best = -1, bd = 0.8;
           (sc.doors || []).forEach((d, i) => { const mx = (d[0] + d[2]) / 2, my = (d[1] + d[3]) / 2, dd = Math.hypot(mx - px, my - py); if (dd < bd) { bd = dd; best = i; } });
@@ -998,6 +1004,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           d[4] = d[4] ? 0 : 1;
           toDMs({ type: 'doors', sceneId: sc.id, doors: sc.doors });
           toPlayersOnScene(sc.id, { type: 'doorFlash', sceneId: sc.id, x: (d[0] + d[2]) / 2, y: (d[1] + d[3]) / 2, open: !!d[4] });
+          toScene(sc.id, { type: 'sfx', sceneId: sc.id, name: d[4] ? 'door-open' : 'door-close', x: (d[0] + d[2]) / 2, y: (d[1] + d[3]) / 2 });
         }
         scheduleVision(sc); save();
         break;
@@ -1172,7 +1179,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       case 'roll':
         try {
           const r = rollDice(msg.expr);
-          const entry = { who: u.name, label: str(msg.label, 30), expr: str(msg.expr, 60), ...r, private: !!msg.private, time: Date.now() };
+          // the DM's rolls stay on the DM's screen unless the DM shows one to the players
+          const priv = u.isDM ? !msg.show : !!msg.private;
+          const entry = { who: u.name, label: str(msg.label, 30), expr: str(msg.expr, 60), ...r, private: priv, time: Date.now(), skin: skinOf(u.name) };
           state.log.push(entry); state.log = state.log.slice(-200);
           clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'roll', entry }));
           save();
@@ -1186,9 +1195,23 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const entry = { kind: 'chat', who: u.name, dm: u.isDM, text, time: now };
         if (Array.isArray(msg.to) && msg.to.length) entry.to = [...new Set(msg.to.map((n) => str(n, 24).trim()).filter(Boolean))].slice(0, 20);
         if (u.isDM && msg.as) entry.as = str(msg.as, 24).trim() || undefined;
+        if (u.isDM && msg.narrate && !entry.to) { entry.narrate = true; delete entry.as; } // read aloud to the table
         state.log.push(entry); state.log = state.log.slice(-200);
         clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'chat', entry }));
         save();
+        break;
+      }
+      case 'diceSkin': { // the look of this person's dice: a built-in skin, or their own picture
+        const key = u.name.toLowerCase(), m = msg.skin || {};
+        if (m.img && typeof m.img === 'string') {
+          const hit = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(m.img);
+          if (!hit || m.img.length > 400 * 1024) return send(ws, { type: 'error', message: 'Use a PNG, JPG or WebP picture under 300 KB' });
+          const buf = Buffer.from(hit[2], 'base64'), name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + (hit[1] === 'jpeg' ? '.jpg' : '.' + hit[1]);
+          try { fs.mkdirSync(uploads, { recursive: true }); fs.writeFileSync(path.join(uploads, name), buf); } catch { return send(ws, { type: 'error', message: 'Could not save the picture' }); }
+          state.diceSkins[key] = { img: '/uploads/' + name, ink: /^#[0-9a-f]{6}$/i.test(m.ink || '') ? m.ink : '#ffffff' };
+        } else if (typeof m.id === 'string' && /^[a-z]{2,16}$/.test(m.id)) state.diceSkins[key] = { id: m.id };
+        else delete state.diceSkins[key];
+        send(ws, { type: 'diceSkin', skin: skinOf(u.name) }); save();
         break;
       }
       case 'setPin': { // a player protects their name with a PIN (or removes it)

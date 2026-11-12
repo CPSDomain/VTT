@@ -346,6 +346,29 @@
   .vrow { display:grid; grid-template-columns:72px 1fr 34px; gap:8px; align-items:center; margin-top:6px; font-size:12px; color:var(--dim); }
   .vrow b { font-weight:500; color:var(--text); text-align:right; }
   canvas#wx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #titleCard { position:absolute; inset:0; z-index:8; background:#000; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .7s ease; pointer-events:none; }
+  #titleCard.show { opacity:1; }
+  #titleCard[hidden] { display:none; }
+  #titleCard .tc-in { display:flex; flex-direction:column; align-items:center; gap:14px; opacity:0; transform:translateY(8px); transition:opacity 1s ease .35s, transform 1.4s ease .35s; }
+  #titleCard.show .tc-in { opacity:1; transform:none; }
+  #titleCard .tc-name { font:600 clamp(28px, 4.6vw, 54px)/1.1 Georgia, 'Times New Roman', serif; color:#efe2c4; letter-spacing:.06em; text-align:center; padding:0 24px; text-shadow:0 0 24px rgba(255,200,120,.25); }
+  #titleCard .tc-rule { width:min(340px, 50vw); height:1px; background:linear-gradient(90deg, transparent, #b8944e, transparent); }
+  #narration { position:absolute; left:50%; top:50%; transform:translate(-50%, -46%); z-index:7; width:min(640px, calc(100% - 48px)); max-height:70%; overflow:auto; padding:28px 34px; border-radius:6px; cursor:pointer;
+    background:radial-gradient(ellipse at 50% 40%, #f3e6c6 0%, #e6d2a6 70%, #cdb07a 100%); color:#3a2a14; box-shadow:0 18px 60px rgba(0,0,0,.65), inset 0 0 40px rgba(120,80,30,.35); border:1px solid #9c7a3e;
+    opacity:0; transition:opacity .6s ease, transform .6s ease; }
+  #narration.show { opacity:1; transform:translate(-50%, -50%); }
+  #narration[hidden] { display:none; }
+  #narration .nr-text { font:18px/1.6 Georgia, 'Times New Roman', serif; white-space:pre-wrap; }
+  #narration .nr-text::first-letter { font-size:2.4em; float:left; line-height:.9; margin:4px 8px 0 0; color:#7a2a12; }
+  .entry.narrate { border-left:3px solid #b8944e; }
+  .entry.narrate .say { font-family:Georgia, serif; font-style:italic; }
+  canvas#diceLayer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:6; }
+  .skins { display:grid; grid-template-columns:repeat(auto-fill, minmax(84px, 1fr)); gap:8px; padding:0 16px; }
+  .skins .tile { border:2px solid transparent; cursor:pointer; }
+  .skins .tile.on { border-color:var(--accent); }
+  .skins .tile canvas { width:60px; height:60px; }
+  .myDice { display:flex; align-items:center; gap:8px; margin-top:6px; }
+  .myDice canvas { width:34px; height:34px; }
   #soundBlocked { position:absolute; left:50%; bottom:58px; transform:translateX(-50%); z-index:6; padding:8px 16px; border-radius:20px; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,.45); }
   #soundBlocked[hidden] { display:none; }
   #wxPop { left:50%; top:56px; transform:translateX(-50%); width:400px; padding:12px; background:var(--panel); }
@@ -422,6 +445,7 @@
     <div class="vrow"><span>Everything</span><input type="range" id="vMaster" min="0" max="100"><b id="vMasterN"></b></div>
     <div class="vrow"><span>Music</span><input type="range" id="vMusic" min="0" max="100"><b id="vMusicN"></b></div>
     <div class="vrow"><span>Ambience</span><input type="range" id="vAmb" min="0" max="100"><b id="vAmbN"></b></div>
+    <div class="vrow"><span>Effects</span><input type="range" id="vSfx" min="0" max="100" title="Dice, doors, blows, spells, footsteps, and torches and lava near your character"><b id="vSfxN"></b></div>
     <label class="check"><input type="checkbox" id="vMute"> Mute</label>
     <label class="check"><input type="checkbox" id="vWx"> Show moving weather (rain, snow…)</label>
     <div class="vrow" style="grid-template-columns:72px 1fr"><span>Map look</span><select id="vFx" title="How the map is drawn on this screen"><option value="full">Lit and moving (fire, water, light)</option><option value="still">Lit, nothing moving (slower PCs)</option><option value="off">Classic (the look before 1.6)</option></select></div>
@@ -505,6 +529,9 @@
   <div id="board">
     <canvas id="c"></canvas>
     <canvas id="wx"></canvas>
+    <canvas id="diceLayer"></canvas>
+    <div id="titleCard" hidden><div class="tc-in"><div class="tc-rule"></div><div class="tc-name"></div><div class="tc-rule"></div></div></div>
+    <div id="narration" hidden title="Click to close"><div class="nr-text"></div></div>
     <button id="soundBlocked" hidden>🔊 Click to hear the table's sound</button>
     <div id="status">Connecting…</div>
     <div id="fogBar" class="dm-only">
@@ -552,6 +579,8 @@
         <div class="shapes"><button data-shape="cone" class="on">Cone</button><button data-shape="sphere">Sphere</button><button data-shape="cube">Cube</button><button data-shape="line">Line</button><button data-shape="cylinder">Cylinder</button></div>
         <span class="hint" id="tplSizeLbl">Length</span><input id="tplSize" type="number" min="5" max="500" step="5" value="15"><span class="hint">ft</span>
         <span class="hint tplw">Width</span><input id="tplWidth" class="tplw" type="number" min="5" max="60" step="5" value="5"><span class="hint tplw">ft</span>
+        <select id="tplFx" title="What the spell looks and sounds like when it goes off"><option value="">No effect</option><option value="fire">🔥 Fire</option><option value="lightning">⚡ Lightning</option><option value="cold">❄ Cold</option><option value="acid">🧪 Acid</option><option value="thunder">💥 Thunder</option><option value="necrotic">💀 Necrotic</option><option value="radiant">✨ Radiant</option><option value="poison">☠ Poison</option><option value="force">🔮 Force</option><option value="psychic">🧠 Psychic</option><option value="healing">💚 Healing</option></select>
+        <button id="tplCast" title="Set off the selected template's effect again">Cast</button>
         <button id="tplClearMine">Clear mine</button><button id="tplClearAll" class="dm-only danger">Clear all</button>
       </div>
       <div class="hint" id="tplHelp"></div>
@@ -639,6 +668,7 @@
         </div>
         <form id="rollForm" class="row"><input id="expr" placeholder="2d6+3, 4d6kh3, d100"><button class="primary fixed">Roll</button></form>
         <label class="check"><input type="checkbox" id="private"> <span id="privLabel">Roll privately (only the DM sees it)</span></label>
+        <div class="myDice"><canvas id="myDicePrev" width="68" height="68"></canvas><button id="openSkins" title="How your dice look when they roll on everyone's screen">My dice…</button></div>
       </section>
 
       <section>
@@ -663,7 +693,7 @@
     <div id="log"></div>
     <form id="chatForm" autocomplete="off">
       <div class="row" style="margin:0"><select id="chatTo" title="Who hears it: everyone, or a whisper to one person"></select><select id="chatAs" class="dm-only" title="Speak as yourself, or as a character (an NPC or monster)"></select></div>
-      <div class="row"><input id="chatText" maxlength="1000" placeholder="Say something…" title="Enter sends. /w Name message whispers; /r 1d20+3 rolls"><button class="fixed primary" title="Send (Enter)">Send</button></div>
+      <div class="row"><input id="chatText" maxlength="1000" placeholder="Say something…" title="Enter sends. /w Name message whispers; /r 1d20+3 rolls"><button type="button" id="chatRead" class="fixed dm-only" title="Read aloud: show this text to everyone in the middle of their screen, like a page from a book">📜</button><button class="fixed primary" title="Send (Enter)">Send</button></div>
     </form>
   </aside>
 </main>
@@ -694,8 +724,21 @@
 </div>
 <div class="modal" id="statModal" hidden>
   <div class="dialog">
-    <div class="dhead"><h2 style="margin:0" id="sbName"></h2><div class="spacer"></div><label class="check" style="margin:0" title="Rolls from the stat block go only to you"><input type="checkbox" id="sbPrivate" checked> Roll privately</label><button class="close" data-close>✕</button></div>
+    <div class="dhead"><h2 style="margin:0" id="sbName"></h2><div class="spacer"></div><label class="check" style="margin:0" title="Rolls from the stat block go only to you"><input type="checkbox" id="sbPrivate"> Show rolls to the players</label><button class="close" data-close>✕</button></div>
     <div id="sbBody" class="hbody"></div>
+  </div>
+</div>
+<div class="modal" id="skinModal" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0">My dice</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
+    <div class="hint" style="padding:0 16px 10px;margin:0">How your dice look when you roll. Everyone who sees your roll sees them like this.</div>
+    <div id="skinGrid" class="skins"></div>
+    <div class="hbody">
+      <div class="hpl">Your own picture</div>
+      <div class="row"><button id="skinImgBtn">Use a picture…</button><label class="check fixed" style="margin:0" title="The colour of the numbers on your picture">Numbers <input type="color" id="skinInk" value="#ffffff" style="width:40px;height:28px;padding:2px"></label><input type="file" id="skinImgIn" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <div class="hint">A PNG, JPG or WebP. It's cropped to a square and wrapped round the dice.</div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="skinShow"> Show dice rolling on my screen</label>
+    </div>
   </div>
 </div>
 <div class="modal" id="handoutModal" hidden>

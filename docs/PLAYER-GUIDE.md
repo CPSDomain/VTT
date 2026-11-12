@@ -22,6 +22,9 @@ The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) g
 - **Roll dice** with the buttons on the right, or type a roll like `1d20+5`, `2d6+3` or `4d6kh3` and press Roll.
 - **Quick rolls:** add your attacks, saves and skills once under "My quick rolls" (e.g. name `Longsword hit`, roll `1d20+5`), copying the bonuses from your D&D Beyond sheet. Then click to roll. **Shift-click** for advantage, **Alt-click** for disadvantage.
 - **Roll privately** sends the result only to the DM.
+- **Your dice roll on screen** for everyone to see. **My dice…** (under the dice buttons) picks their look, or uses a picture of your own. The DM's rolls stay secret.
+- **Spells:** with the **Spell** tool, pick an effect (fire, lightning, cold…) before placing a template and it goes off for everyone. Select one of yours and click **Cast** to set it off again.
+- **Sound:** you hear the map from where your character stands: torches, water, doors, footsteps and blows. **🔊 → Effects** sets how loud.
 
 ## Table tools
 

@@ -8,7 +8,8 @@ export function createSound({ onState } = {}) {
   let ac = null, master = null, previewNode = null;
   const buses = {}, layers = new Map(), buffers = new Map();
   let want = { music: null, amb: [] }, skew = 0;
-  const levels = { master: 1, music: 1, amb: 1, mute: false };
+  const levels = { master: 1, music: 1, amb: 1, sfx: 1, mute: false };
+  const spatial = new Map(); // loops coming from things on the map: key → { gain, panner, src }
 
   function ctx() {
     if (ac) return ac;
@@ -16,7 +17,7 @@ export function createSound({ onState } = {}) {
     if (!AC) return null;
     ac = new AC();
     master = ac.createGain(); master.connect(ac.destination);
-    for (const b of ['music', 'amb', 'preview']) { buses[b] = ac.createGain(); buses[b].connect(master); }
+    for (const b of ['music', 'amb', 'preview', 'sfx']) { buses[b] = ac.createGain(); buses[b].connect(master); }
     ac.onstatechange = report;
     applyLevels();
     return ac;
@@ -27,6 +28,7 @@ export function createSound({ onState } = {}) {
     master.gain.setTargetAtTime(levels.mute ? 0 : levels.master, t, 0.05);
     buses.music.gain.setTargetAtTime(levels.music, t, 0.05);
     buses.amb.gain.setTargetAtTime(levels.amb, t, 0.05);
+    buses.sfx.gain.setTargetAtTime(levels.sfx == null ? 1 : levels.sfx, t, 0.05);
   }
   const wanted = () => !!(want.music || want.amb.length);
   // blocked: the browser won't play sound until this person clicks something
@@ -84,7 +86,42 @@ export function createSound({ onState } = {}) {
     report();
   }
 
+  // ---------- sound effects and sounds from the map ----------
+  const SFX = (name) => '/audio/sfx/' + name + '.mp3';
+  function effect(name, { vol = 1, pan = 0, rate = 1, delay = 0 } = {}) {
+    const c = ctx(); if (!c || c.state !== 'running' || levels.mute) return;
+    load(SFX(name)).then((buf) => {
+      if (!buf) return;
+      const src = c.createBufferSource(), g = c.createGain(), p = c.createStereoPanner();
+      src.buffer = buf; src.playbackRate.value = rate; g.gain.value = Math.max(0, Math.min(1.5, vol)); p.pan.value = Math.max(-1, Math.min(1, pan));
+      src.connect(g); g.connect(p); p.connect(buses.sfx); src.start(c.currentTime + delay);
+      src.onended = () => { g.disconnect(); p.disconnect(); };
+    }).catch(() => {});
+  }
+  // list: [{ key, name, vol, pan }]; loops fade in, follow their volume and pan, and fade out when gone
+  function setSpatial(list) {
+    const c = ac; if (!c || c.state !== 'running') { for (const k of [...spatial.keys()]) dropSpatial(k); return; }
+    const want = new Map(list.map((x) => [x.key, x]));
+    for (const k of [...spatial.keys()]) if (!want.has(k)) dropSpatial(k);
+    for (const [k, x] of want) {
+      let L = spatial.get(k);
+      if (!L) {
+        L = { gain: c.createGain(), pan: c.createStereoPanner(), stopped: false }; L.gain.gain.value = 0; L.gain.connect(L.pan); L.pan.connect(buses.sfx); spatial.set(k, L);
+        load(x.url || SFX(x.name)).then((buf) => { if (L.stopped || !buf) return; L.src = c.createBufferSource(); L.src.buffer = buf; L.src.loop = true; L.src.playbackRate.value = x.rate || 1; L.src.connect(L.gain); L.src.start(0, Math.random() * buf.duration); }).catch(() => {});
+      }
+      L.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, x.vol)), c.currentTime, 0.25);
+      L.pan.pan.setTargetAtTime(Math.max(-1, Math.min(1, x.pan || 0)), c.currentTime, 0.25);
+    }
+  }
+  function dropSpatial(k) {
+    const L = spatial.get(k); if (!L) return; spatial.delete(k); L.stopped = true;
+    if (ac) L.gain.gain.setTargetAtTime(0, ac.currentTime, 0.3);
+    setTimeout(() => { try { L.src && L.src.stop(); } catch { /* */ } L.gain.disconnect(); L.pan.disconnect(); }, 1500);
+  }
+
   return {
+    effect, setSpatial,
+    running: () => !!ac && ac.state === 'running',
     // what the DM has playing, and the server's clock when it was sent
     apply(sound, serverNow) {
       if (serverNow) skew = serverNow - Date.now();
@@ -95,7 +132,7 @@ export function createSound({ onState } = {}) {
     setLevels(p) { Object.assign(levels, p); applyLevels(); },
     levels,
     // after a click: the browser lets sound play now
-    resume() { const c = ctx(); if (!c) return; c.resume().then(() => { for (const L of layers.values()) if (L.el && L.el.paused) L.el.play().catch(() => {}); report(); }).catch(() => {}); },
+    resume() { const c = ctx(); if (!c) return; if (c.state === 'running') return; c.resume().then(() => { for (const L of layers.values()) if (L.el && L.el.paused) L.el.play().catch(() => {}); report(); }).catch(() => {}); },
     blocked: () => !!ac && ac.state !== 'running' && wanted(),
     // the DM listens to a track on their own screen only (null stops it)
     async preview(url) {
@@ -111,6 +148,6 @@ export function createSound({ onState } = {}) {
     },
     previewing: () => (previewNode ? previewNode.url : null),
     // for tests: what's playing on this screen, and where in each loop
-    debug: () => ({ state: ac ? ac.state : 'none', levels: { ...levels }, layers: [...layers.entries()].map(([k, L]) => ({ key: k, id: L.id, bus: L.bus, vol: L.vol, gain: L.gain.gain.value, ready: !!(L.src || L.el), pos: L.src ? offsetIn(want.music && want.music.id === L.id ? want.music.at : (want.amb.find((a) => a.id === L.id) || {}).at, L.src.buffer.duration) : L.el ? L.el.currentTime : null })) })
+    debug: () => ({ state: ac ? ac.state : 'none', levels: { ...levels }, spatial: [...spatial.keys()], layers: [...layers.entries()].map(([k, L]) => ({ key: k, id: L.id, bus: L.bus, vol: L.vol, gain: L.gain.gain.value, ready: !!(L.src || L.el), pos: L.src ? offsetIn(want.music && want.music.id === L.id ? want.music.at : (want.amb.find((a) => a.id === L.id) || {}).at, L.src.buffer.duration) : L.el ? L.el.currentTime : null })) })
   };
 }

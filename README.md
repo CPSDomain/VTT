@@ -133,6 +133,15 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 
 ![The new look: a torch-lit crypt with shadows from the pillars, glowing lava and rippling water](docs/images/lighting.jpg)
 
+**Immersion**
+- Dice that roll across everyone's screen and land on the result; twelve dice sets or a picture of your own. The DM's rolls stay secret
+- Spells that go off over their templates (fire, lightning, cold, acid, thunder and more), with sound
+- Tokens flinch when hit, glow when healed, fall when they drop, and show conditions such as burning or poisoned
+- Sound from the map: torches, fires, water and lava, louder as your character gets closer; doors, blows and footsteps
+- Read-aloud text on every player's screen, and a title card when the party arrives somewhere new
+
+![Spells going off over their templates, read-aloud text, and dice rolling across the map](docs/images/immersion.jpg)
+
 **Atmosphere**
 - Music and ambience the DM plays for everyone, in step on every screen: 4 music tracks and 8 ambiences built in (tavern, battle, dungeon, rain, thunderstorm, campfire, cave, ocean…), or upload your own
 - Layer up to 5 ambiences under the music, each with its own volume; every player sets their own volume too

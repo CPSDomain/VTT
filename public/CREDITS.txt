@@ -13,5 +13,5 @@ Data prepared by the 5e-database project (https://github.com/5e-bits/5e-database
 
 
 Music and ambience (public/audio)
-Made for Tabletop (build/make-audio.py). The music is played on the FluidR3 GM soundfont by Frank Wen,
+Made for Tabletop (build/make-audio.py; sound effects build/make-sfx.py). The music is played on the FluidR3 GM soundfont by Frank Wen,
 MIT licence (https://member.keymusician.com/Member/FluidR3_GM/index.html).

@@ -200,7 +200,7 @@ Click **⚔ Encounter builder…** under Add tokens.
 3. **Place on the map** puts the monsters near the middle of your view, on free squares, numbered (Goblin 1, Goblin 2…), with average or rolled hit points and their initiative bonus. **Add hidden** keeps them out of sight until you reveal them.
 4. **Save** keeps the encounter (give it a name) to place again later from **Saved encounters…**.
 
-**Stat blocks:** select a monster on the map and click **📖 Stat block**. Attack bonuses, damage, hit dice and ability scores are buttons that roll; **Roll privately** keeps the result to you. Library tokens named like an SRD monster ("Goblin 3") have one too.
+**Stat blocks:** select a monster on the map and click **📖 Stat block**. Attack bonuses, damage, hit dice and ability scores are buttons that roll; your rolls stay private unless you tick **Show rolls to the players**. Library tokens named like an SRD monster ("Goblin 3") have one too.
 
 The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under the Creative Commons Attribution 4.0 licence.
 
@@ -245,9 +245,28 @@ Players' moves and rulers show on your screen too. Your own token moves aren't s
 
 ## Dice
 
-Everyone rolls in the right-hand panel: the die buttons, or type any roll such as `2d6+3`, `4d6kh3` or `d100`. Rolls happen on your PC, so nobody can fudge them, and everyone sees the log. Tick **Roll privately** for rolls players shouldn't see; a player's private roll is seen only by them and you.
+Everyone rolls in the right-hand panel: the die buttons, or type any roll such as `2d6+3`, `4d6kh3` or `d100`. Rolls happen on your PC, so nobody can fudge them.
+
+- **The dice roll on screen:** real dice tumble across the map and land on the result, with the total, a golden burst for a natural 20 and a red one for a natural 1. Dice dropped by advantage or `kh`/`kl` fade out.
+- **Who sees what:** a player's roll rolls on everyone's screen. A player's private roll (**Roll privately**) shows only on their screen and yours. **Your rolls are yours alone:** nobody else sees them, on screen or in the log. To show one to the table, tick **Show this roll to the players** first.
+- **My dice…** under the dice buttons: pick a set (Ivory, Obsidian, Ruby, Gold, Frost, Ember and more) or **Use a picture…** of your own; everyone sees your dice in your colours. Untick **Show dice rolling on my screen** to keep only the log.
 
 Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bonuses from D&D Beyond once. Shift-click rolls with advantage, Alt-click with disadvantage. Natural 20s show green, natural 1s red.
+
+## Sound and story
+
+**Sounds from the map.** Torches and braziers crackle, campfires and fireplaces burn, water runs and lava bubbles, louder the closer you are: players hear the map from their character, you from the middle of your view. Doors creak open and thud shut, weapons strike when a token loses hit points, healing chimes, and footsteps follow tokens across stone, wood, grass, dirt and water. Each screen sets the level under **🔊 → Effects**.
+
+**Read aloud.** Type a description in the chat box and click **📜** instead of Send: it appears in the middle of every player's screen like a page from a book, with the sound of parchment, and stays long enough to read (a click closes it). It goes in the log too.
+
+**Scene changes.** When you show players a different map, their screens fade to black and show its name, then fade in on the new place. Name your maps for it ("The Drowned Hall", "Tomb of the Ash King").
+
+## Spells and hits
+
+- **Spell effects:** with the **Spell** tool, pick an effect in the bar (🔥 Fire, ⚡ Lightning, ❄ Cold, 🧪 Acid, 💥 Thunder, 💀 Necrotic, ✨ Radiant, ☠ Poison, 🔮 Force, 🧠 Psychic, 💚 Healing) before placing a template. It goes off for everyone with its sound: a fireball bursts and burns, lightning crackles along its line, cold frosts the cone. Click a template and **Cast** to set it off again. Players can do the same with theirs.
+- **Hits and healing:** when a token loses hit points it flinches with a red flash and a blow; healing glows green. Players see the numbers only for tokens whose numbers they're allowed to see.
+- **Down:** a token at 0 HP falls over in a pool of blood. Prone, unconscious and dead tokens lie down too.
+- **Conditions you can see:** burning tokens flicker with flame, poisoned ones turn green, raging ones glow red, blessed ones gold, hasted ones blue; concentrating gets a turning ring, frightened ones tremble, invisible ones shimmer faintly, petrified ones turn grey and bleeding ones drip.
 
 ## The look of the map
 

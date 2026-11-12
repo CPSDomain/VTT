@@ -2,6 +2,22 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.8.0] - 2026-11-12
+
+### Added
+- **Dice that roll on screen:** real dice (d4 to d20, and d100 as two d10s) are thrown across the map, bounce, tumble and land on the result, with the total and the roll's name. A natural 20 bursts gold with a fanfare, a natural 1 goes red. Dice dropped by advantage or keep-highest fade out.
+  - A player's roll rolls on everyone's screen; a private roll only on theirs and the DM's.
+  - **The DM's rolls are now the DM's alone**, on screen and in the log. **Show this roll to the players** shows one.
+  - **My dice…**: twelve sets to choose from, or your own picture wrapped round your dice. Everyone sees your dice your way.
+- **Sound from the map:** torches and braziers crackle, campfires and fireplaces burn, water runs and lava bubbles, louder the closer your character is. Doors creak open and shut, blows land when a token loses hit points, healing chimes, and footsteps follow tokens over stone, wood, grass, dirt and water. New **Effects** volume under 🔊.
+- **Read aloud:** the DM's 📜 button shows text in the middle of every player's screen like a page from a book.
+- **Scene changes:** showing players a new map fades their screens to black and names the place before the new map fades in.
+- **Spell effects:** pick an effect for a spell template (fire, lightning, cold, acid, thunder, necrotic, radiant, poison, force, psychic, healing) and it goes off for everyone, with its sound. **Cast** sets it off again.
+- **Tokens react:** a red flash and a flinch when hit, a green glow when healed, with the numbers floating up where you may see them. A token at 0 HP falls over in a pool of blood; prone, unconscious and dead tokens lie down. Burning, poisoned, raging, blessed, hasted, concentrating, frightened, invisible, petrified and bleeding tokens show it.
+
+### Changed
+- A token at 0 HP no longer gets a red cross: it lies down instead.
+
 ## [1.7.2] - 2026-11-12
 
 ### Fixed
