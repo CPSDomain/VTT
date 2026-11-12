@@ -24,7 +24,7 @@ The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) g
 - **Roll privately** sends the result only to the DM.
 - **Your dice roll on screen** for everyone to see. **My dice…** (under the dice buttons) picks their look, or uses a picture of your own. The DM's rolls stay secret.
 - **Spells:** with the **Spell** tool, pick an effect (fire, lightning, cold…) before placing a template and it goes off for everyone. Select one of yours and click **Cast** to set it off again.
-- **Sound:** you hear the map from where your character stands: torches, water, doors, footsteps and blows. **🔊 → Effects** sets how loud.
+- **Sound:** you hear the map from where your character stands: torches, water, doors, footsteps and blows. Under **🔊**, **Map sounds** sets how loud the torches, fires, water and lava are (0 turns them off), and **Effects** the dice, doors, blows and footsteps.
 
 ## Table tools
 

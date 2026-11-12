@@ -255,7 +255,7 @@ Each player can save **quick rolls** (e.g. "Longsword hit" `1d20+5`), copying bo
 
 ## Sound and story
 
-**Sounds from the map.** Torches and braziers crackle, campfires and fireplaces burn, water runs and lava bubbles, louder the closer you are: players hear the map from their character, you from the middle of your view. Doors creak open and thud shut, weapons strike when a token loses hit points, healing chimes, and footsteps follow tokens across stone, wood, grass, dirt and water. Each screen sets the level under **🔊 → Effects**.
+**Sounds from the map.** Torches and braziers crackle, campfires and fireplaces burn, water runs and lava bubbles, louder the closer you are: players hear the map from their character, you from the middle of your view. Doors creak open and thud shut, weapons strike when a token loses hit points, healing chimes, and footsteps follow tokens across stone, wood, grass, dirt and water. Each screen sets its own levels under **🔊**: **Map sounds** for the torches, fires, water and lava (0 turns them off), **Effects** for the rest.
 
 **Read aloud.** Type a description in the chat box and click **📜** instead of Send: it appears in the middle of every player's screen like a page from a book, with the sound of parchment, and stays long enough to read (a click closes it). It goes in the log too.
 

@@ -9,7 +9,7 @@ const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
 
-const VERSION = '1.8.0';
+const VERSION = '1.8.2';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));

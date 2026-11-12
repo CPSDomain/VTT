@@ -71,6 +71,7 @@ function onMessage(msg) {
       $('me').textContent = me.isDM ? '' : `Playing as ${me.name}` + (msg.pinSet ? ' 🔑' : '');
       $('privLabel').textContent = me.isDM ? 'Show this roll to the players' : 'Roll privately (only the DM sees it)';
       mySkin = st.diceSkin || null; renderMyDice();
+      snd.resume(); // the apps may play sound straight away; a browser waits for the first click
       $('status').style.display = 'none';
       $('log').innerHTML = ''; st.log.forEach((e) => addLog(e, false));
       macros = st.myMacros || []; renderMacros();
@@ -2895,10 +2896,10 @@ function reactTo(s, a, b) {
   }
 }
 // torches, fires, water and lava near the listener, every half second
-const LOOPS = { torch: { name: 'loop-torch', range: 6, vol: 0.55 }, brazier: { name: 'loop-torch', range: 8, vol: 0.8, rate: 0.85 }, campfire: { url: '/audio/campfire.mp3', range: 10, vol: 0.7 }, fireplace: { url: '/audio/campfire.mp3', range: 9, vol: 0.6 } };
+const LOOPS = { torch: { name: 'loop-torch', range: 5, vol: 0.35 }, brazier: { name: 'loop-torch', range: 7, vol: 0.5, rate: 0.85 }, campfire: { url: '/audio/campfire.mp3', range: 8, vol: 0.45 }, fireplace: { url: '/audio/campfire.mp3', range: 7, vol: 0.4 } };
 function mapSounds() {
   const s = sc();
-  if (!s || prefs.mute || !snd.running() || document.hidden) { snd.setSpatial([]); return; }
+  if (!s || prefs.mute || prefs.map === 0 || !snd.running() || document.hidden) { snd.setSpatial([]); return; }
   const [lx, ly] = listener(s), list = [];
   for (const p of Object.values(s.props)) {
     const L = LOOPS[p.kind]; if (!L || p.off) continue;
@@ -2906,7 +2907,7 @@ function mapSounds() {
     list.push({ key: 'p:' + p.id, name: L.name, url: L.url, rate: L.rate, d, vol: L.vol * Math.pow(1 - d / L.range, 1.5), pan: Math.max(-0.8, Math.min(0.8, (p.x + 0.5 - lx) / 8)) });
   }
   list.sort((a, b) => a.d - b.d); list.length = Math.min(list.length, 6);
-  for (const [tile, L] of [['water', { url: '/audio/river.mp3', range: 10, vol: 0.5 }], ['lava', { name: 'loop-lava', range: 9, vol: 0.75 }]]) {
+  for (const [tile, L] of [['water', { url: '/audio/river.mp3', range: 8, vol: 0.3 }], ['lava', { name: 'loop-lava', range: 8, vol: 0.45 }]]) {
     let best = null;
     for (let y = Math.floor(ly - L.range); y <= ly + L.range; y++) for (let x = Math.floor(lx - L.range); x <= lx + L.range; x++) if (s.tiles[x + ',' + y] === tile) { const d = Math.hypot(x + 0.5 - lx, y + 0.5 - ly); if (!best || d < best.d) best = { d, x: x + 0.5 }; }
     if (best && best.d <= L.range) list.push({ key: tile, name: L.name, url: L.url, vol: L.vol * Math.pow(1 - best.d / L.range, 1.3), pan: Math.max(-0.7, Math.min(0.7, (best.x - lx) / 8)) });
@@ -2928,6 +2929,7 @@ let narrTimer = 0;
 function narrate(text) {
   const el = $('narration'); clearTimeout(narrTimer);
   el.querySelector('.nr-text').textContent = text;
+  el.classList.toggle('long', text.length > 140 || text.includes('\n')); // short lines sit in the middle
   el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); el.scrollTop = 0;
   snd.effect('page', { vol: 0.8 });
   const words = text.split(/\s+/).length;
@@ -3009,7 +3011,7 @@ $('macroForm').onsubmit = (e) => {
 // ---------- sound: music and ambience ----------
 // The DM picks what plays; everyone's screen plays it (see audio.js). Each person sets their own volume.
 let audioLib = [], soundNow = { music: null, amb: [] }, builtinSounds = [], sdKind = 'music', sdRename = null, sdDelete = null;
-const prefs = { master: 1, music: 1, amb: 1, sfx: 1, mute: false, wx: true, dice: true };
+const prefs = { master: 1, music: 1, amb: 1, sfx: 1, map: 0.6, mute: false, wx: true, dice: true };
 try { Object.assign(prefs, JSON.parse(tryGet('tt-sound') || '{}')); } catch { /* defaults */ }
 const snd = createSound({ onState: (st) => { $('soundBlocked').hidden = !st.blocked; $('soundBtn').classList.toggle('playing', st.playing); } });
 snd.setLevels(prefs);
@@ -3038,7 +3040,7 @@ function renderSound() {
   $('soundBtn').textContent = prefs.mute ? '🔇' : '🔊';
   $('soundBtn').classList.toggle('playing', !!(soundNow.music || soundNow.amb.length));
   $('soundBtn').classList.toggle('open', !$('soundPop').hidden);
-  for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
+  for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx'], ['vMap', 'map']]) { $(id).value = Math.round(prefs[k] * 100); $(id + 'N').textContent = Math.round(prefs[k] * 100); }
   $('vMute').checked = !!prefs.mute; $('vWx').checked = prefs.wx !== false; $('vFx').value = fxMode();
   if ($('soundPop').hidden) return;
   // playing now
@@ -3133,7 +3135,7 @@ $('sdSaveMap').onclick = () => { setAtmo({ sound: cleanNow(soundNow) }); toast('
 $('sdPlayMap').onclick = () => { const a = atmoOf(sc()); if (a.sound) sendSound(a.sound); };
 $('sdClearMap').onclick = () => setAtmo({ sound: null, auto: false });
 $('sdAuto').onchange = () => setAtmo({ auto: $('sdAuto').checked });
-for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
+for (const [id, k] of [['vMaster', 'master'], ['vMusic', 'music'], ['vAmb', 'amb'], ['vSfx', 'sfx'], ['vMap', 'map']]) $(id).oninput = () => { prefs[k] = $(id).value / 100; savePrefs(); };
 $('vMute').onchange = () => { prefs.mute = $('vMute').checked; savePrefs(); };
 $('vWx').onchange = () => { prefs.wx = $('vWx').checked; savePrefs(); draw(); };
 $('vFx').onchange = () => { prefs.fx = $('vFx').value; savePrefs(); draw(); };

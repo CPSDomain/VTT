@@ -8,7 +8,7 @@ export function createSound({ onState } = {}) {
   let ac = null, master = null, previewNode = null;
   const buses = {}, layers = new Map(), buffers = new Map();
   let want = { music: null, amb: [] }, skew = 0;
-  const levels = { master: 1, music: 1, amb: 1, sfx: 1, mute: false };
+  const levels = { master: 1, music: 1, amb: 1, sfx: 1, map: 0.6, mute: false };
   const spatial = new Map(); // loops coming from things on the map: key → { gain, panner, src }
 
   function ctx() {
@@ -17,7 +17,7 @@ export function createSound({ onState } = {}) {
     if (!AC) return null;
     ac = new AC();
     master = ac.createGain(); master.connect(ac.destination);
-    for (const b of ['music', 'amb', 'preview', 'sfx']) { buses[b] = ac.createGain(); buses[b].connect(master); }
+    for (const b of ['music', 'amb', 'preview', 'sfx', 'map']) { buses[b] = ac.createGain(); buses[b].connect(master); }
     ac.onstatechange = report;
     applyLevels();
     return ac;
@@ -29,6 +29,7 @@ export function createSound({ onState } = {}) {
     buses.music.gain.setTargetAtTime(levels.music, t, 0.05);
     buses.amb.gain.setTargetAtTime(levels.amb, t, 0.05);
     buses.sfx.gain.setTargetAtTime(levels.sfx == null ? 1 : levels.sfx, t, 0.05);
+    buses.map.gain.setTargetAtTime(levels.map == null ? 0.6 : levels.map, t, 0.05);
   }
   const wanted = () => !!(want.music || want.amb.length);
   // blocked: the browser won't play sound until this person clicks something
@@ -106,7 +107,7 @@ export function createSound({ onState } = {}) {
     for (const [k, x] of want) {
       let L = spatial.get(k);
       if (!L) {
-        L = { gain: c.createGain(), pan: c.createStereoPanner(), stopped: false }; L.gain.gain.value = 0; L.gain.connect(L.pan); L.pan.connect(buses.sfx); spatial.set(k, L);
+        L = { gain: c.createGain(), pan: c.createStereoPanner(), stopped: false }; L.gain.gain.value = 0; L.gain.connect(L.pan); L.pan.connect(buses.map); spatial.set(k, L);
         load(x.url || SFX(x.name)).then((buf) => { if (L.stopped || !buf) return; L.src = c.createBufferSource(); L.src.buffer = buf; L.src.loop = true; L.src.playbackRate.value = x.rate || 1; L.src.connect(L.gain); L.src.start(0, Math.random() * buf.duration); }).catch(() => {});
       }
       L.gain.gain.setTargetAtTime(Math.max(0, Math.min(1, x.vol)), c.currentTime, 0.25);

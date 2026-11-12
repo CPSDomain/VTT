@@ -358,8 +358,8 @@
     opacity:0; transition:opacity .6s ease, transform .6s ease; }
   #narration.show { opacity:1; transform:translate(-50%, -50%); }
   #narration[hidden] { display:none; }
-  #narration .nr-text { font:18px/1.6 Georgia, 'Times New Roman', serif; white-space:pre-wrap; }
-  #narration .nr-text::first-letter { font-size:2.4em; float:left; line-height:.9; margin:4px 8px 0 0; color:#7a2a12; }
+  #narration .nr-text { font:19px/1.6 Georgia, 'Times New Roman', serif; white-space:pre-wrap; text-align:center; }
+  #narration.long .nr-text { text-align:left; }
   .entry.narrate { border-left:3px solid #b8944e; }
   .entry.narrate .say { font-family:Georgia, serif; font-style:italic; }
   canvas#diceLayer { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:6; }
@@ -445,7 +445,8 @@
     <div class="vrow"><span>Everything</span><input type="range" id="vMaster" min="0" max="100"><b id="vMasterN"></b></div>
     <div class="vrow"><span>Music</span><input type="range" id="vMusic" min="0" max="100"><b id="vMusicN"></b></div>
     <div class="vrow"><span>Ambience</span><input type="range" id="vAmb" min="0" max="100"><b id="vAmbN"></b></div>
-    <div class="vrow"><span>Effects</span><input type="range" id="vSfx" min="0" max="100" title="Dice, doors, blows, spells, footsteps, and torches and lava near your character"><b id="vSfxN"></b></div>
+    <div class="vrow"><span>Effects</span><input type="range" id="vSfx" min="0" max="100" title="Dice, doors, blows, spells and footsteps"><b id="vSfxN"></b></div>
+    <div class="vrow"><span>Map sounds</span><input type="range" id="vMap" min="0" max="100" title="Torches, fires, water and lava near your character (0 turns them off)"><b id="vMapN"></b></div>
     <label class="check"><input type="checkbox" id="vMute"> Mute</label>
     <label class="check"><input type="checkbox" id="vWx"> Show moving weather (rain, snow…)</label>
     <div class="vrow" style="grid-template-columns:72px 1fr"><span>Map look</span><select id="vFx" title="How the map is drawn on this screen"><option value="full">Lit and moving (fire, water, light)</option><option value="still">Lit, nothing moving (slower PCs)</option><option value="off">Classic (the look before 1.6)</option></select></div>

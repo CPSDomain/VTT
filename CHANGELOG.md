@@ -2,6 +2,18 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.8.2] - 2026-11-12
+
+### Fixed
+- **Players didn't hear the map:** the sound on a player's screen only started once they clicked something (or the DM played music). Tabletop Player now starts it as soon as it joins, so torches, fires, water and lava are heard straight away.
+- **Read-aloud text:** the big first letter is gone (it split short lines like "alone" into "a lone"). Short lines sit in the middle of the page.
+
+## [1.8.1] - 2026-11-12
+
+### Changed
+- **Map sounds have their own volume:** 🔊 → **Map sounds** sets how loud torches, fires, water and lava are on your screen (0 turns them off), apart from **Effects** (dice, doors, blows, spells, footsteps). Every player sets their own.
+- **Map sounds are quieter** to start with (60%), and torches, fires, water and lava carry less far.
+
 ## [1.8.0] - 2026-11-12
 
 ### Added
