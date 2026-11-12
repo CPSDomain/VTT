@@ -187,9 +187,10 @@ function pattern(g, id, R) {
 }
 
 // ---------- natural edges ----------
-const NATURAL = ['water', 'lava', 'pit', 'dirt', 'path', 'farm', 'sand', 'grass', 'snow']; // low to high: later ones spread over earlier ones
+const NATURAL = ['pit', 'dirt', 'path', 'farm', 'sand', 'grass', 'snow', 'water', 'lava']; // low to high: later ones spread over earlier ones.
+// Water and lava go last with an even edge, so the shore sits on the square's edge (land never eats into water squares, and piers stay over water)
 const BUILT = new Set(['stone', 'cobble', 'marble', 'wood']);
-const CAVE_NATURAL = ['water', 'lava', 'pit', 'stone', 'dirt', 'path', 'sand', 'grass', 'snow']; // in caves, stone is natural rock floor
+const CAVE_NATURAL = ['pit', 'stone', 'dirt', 'path', 'sand', 'grass', 'snow', 'water', 'lava']; // in caves, stone is natural rock floor
 const Z = 16; // mask pixels a square
 const NA = smoothNoise(64, 5), NB = smoothNoise(64, 6);
 function edgeNoise(sc) {

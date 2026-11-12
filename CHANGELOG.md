@@ -2,6 +2,12 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.7.2] - 2026-11-12
+
+### Fixed
+- **Piers and bridges looked under water:** the moving ripples of light on water were drawn over the planks too. They now stay under any bridge or pier, and the glow of lava stays under bridges over lava.
+- **Shorelines sit on the squares again:** with the 1.7 art, grass and sand spread a little over the edge of water, so water squares next to land (and the end of a pier) could look like land. Water and lava now keep their own soft edge on the line between squares, so what looks like water is water.
+
 ## [1.7.1] - 2026-11-11
 
 The new map art. (1.7.0 was never released: its tag was typed with a capital V, so nothing was built. 1.7.1 is that version, plus the fix below.)

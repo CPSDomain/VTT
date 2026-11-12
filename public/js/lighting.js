@@ -192,9 +192,11 @@ export function createLighting({ CELL, VIS }) {
     return [Math.max(0, Math.floor(-view.x / view.zoom / CELL)), Math.max(0, Math.floor(-view.y / view.zoom / CELL)),
       Math.min(s.cols - 1, Math.ceil((w - view.x) / view.zoom / CELL)), Math.min(s.rows - 1, Math.ceil((h - view.y) / view.zoom / CELL))];
   }
+  // squares of water or lava, leaving out the ones with a bridge or pier over them (the ripples and glow belong under the planks)
   function cellsOf(s, kind, r) {
-    const p = new Path2D(); let any = false;
-    for (let y = r[1]; y <= r[3]; y++) for (let x = r[0]; x <= r[2]; x++) if (s.tiles[x + ',' + y] === kind) { p.rect(x * CELL, y * CELL, CELL, CELL); any = true; }
+    const p = new Path2D(); let any = false, covered = null;
+    for (const id in s.props) { const q = s.props[id]; if (q.kind === 'bridge') (covered = covered || new Set()).add(q.x + ',' + q.y); }
+    for (let y = r[1]; y <= r[3]; y++) for (let x = r[0]; x <= r[2]; x++) if (s.tiles[x + ',' + y] === kind && !(covered && covered.has(x + ',' + y))) { p.rect(x * CELL, y * CELL, CELL, CELL); any = true; }
     return any ? p : null;
   }
   // ripples of light on water (under everything else)
