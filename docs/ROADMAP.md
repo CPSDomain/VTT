@@ -31,6 +31,8 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.11 | A bigger map generator: ships, castles, graveyards and city streets; dungeons with several levels, room size, twisty corridors, doors, clutter, underground lakes and mine tracks; buildings with upstairs and cellars; SRD monsters sized for the party, treasure, room names and DM notes; lighting, time, weather and sound to fit |
 | 1.12 | Spells for players: slots and pact magic, casting with upcasting, spell details and rolls, areas from the spell, concentration, short and long rests |
 | 1.13 | Spells and class features land on the map: healing, temporary hit points, attack and save spells against each target, resistances, Lay on Hands, Second Wind, Channel Divinity and other limited-use features |
+| 1.14 | Magic Missile darts and Scorching Ray/Eldritch Blast rays split between targets, automatic concentration checks, spells that put conditions on their targets and take them off when concentration ends |
+| 1.15 | Spells end on their targets by the 2024 rules: end-of-turn saves, saves when hurt, damage breaking charms and Sleep, Sleep's second save, breaking free of Web and Entangle |
 
 ## Next
 

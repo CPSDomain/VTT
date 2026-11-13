@@ -677,6 +677,8 @@ function render() {
     if (aim && aim.ids.has(t.id)) { // chosen as a target for a spell
       ctx.save(); ctx.setLineDash([6 / view.zoom, 4 / view.zoom]); ctx.lineDashOffset = -performance.now() / 60; ctx.lineWidth = 4 / view.zoom; ctx.strokeStyle = aim.color;
       ctx.beginPath(); ctx.arc(cx, cy, rad + 2, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      const n = aim.count && aim.count.get(t.id);
+      if (n) { const bx = cx + rad * 0.75, by = cy - rad * 0.75, br = 9 / view.zoom; ctx.fillStyle = aim.color; ctx.beginPath(); ctx.arc(bx, by, br, 0, 7); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = `700 ${11 / view.zoom}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(String(n), bx, by + 0.5 / view.zoom); }
     }
     if (t.id === turnId) { // whose turn it is: a glowing gold ring
       ctx.save(); ctx.shadowColor = '#fbbf24'; ctx.shadowBlur = 18; ctx.lineWidth = 5; ctx.strokeStyle = '#fbbf24';
@@ -1887,6 +1889,23 @@ function renderEditor() {
   }
   const on = new Set(t.conditions || []);
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
+  renderMarks(t);
+}
+// spells holding this token, and how each one ends (2024 rules); a button to roll the save or break free now
+const ENDS = { end: (m) => `${m.save} save DC ${m.dc} at the end of each of its turns`, 'end+hurtAdv': (m) => `${m.save} save DC ${m.dc} at the end of each of its turns, and with Advantage when hurt`, hurt: (m) => `${m.save} save DC ${m.dc} whenever it takes damage`,
+  damage: () => 'ends if it takes damage', sleep: (m) => (m.stage === 1 ? `${m.save} save DC ${m.dc} at the end of its next turn, or it falls asleep` : 'asleep until it takes damage or is shaken awake'), escape: (m) => `its action: Strength (Athletics) DC ${m.dc} to break free`, fear: (m) => `${m.save} save DC ${m.dc} if it ends its turn out of sight of the caster` };
+function renderMarks(t) {
+  const box = $('eMarks'), seen = new Map();
+  for (const m of t.marks || []) { const k = m.by + '|' + m.spell; if (!seen.has(k)) seen.set(k, { ...m, cs: [] }); seen.get(k).cs.push(m.c); }
+  box.hidden = !seen.size; box.innerHTML = '';
+  const mine = me.isDM || (t.owner && t.owner === me.name);
+  for (const m of seen.values()) {
+    const row = document.createElement('div'); row.className = 'mk';
+    const tx = document.createElement('span'); tx.textContent = `✨ ${m.spell}` + (m.ends && ENDS[m.ends] ? ': ' + ENDS[m.ends](m) : m.conc ? ': while the caster concentrates' : ''); row.append(tx);
+    const canRoll = mine && (m.ends === 'escape' || m.ends === 'end' || m.ends === 'end+hurtAdv' || m.ends === 'hurt' || m.ends === 'fear' || (m.ends === 'sleep' && m.stage === 1));
+    if (canRoll) { const b = document.createElement('button'); b.textContent = m.ends === 'escape' ? '🪢 Try to break free' : '🎲 Roll the save'; b.onclick = () => sendMsg({ type: 'spellRetry', sceneId: editing, id: t.id, by: m.by, spell: m.spell }); row.append(b); }
+    box.append(row);
+  }
 }
 function buildConditionGrid() {
   const box = $('eConds'); box.innerHTML = '';
@@ -2083,7 +2102,13 @@ canvas.addEventListener('pointerdown', (e) => {
 
   if (aim) { // choosing targets for a spell: clicking a token adds it or takes it off
     const t = tokenAt(s, p);
-    if (t) { if (aim.ids.has(t.id)) aim.ids.delete(t.id); else { if (aim.one) aim.ids.clear(); aim.ids.add(t.id); } aimBar(); draw(); }
+    if (t && aim.pieces) { // darts, rays, beams: each click sends one more at it; Shift+click takes one back
+      const n = aim.count.get(t.id) || 0, used = [...aim.count.values()].reduce((a, b) => a + b, 0);
+      if (!e.shiftKey && used >= aim.pieces) toast(`All ${aim.pieces} ${aim.word}s are placed. Shift+click a token to take one back.`);
+      else if (e.shiftKey) { if (n > 1) aim.count.set(t.id, n - 1); else { aim.count.delete(t.id); aim.ids.delete(t.id); } }
+      else { aim.count.set(t.id, n + 1); aim.ids.add(t.id); }
+      aimBar(); draw();
+    } else if (t) { if (aim.ids.has(t.id)) aim.ids.delete(t.id); else { if (aim.one) aim.ids.clear(); aim.ids.add(t.id); } aimBar(); draw(); }
     return;
   }
 
@@ -3005,7 +3030,7 @@ let aim = null;
 const myTokens = (s) => Object.values(s.tokens).filter((t) => t.owner === me.name && (!myChar || !t.ddb || t.ddb === myChar.link));
 function startAim(o) {
   const s = sc(); if (!s) return toast('Open a map first');
-  aim = { color: '#22c55e', ids: new Set(), ...o };
+  aim = { color: '#22c55e', ids: new Set(), count: new Map(), ...o };
   if (o.self) for (const t of myTokens(s).slice(0, 1)) aim.ids.add(t.id);
   aimBar(); draw();
 }
@@ -3013,15 +3038,16 @@ function stopAim() { aim = null; $('aimBar').hidden = true; draw(); }
 function aimBar() {
   const bar = $('aimBar'); bar.hidden = !aim; if (!aim) return;
   $('aimTitle').textContent = aim.title;
-  $('aimCount').textContent = aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
+  const used = [...aim.count.values()].reduce((a, b) => a + b, 0);
+  $('aimCount').textContent = aim.pieces ? `${used} of ${aim.pieces} ${aim.word}s placed · Shift+click takes one back` : aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
+  $('aimArea').hidden = !!aim.one || !!aim.pieces;
   $('aimAmt').hidden = !aim.amount; if (aim.amount && !$('aimAmt').value) $('aimAmt').value = aim.amount;
   $('aimAmt').max = aim.amount || '';
-  $('aimArea').hidden = !!aim.one;
   $('aimGo').disabled = !aim.ids.size && !aim.allowNone;
   $('aimGo').textContent = aim.ids.size ? 'Apply' : aim.allowNone ? 'Cast with no targets' : 'Apply';
 }
 $('aimCancel').onclick = stopAim;
-$('aimSelf').onclick = () => { const s = sc(); if (!s || !aim) return; const t = myTokens(s)[0]; if (!t) return toast('Your token isn’t on this map'); if (aim.one) aim.ids.clear(); aim.ids.add(t.id); aimBar(); draw(); };
+$('aimSelf').onclick = () => { const s = sc(); if (!s || !aim) return; const t = myTokens(s)[0]; if (!t) return toast('Your token isn’t on this map'); if (aim.one) aim.ids.clear(); aim.ids.add(t.id); if (aim.pieces && [...aim.count.values()].reduce((x, y) => x + y, 0) < aim.pieces) aim.count.set(t.id, (aim.count.get(t.id) || 0) + 1); aimBar(); draw(); };
 $('aimArea').onclick = () => { // every token in my most recent area on this map
   const s = sc(); if (!s || !aim) return;
   const mine = Object.values(s.templates || {}).filter((t) => t.owner === me.name).pop();
@@ -3030,7 +3056,7 @@ $('aimArea').onclick = () => { // every token in my most recent area on this map
   for (const t of Object.values(s.tokens)) { let inside = false; for (let y = t.y; y < t.y + t.size && !inside; y++) for (let x = t.x; x < t.x + t.size; x++) if (cells.has(x + ',' + y)) { inside = true; break; } if (inside) aim.ids.add(t.id); }
   aimBar(); draw();
 };
-$('aimGo').onclick = () => { if (!aim) return; const amt = Math.max(1, Math.min(+$('aimAmt').value || 0, aim.amount || 1e9)); aim.send([...aim.ids], amt); $('aimAmt').value = ''; stopAim(); };
+$('aimGo').onclick = () => { if (!aim) return; const amt = Math.max(1, Math.min(+$('aimAmt').value || 0, aim.amount || 1e9)); aim.send(aim.pieces ? [...aim.count].flatMap(([id, n]) => Array(n).fill(id)) : [...aim.ids], amt); $('aimAmt').value = ''; stopAim(); };
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && aim) stopAim(); });
 
 function renderResources(d, c, el) {
@@ -3084,12 +3110,13 @@ function renderSpells(d, c, el) {
       if (options.length > 1) { sel = el('select'); for (const o of options) { const op = el('option', '', o.t); op.value = o.v; sel.append(op); } }
       const cast = el('button', 'primary', sp.level === 0 ? 'Cast' : sp.usesSlot ? (options.length ? 'Cast' : 'No slots left') : sp.uses ? 'Cast (uses 1)' : 'Cast');
       cast.disabled = sp.level > 0 && sp.usesSlot && !options.length;
-      const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp);
+      const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi);
       const slotMsg = () => { const o = sel ? sel.value : options[0] && options[0].v; return { name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }; };
-      const harm = sp.dice && !sp.heal && !sp.temp;
+      const harm = (sp.dice && !sp.heal && !sp.temp) || !!sp.multi || !!(sp.cond && !sp.cond.ally);
       cast.onclick = () => {
         if (!lands) return sendMsg({ type: 'charCast', ...slotMsg() });
-        startAim({ title: `Cast ${sp.name}`, harm, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly, allowNone: true,
+        const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0;
+        startAim({ title: `Cast ${sp.name}`, harm, pieces, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly, allowNone: true,
           send: (ids) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
       };
       if (lands) cast.title = 'Spends the slot, then you pick the targets: rolls and hit points are done for you';

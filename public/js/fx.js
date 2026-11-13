@@ -20,7 +20,7 @@ export const SPELLS = {
   healing: { name: 'Healing', dur: 2.0, col: '#62e08a' }
 };
 // conditions that move: they keep the map drawing while a token has them
-export const LIVE_CONDITIONS = new Set(['burning', 'poisoned', 'raging', 'blessed', 'concentrating', 'frightened', 'invisible', 'hasted', 'bleeding']);
+export const LIVE_CONDITIONS = new Set(['burning', 'poisoned', 'raging', 'blessed', 'concentrating', 'frightened', 'invisible', 'hasted', 'bleeding', 'baned', 'slowed', 'outlined', 'hexed', 'shielded', 'paralyzed']);
 
 export function createFx({ CELL }) {
   const spells = [], parts = [], toks = new Map(), floats = [], bursts = [];
@@ -172,6 +172,10 @@ export function createFx({ CELL }) {
     if (c.includes('raging')) aura('230,40,30', 0.45 + 0.15 * Math.sin(T * 6));
     if (c.includes('blessed')) aura('255,215,110', 0.35 + 0.1 * Math.sin(T * 2.5), 1.3);
     if (c.includes('hasted')) aura('120,200,255', 0.3 + 0.15 * Math.sin(T * 10), 1.2);
+    if (c.includes('baned')) aura('120,40,20', 0.4 + 0.1 * Math.sin(T * 2), 1.25);
+    if (c.includes('hexed')) aura('110,40,170', 0.38 + 0.12 * Math.sin(T * 3.3), 1.25);
+    if (c.includes('outlined')) aura('200,120,255', 0.5 + 0.2 * Math.sin(T * 4), 1.35); // faerie fire: lit up for all to see
+    if (c.includes('shielded')) aura('90,150,255', 0.3 + 0.08 * Math.sin(T * 2), 1.3);
     if (c.includes('burning')) aura('255,120,30', 0.45 + 0.2 * Math.sin(T * 17) * Math.sin(T * 7), 1.3);
   }
   // over the token: flashes, tints and little moving signs
@@ -188,6 +192,9 @@ export function createFx({ CELL }) {
     if (c.includes('petrified')) { g.save(); g.globalCompositeOperation = 'saturation'; g.fillStyle = '#888'; g.beginPath(); g.arc(cx, cy, rad - 4, 0, 7); g.fill(); g.restore(); g.fillStyle = 'rgba(150,150,150,.25)'; g.beginPath(); g.arc(cx, cy, rad - 4, 0, 7); g.fill(); }
     if (c.includes('concentrating')) { g.save(); g.strokeStyle = 'rgba(140,200,255,.85)'; g.lineWidth = 2; g.setLineDash([6, 6]); g.lineDashOffset = -T * 20; g.beginPath(); g.arc(cx, cy, rad + 1, 0, 7); g.stroke(); g.restore(); }
     if (c.includes('burning')) { g.save(); g.globalCompositeOperation = 'lighter'; for (let i = 0; i < 5; i++) { const a = i * 1.25 + T * 1.5, ph = (T * 2.2 + i * 0.37) % 1, x = cx + Math.cos(a) * rad * 0.75, y = cy + Math.sin(a) * rad * 0.6 - ph * rad * 0.6, s = rad * 0.22 * (1 - ph), gr = g.createRadialGradient(x, y, 0, x, y, s); gr.addColorStop(0, `rgba(255,200,90,${0.9 * (1 - ph)})`); gr.addColorStop(1, 'rgba(255,90,20,0)'); g.fillStyle = gr; g.fillRect(x - s, y - s, s * 2, s * 2); } g.restore(); }
+    if (c.includes('paralyzed')) { g.save(); g.globalCompositeOperation = 'lighter'; g.strokeStyle = `rgba(150,220,255,${0.5 + 0.3 * Math.sin(T * 9)})`; g.lineWidth = 1.5; g.beginPath(); for (let i = 0; i < 6; i++) { const a = i * 1.047 + Math.floor(T * 6) * 0.4; g.moveTo(cx + Math.cos(a) * rad * 0.3, cy + Math.sin(a) * rad * 0.3); g.lineTo(cx + Math.cos(a + 0.3) * rad * 0.65, cy + Math.sin(a + 0.3) * rad * 0.65); g.lineTo(cx + Math.cos(a) * rad * 0.95, cy + Math.sin(a) * rad * 0.95); } g.stroke(); g.restore(); }
+    if (c.includes('slowed')) { g.fillStyle = `rgba(60,170,200,${0.18 + 0.06 * Math.sin(T * 1.2)})`; g.beginPath(); g.arc(cx, cy, rad - 4, 0, 7); g.fill(); }
+    if (c.includes('outlined')) { g.save(); g.globalCompositeOperation = 'lighter'; for (let i = 0; i < 6; i++) { const a = i * 1.05 + T * 0.9, x = cx + Math.cos(a) * rad * 0.95, y = cy + Math.sin(a) * rad * 0.95; g.fillStyle = `rgba(230,180,255,${0.6 + 0.4 * Math.sin(T * 8 + i)})`; g.fillRect(x - 1.5, y - 1.5, 3, 3); } g.restore(); }
     if (c.includes('bleeding')) { const ph = (T * 0.8) % 1; g.fillStyle = `rgba(150,10,10,${0.8 * (1 - ph)})`; g.beginPath(); g.ellipse(cx + rad * 0.35, cy + rad * 0.1 + ph * rad * 0.5, 2.2, 3.2, 0, 0, 7); g.fill(); }
   }
   const tokenAlpha = (t) => ((t.conditions || []).includes('invisible') ? 0.42 + 0.12 * Math.sin(now() * 3) : 1);

@@ -2,6 +2,30 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.15.0] - 2026-11-13
+
+### Added
+- **Spells end on their targets the way the 2024 rules say.** When a creature saves, the condition comes off by itself:
+  - **A save at the end of each of its turns** (Hold Person, Hold Monster, Slow, Blindness/Deafness, Cause Fear, Blinding Smite): rolled when the DM clicks **Next turn** at the end of that creature's turn. A success ends the spell on it.
+  - **Tasha's Hideous Laughter:** that end-of-turn save, plus another save with Advantage whenever it takes damage.
+  - **Dominate Person, Beast and Monster:** a save whenever it takes damage.
+  - **Charm Person, Charm Monster and Hypnotic Pattern** end when the target takes damage.
+  - **Sleep:** incapacitated until the end of its next turn, then a second save. If it fails again, it's unconscious until it takes damage or someone wakes it.
+  - **Web, Entangle and Ensnaring Strike:** at the start of a restrained creature's turn, a reminder that it can use its action for a Strength (Athletics) check against the spell's DC. **🪢 Try to break free** on the token rolls it.
+  - **Fear:** the DM gets a reminder at the end of the creature's turn, because the save only comes if it ended its turn out of sight of the caster.
+  - Prone stays when a spell ends (Hideous Laughter): standing up is the creature's own doing.
+- **What's holding a token** shows under its conditions: the spell and how it ends. A **🎲 Roll the save** button rolls it outside combat.
+- Players see that a monster shook a spell off or is still held, but never the monster's roll. A player's own saves roll on screen.
+
+## [1.14.0] - 2026-11-13
+
+### Added
+- **Darts, rays and beams pick their own targets.** Magic Missile, Scorching Ray and Eldritch Blast: after **Cast**, click a token once for each dart, ray or beam (a number shows how many it gets), Shift+click takes one back. Higher slots add darts and rays, and Eldritch Blast gets more beams at levels 5, 11 and 17. Magic Missile's darts always hit; each ray or beam rolls its own attack.
+- **Concentration checks.** When someone concentrating takes damage (from a spell, or hit points taken off by the DM), Tabletop rolls their Constitution save against DC 10 or half the damage, whichever is higher. A failed save, or dropping to 0 hit points, ends the spell. Players' checks roll on screen; monsters' checks are a whisper to the DM only. Casting a new concentration spell ends the old one, and so does a long rest or taking the Concentrating condition off by hand.
+- **Spells put conditions on.** Hold Person and Hold Monster (paralyzed), Bless, Bane, Faerie Fire, Slow, Haste, Shield of Faith, Hex, Hunter's Mark, Invisibility, Web, Entangle, Sleep, Hideous Laughter, Charm Person, Cause Fear, Fear, Hypnotic Pattern, Banishment, Blindness/Deafness, Command, Grease and more. Each target makes its save against your DC (only the result shows) and gets the condition if it fails. When a concentration spell ends, its conditions come off everyone it was on.
+- New conditions with their own look on the token: Baned, Slowed, Faerie fire (glowing sparks), Hexed, Shield of Faith and Banished. Paralyzed tokens crackle.
+- Characters brought in from D&D Beyond earlier pick all this up without being imported again.
+
 ## [1.13.0] - 2026-11-12
 
 ### Added

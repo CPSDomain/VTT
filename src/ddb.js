@@ -1,3 +1,4 @@
+const { enrichCharacter } = require('./spellrules');
 // Reads a character from D&D Beyond: name, portrait, hit points, AC, speed, initiative, darkvision, ability scores,
 // saving throws, skills and attacks. D&D Beyond has no official way for other apps to do this; like other tools,
 // this reads the same character data its own character sheet uses, so the character must be public
@@ -228,13 +229,13 @@ function readCharacter(d) {
   spellsOut.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
   const avatar = (d.decorations && d.decorations.avatarUrl) || d.avatarUrl || null;
-  return {
+  return enrichCharacter({
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,
     abilities: SHORT.map((n, i) => ({ name: n, score: scores[i], mod: M[i] })), saves, skills, attacks: attacks.slice(0, 12), coins, items, spells: spellsOut.slice(0, 150), slots, pact, casting: spellsOut.length ? casting : null, resources,
     avatar: typeof avatar === 'string' && /^https?:\/\//.test(avatar) ? avatar : null
-  };
+  });
 }
 
 module.exports = { fetchCharacter, characterId, readCharacter };

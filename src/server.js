@@ -8,9 +8,10 @@ const crypto = require('crypto');
 const os = require('os');
 const { WebSocketServer } = require('ws');
 const { rollDice } = require('./dice');
+const RULES = require('./spellrules');
 const ddb = require('./ddb');
 
-const VERSION = '1.13.0';
+const VERSION = '1.15.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -82,6 +83,7 @@ function loadState(file) {
     s.sound = s.sound && typeof s.sound === 'object' ? s.sound : { music: null, amb: [] };
     s.diceSkins = s.diceSkins && typeof s.diceSkins === 'object' ? s.diceSkins : {};
     s.characters = s.characters && typeof s.characters === 'object' ? s.characters : {};
+    for (const ch of Object.values(s.characters)) RULES.enrichCharacter(ch); // spells brought in before 1.14 learn their conditions and darts
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     return s;
   }
@@ -494,6 +496,113 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     tok.hp = hp; tok.tempHp = th;
     if (hp === 0 && amount < 0 && tok.owner && !(tok.conditions || []).includes('unconscious')) tok.conditions = [...(tok.conditions || []), 'unconscious'];
     tokenChanged(sc, tok, before);
+    if (amount < 0) { onHurt(sc, tok); concCheck(sc, tok, -amount); }
+  }
+
+  // ---------- 1.14: concentration ----------
+  // who holds the concentration: a player's character ('p:name') or a monster's token ('t:id')
+  const concKey = (t) => (t.owner && t.ddb ? 'p:' + t.owner.toLowerCase() : 't:' + t.id);
+  const condName = (id) => ((TOKENS_JSON.conditions || []).find((c) => c.id === id) || { name: id }).name.toLowerCase();
+  function post(entry) { state.log.push(entry); state.log = state.log.slice(-200); clients().forEach((c) => canSee(c.user, entry) && send(c, { type: entry.kind === 'chat' ? 'chat' : 'roll', entry })); }
+  // concentration ends: the ring goes, and so do the conditions that spell put on anyone
+  function endConc(key, why) {
+    let spell = '';
+    const ch = key.startsWith('p:') ? charOf(key.slice(2)) : null;
+    if (ch) { spell = ch.concOn || ''; delete ch.concOn; }
+    const freed = [];
+    for (const scn of Object.values(state.scenes)) for (const t of Object.values(scn.tokens)) {
+      const before = { ...t }; let changed = false;
+      if (concKey(t) === key && (t.conditions || []).includes('concentrating')) { if (!ch) { spell = spell || t.concOn || ''; } delete t.concOn; t.conditions = t.conditions.filter((c) => c !== 'concentrating'); changed = true; }
+      if (liftMarks(t, (m) => m.by === key && m.conc !== false)) { changed = true; freed.push(t.label || '?'); }
+      if (changed) tokenChanged(scn, t, before);
+    }
+    return { spell, freed };
+  }
+  // take a spell's marks off a token, and the conditions only they were holding there (prone stays: standing up is the creature's own doing)
+  function liftMarks(t, pick) {
+    if (!(t.marks || []).some(pick)) return false;
+    const gone = t.marks.filter(pick).map((m) => m.c); t.marks = t.marks.filter((m) => !pick(m));
+    const still = new Set(t.marks.map((m) => m.c));
+    t.conditions = (t.conditions || []).filter((c) => c === 'prone' || !gone.includes(c) || still.has(c)); if (!t.marks.length) delete t.marks;
+    return true;
+  }
+
+  // ---------- 1.15: spells end on their targets the 2024 way ----------
+  // the spells on a token, one entry per caster and spell
+  const spellsOn = (t) => { const seen = new Map(); for (const m of t.marks || []) { const k = m.by + '|' + m.spell; if (!seen.has(k)) seen.set(k, m); } return [...seen.values()]; };
+  const sameSpell = (a) => (m) => m.by === a.by && m.spell === a.spell;
+  // a line for the table: a player's own token is everyone's business; a hidden monster's only the DM's
+  function tellAbout(sc, t, text, roll) {
+    const mine = t.owner && t.owner !== '*', vis = t.hidden ? { to: ['DM'] } : {};
+    if (roll) post({ who: mine ? t.owner : 'Monsters', ...roll, private: false, ...(mine ? {} : { to: ['DM'] }), time: Date.now(), skin: mine ? skinOf(t.owner) : null });
+    post({ kind: 'chat', who: mine ? t.owner : 'Monsters', ...vis, text, time: Date.now(), cast: true });
+  }
+  const athletics = (t) => {
+    const ch = charForToken(t); if (ch) { const sk = (ch.skills || []).find((x) => x.name === 'Athletics'); return sk ? sk.bonus : Math.floor((((ch.abilities || [])[0] || {}).score - 10) / 2) || 0; }
+    const m = srdOf(t); if (!m) return 0; const h = /Athletics ([+-]\d+)/.exec(m.skills || ''); return h ? +h[1] : Math.floor(((m.abl || [])[0] - 10) / 2) || 0;
+  };
+  // the target tries again: a save (or for Web and Entangle, a Strength (Athletics) check); success ends the spell on it
+  function retry(sc, t, mk, how) {
+    const escape = mk.ends === 'escape', bonus = escape ? athletics(t) : saveBonus(t, mk.save || 'WIS');
+    const r = rollDice('1d20' + sgnS(bonus) + (how === 'adv' ? 'adv' : ''));
+    const ok = escape ? r.total >= mk.dc : r.crit !== 'nat1' && (r.crit === 'nat20' || r.total >= mk.dc);
+    const before = { ...t }, who = t.label || '?', what = escape ? `Strength (Athletics) DC ${mk.dc}` : `${mk.save} save DC ${mk.dc}${how === 'adv' ? ', with Advantage' : ''}`;
+    const roll = { label: `${mk.spell}: ${escape ? 'escape' : mk.save + ' save'}`, expr: '1d20' + sgnS(bonus) + (how === 'adv' ? 'adv' : ''), ...r };
+    if (ok) { liftMarks(t, sameSpell(mk)); tokenChanged(sc, t, before); tellAbout(sc, t, `${escape ? '🪢' : '💪'} ${who} ${escape ? 'breaks free of' : 'shakes off'} ${mk.spell} (${what})`, roll); return true; }
+    if (mk.ends === 'sleep' && mk.stage === 1) { // the second failed save: asleep for real
+      t.marks = t.marks.map((m) => (sameSpell(mk)(m) ? { ...m, c: 'unconscious', stage: 2 } : m));
+      t.conditions = [...new Set([...(t.conditions || []).filter((c) => c !== 'incapacitated' || t.marks.some((m) => m.c === 'incapacitated')), 'unconscious'])];
+      tokenChanged(sc, t, before); tellAbout(sc, t, `😴 ${who} falls asleep (${mk.spell}): unconscious until it takes damage or someone shakes it awake`, roll); return false;
+    }
+    tellAbout(sc, t, `🔗 ${who} is still held by ${mk.spell} (${what})`, roll); return false;
+  }
+  // the end of a creature's turn: Hold Person, Slow, Blindness/Deafness and friends get their save; Sleep its second one
+  function endOfTurn(sc, t) {
+    if (!t) return;
+    for (const mk of spellsOn(t)) {
+      if (mk.ends === 'end' || mk.ends === 'end+hurtAdv' || (mk.ends === 'sleep' && mk.stage === 1)) retry(sc, t, mk);
+      else if (mk.ends === 'fear') post({ kind: 'chat', who: 'Monsters', to: ['DM'], text: `😨 ${t.label || '?'} (${mk.spell}): if it ended its turn out of sight of the caster, select it and roll its save`, time: Date.now(), cast: true });
+    }
+  }
+  // the start of a creature's turn: a reminder that Web or Entangle can be fought with its action
+  function startOfTurn(sc, t) {
+    if (!t) return;
+    for (const mk of spellsOn(t)) if (mk.ends === 'escape') {
+      const to = t.owner && t.owner !== '*' ? [t.owner] : ['DM'];
+      post({ kind: 'chat', who: 'Monsters', to, text: `🕸 ${t.label || '?'} is restrained by ${mk.spell}: it can use its action to try to break free (Strength (Athletics) DC ${mk.dc}). Select the token and click Try to break free.`, time: Date.now(), cast: true });
+    }
+  }
+  // taking damage: Charm Person, Hypnotic Pattern and Sleep end; Dominate gets a save, Hideous Laughter one with Advantage
+  function onHurt(sc, t) {
+    for (const mk of spellsOn(t)) {
+      if (mk.ends === 'damage' || mk.ends === 'sleep') { const before = { ...t }; liftMarks(t, sameSpell(mk)); tokenChanged(sc, t, before); setImmediate(() => tellAbout(sc, t, `💢 The hurt breaks ${mk.spell} on ${t.label || '?'}`)); }
+      else if (mk.ends === 'hurt' || mk.ends === 'end+hurtAdv') setImmediate(() => { if ((t.marks || []).some(sameSpell(mk))) retry(sc, t, mk, mk.ends === 'end+hurtAdv' ? 'adv' : ''); save(); });
+    }
+  }
+  // damage while concentrating: a Constitution save, DC half the damage (at least 10); at 0 hit points it just ends
+  function concCheck(sc, tok, dmg) {
+    if (!(dmg > 0) || !(tok.conditions || []).includes('concentrating')) return;
+    const key = concKey(tok), player = key.startsWith('p:'), who = tok.label || '?', dc = Math.min(30, Math.max(10, Math.floor(dmg / 2)));
+    const vis = player ? {} : { to: ['DM'] }; // a monster's check stays with the DM
+    let lost = tok.hp === 0, r = null;
+    if (!lost) {
+      r = rollDice('1d20' + sgnS(saveBonus(tok, 'CON'))); lost = r.crit === 'nat1' || (r.crit !== 'nat20' && r.total < dc);
+      if (player) post({ who: tok.owner, label: `Concentration (DC ${dc})`, expr: '1d20' + sgnS(saveBonus(tok, 'CON')), ...r, private: false, time: Date.now(), skin: skinOf(tok.owner) });
+    }
+    setImmediate(() => { // after the hit's own line in the log
+      if (!lost) return post({ kind: 'chat', who: player ? tok.owner : 'Monsters', ...vis, text: `🧠 ${who} keeps concentration (${r.total} vs DC ${dc})`, time: Date.now(), cast: true });
+      const { spell, freed } = endConc(key);
+      post({ kind: 'chat', who: player ? tok.owner : 'Monsters', ...vis, text: `💫 ${who} loses concentration${spell ? ' on ' + spell : ''}${r ? ` (${r.total} vs DC ${dc})` : ' (down)'}${freed.length ? ': it ends for ' + freed.join(', ') : ''}`, time: Date.now(), cast: true });
+      save();
+    });
+  }
+  // a player starts concentrating on a spell: any earlier one ends first
+  function startConc(sc, u, ch, sp) {
+    const key = 'p:' + u.name.toLowerCase(), notes = [];
+    if (ch.concOn) { const { spell, freed } = endConc(key); notes.push(`(${spell || 'the last spell'} ends${freed.length ? ' for ' + freed.join(', ') : ''})`); }
+    ch.concOn = sp.name;
+    for (const t of Object.values(sc.tokens)) if (t.owner === u.name && t.ddb === ch.link && !(t.conditions || []).includes('concentrating')) { const before = { ...t }; t.conditions = [...(t.conditions || []), 'concentrating']; tokenChanged(sc, t, before); }
+    return notes;
   }
   const diceAt = (base, per, extra) => {
     if (!base) return ''; if (!per || extra <= 0) return base;
@@ -824,6 +933,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision', 'ddb'].filter((k) => k in msg).map((k) => [k, msg[k]]));
         Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
         tokenChanged(sc, tok, before);
+        // concentration taken off by hand: the spell's conditions go too
+        if ((before.conditions || []).includes('concentrating') && !(tok.conditions || []).includes('concentrating')) { const { spell, freed } = endConc(concKey(tok)); if (freed.length) post({ kind: 'chat', who: u.name, ...(tok.owner ? {} : { to: ['DM'] }), text: `💫 ${tok.label || '?'} stops concentrating${spell ? ' on ' + spell : ''}: it ends for ${freed.join(', ')}`, time: Date.now(), cast: true }); }
+        // a condition taken off by hand isn't put back when concentration ends
+        if (tok.marks) { tok.marks = tok.marks.filter((mk) => (tok.conditions || []).includes(mk.c)); if (!tok.marks.length) delete tok.marks; }
         if (visionOn(sc)) scheduleVision(sc);
         if (sc.group && (before.owner !== tok.owner || before.hidden !== tok.hidden)) refreshViews();
         if (sc.combat && sc.combat.active && 'initBonus' in m) { sortCombat(sc); sendCombat(sc); }
@@ -834,12 +947,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (!tok || (!u.isDM && !(tok.owner && tok.owner === u.name))) return;
         const amt = clamp(int(msg.amount, 0), -99999, 99999);
         if (!amt || (tok.hp == null && tok.maxHp == null)) return;
-        const before = { ...tok };
-        let hp = tok.hp ?? tok.maxHp ?? 0, temp = tok.tempHp || 0;
-        if (amt < 0) { const soak = Math.min(temp, -amt); temp -= soak; hp = Math.max(0, hp - (-amt - soak)); }
-        else hp = tok.maxHp ? Math.min(tok.maxHp, hp + amt) : hp + amt;
-        tok.hp = hp; tok.tempHp = temp;
-        tokenChanged(sc, tok, before); save();
+        hpTo(sc, tok, amt); save(); // a hit on someone concentrating makes them check it
         break;
       }
       case 'removeToken':
@@ -901,11 +1009,14 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       case 'combatNext': case 'combatPrev': {
         const c = sc && sc.combat;
         if (!u.isDM || !c || !c.active || !c.entries.length) return;
-        sortCombat(sc); c.started = true;
-        const i = Math.max(0, c.entries.findIndex((e) => e.id === c.turnId));
+        const started0 = !!c.started; sortCombat(sc); c.started = true;
+        const i = Math.max(0, c.entries.findIndex((e) => e.id === c.turnId)), wasStarted = started0, ending = c.turnId;
+        if (msg.type === 'combatNext' && wasStarted && ending) endOfTurn(sc, sc.tokens[ending]);
         if (msg.type === 'combatNext') { if (i + 1 >= c.entries.length) { c.round++; c.turnId = c.entries[0].id; } else c.turnId = c.entries[i + 1].id; }
         else if (i === 0) { if (c.round > 1) { c.round--; c.turnId = c.entries[c.entries.length - 1].id; } } else c.turnId = c.entries[i - 1].id;
-        sendCombat(sc); save();
+        sendCombat(sc);
+        if (msg.type === 'combatNext' && c.turnId !== ending) startOfTurn(sc, sc.tokens[c.turnId]);
+        save();
         break;
       }
       case 'combatEnd':
@@ -1349,10 +1460,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const at = spent.at;
         const ord = (n) => n + (n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th');
         const entry = { kind: 'chat', who: u.name, text: `✨ ${ch.name.split(' ')[0]} casts ${sp.name}${at > sp.level ? ` at ${ord(at)} level` : ''}${sp.save ? ` (${sp.save})` : ''}${msg.ritual ? ' as a ritual' : ''}`, time: Date.now(), cast: true };
+        // concentration shows on the caster's token (and ends any earlier spell)
+        if (sp.conc && sc) { const notes = startConc(sc, u, ch, sp); if (notes.length) entry.text += ' ' + notes.join(' '); }
         state.log.push(entry); state.log = state.log.slice(-200);
         clients().forEach((c) => send(c, { type: 'chat', entry }));
-        // concentration shows on the caster's token
-        if (sp.conc && sc) for (const t of Object.values(sc.tokens)) if (t.owner === u.name && t.ddb === ch.link && !(t.conditions || []).includes('concentrating')) { const before = { ...t }; t.conditions = [...(t.conditions || []), 'concentrating']; tokenChanged(sc, t, before); }
         send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
         break;
       }
@@ -1361,6 +1472,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const long = msg.kind === 'long';
         for (const sl of ch.pact || []) sl.used = 0;
         for (const r of ch.resources || []) if (long || r.reset === 'short') r.used = 0;
+        if (long && ch.concOn) endConc('p:' + u.name.toLowerCase());
         if (long) { for (const sl of ch.slots || []) sl.used = 0; ch.spellUses = {}; }
         if (long) for (const scn of Object.values(state.scenes)) for (const t of Object.values(scn.tokens)) if (t.owner === u.name && t.ddb === ch.link) {
           const before = { ...t }; if (ch.maxHp) t.maxHp = ch.maxHp; if (t.maxHp) t.hp = t.maxHp; t.tempHp = 0; t.conditions = (t.conditions || []).filter((c) => c !== 'concentrating' && c !== 'unconscious'); tokenChanged(scn, t, before);
@@ -1374,8 +1486,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       case 'spellEffect': {
         if (u.isDM || !sc) return; const ch = charOf(u.name); if (!ch) return;
         const first = ch.name.split(' ')[0];
-        const ids = [...new Set((Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string'))].slice(0, 30);
-        const targets = ids.map((id) => sc.tokens[id]).filter((t) => t && tokVisible(sc, t, u));
+        const raw = (Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string' && sc.tokens[id] && tokVisible(sc, sc.tokens[id], u)).slice(0, 40);
+        const targets = [...new Set(raw)].slice(0, 30).map((id) => sc.tokens[id]);
         const lines = [], rolls = [];
         const rollOut = (expr, label) => { const r = rollDice(expr); const entry = { who: u.name, label: str(label, 30), expr, ...r, private: false, time: Date.now(), skin: skinOf(u.name) }; rolls.push(entry); return r; };
         const nameOf = (t) => t.label || '?';
@@ -1402,6 +1514,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
             const at = spent.at, up = at - sp.level;
             const casting = `${msg.cast ? '✨' : '🎯'} ${first} ${msg.cast ? 'casts' : 'uses'} ${sp.name}${up > 0 ? ` at ${ORD(at)} level` : ''}`;
             lines.push(casting + (targets.length ? ' on ' + targets.map(nameOf).join(', ') : ''));
+            const dc = +((/DC (\d+)/.exec(sp.save || '') || [])[1] || (ch.casting || {}).dc || 10);
+            if (sp.conc && msg.cast) lines.push(...startConc(sc, u, ch, sp));
+            const failed = new Map(); // target id → the ability it failed a save on (the condition uses the same save)
             if (sp.heal && targets.length) {
               const x = rollOut(diceAt(sp.heal, sp.healPer, up) + (sp.healMod ? sgnS(sp.healMod) : ''), sp.name + ' healing');
               for (const t of targets) { hpTo(sc, t, x.total); lines.push(`💚 ${nameOf(t)} regains ${x.total} hit points${hpNote(t)}`); }
@@ -1414,9 +1529,25 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
               const x = rollOut(sp.temp.replace(/\s/g, ''), sp.name + ' temp HP');
               for (const t of targets) { hpTo(sc, t, 0, x.total); lines.push(`🛡 ${nameOf(t)} gains ${x.total} temporary hit points`); }
             }
-            if (sp.dice && targets.length) {
+            const typeNote = (k) => (k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : '');
+            if (sp.multi && targets.length) { // darts, rays or beams: each picks its own target
+              const M = sp.multi, total = M.n + (sp.level > 0 ? M.up * up : 0), per = new Map();
+              for (const id of raw) if ([...per.values()].reduce((a, b) => a + b, 0) < total) per.set(id, (per.get(id) || 0) + 1);
+              const times = (d, k) => d.replace(/(\d*)d(\d+)/g, (_, n, f) => (k * (+n || 1)) + 'd' + f).replace(/\+(\d+)$/, (_, c) => '+' + k * c);
+              for (const [id, k] of per) {
+                const t = sc.tokens[id]; let amount = 0, hits = 0, crits = 0;
+                if (sp.attack) for (let i = 0; i < k; i++) {
+                  const a = rollOut(sp.attack, `${sp.name} ${M.word} → ${nameOf(t)}`), hit = a.crit === 'nat20' || (a.crit !== 'nat1' && a.total >= acOf(t));
+                  if (hit) { hits++; if (a.crit === 'nat20') crits++; amount += rollOut(a.crit === 'nat20' ? doubleDice(M.dice) : M.dice, sp.name + ' damage').total; }
+                } else { hits = k; amount = rollOut(times(M.dice, k), `${sp.name} → ${nameOf(t)}`).total; }
+                if (!hits) { lines.push(`💨 ${nameOf(t)}: ${k > 1 ? `all ${k} ${M.word}s miss` : 'miss'}`); continue; }
+                const kk = takes(t, M.type), dealt = Math.floor(amount * kk);
+                hpTo(sc, t, -dealt);
+                lines.push(`💥 ${nameOf(t)}: ${sp.attack ? `${hits} of ${k} ${M.word}${k > 1 ? 's' : ''} hit${crits ? ' (critical!)' : ''}` : `${k} ${M.word}${k > 1 ? 's' : ''}`}, ${dealt} ${M.type} damage${typeNote(kk)}${hpNote(t)}`);
+              }
+            } else if (sp.dice && targets.length) {
               const expr = diceAt(sp.dice, sp.per, up), type = sp.type || '';
-              const saveAbl = sp.save ? (/\b(STR|DEX|CON|INT|WIS|CHA)\b/i.exec(sp.save) || [])[1] : null, dc = sp.save ? +((/DC (\d+)/.exec(sp.save) || [])[1] || (ch.casting || {}).dc || 10) : 0;
+              const saveAbl = sp.save ? (/\b(STR|DEX|CON|INT|WIS|CHA)\b/i.exec(sp.save) || [])[1] : null;
               let shared = null; // a save spell rolls its damage once for everyone
               for (const t of targets) {
                 let amount = 0, how = '';
@@ -1427,21 +1558,45 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
                 } else if (saveAbl) {
                   shared = shared || rollOut(expr, sp.name + ' damage');
                   const sv = rollDice('1d20' + sgnS(saveBonus(t, saveAbl.toUpperCase()))), ok = sv.total >= dc; // the target's save: only the outcome is shown
+                  if (!ok) failed.set(t.id, saveAbl.toUpperCase()); else failed.set(t.id, 'saved:' + saveAbl.toUpperCase());
                   if (ok && !sp.half) { lines.push(`🛡 ${nameOf(t)} saves: no effect`); continue; }
                   amount = ok ? Math.floor(shared.total / 2) : shared.total; how = ok ? 'saves, half: ' : 'fails the save: ';
                 } else { shared = shared || rollOut(expr, sp.name + ' damage'); amount = shared.total; }
                 const k = takes(t, type), dealt = Math.floor(amount * k);
                 hpTo(sc, t, -dealt);
-                lines.push(`💥 ${nameOf(t)}: ${how}${dealt} ${type} damage${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}${hpNote(t)}`);
+                lines.push(`💥 ${nameOf(t)}: ${how}${dealt} ${type} damage${typeNote(k)}${hpNote(t)}`);
               }
             }
-            if (sp.conc && msg.cast) for (const t of Object.values(sc.tokens)) if (t.owner === u.name && t.ddb === ch.link && !(t.conditions || []).includes('concentrating')) { const before = { ...t }; t.conditions = [...(t.conditions || []), 'concentrating']; tokenChanged(sc, t, before); }
+            if (sp.cond && targets.length) { // conditions: Hold Person, Bless, Bane, Faerie Fire…
+              const C = sp.cond, key = 'p:' + u.name.toLowerCase();
+              for (const t of targets) {
+                if (t.hp === 0 && !t.owner) continue; // already down
+                if (C.save) {
+                  const prev = failed.get(t.id);
+                  let ok;
+                  if (prev === C.save) ok = false; else if (prev === 'saved:' + C.save) ok = true;
+                  else { const sv = rollDice('1d20' + sgnS(saveBonus(t, C.save))); ok = sv.crit !== 'nat1' && sv.total >= dc; }
+                  if (ok) { lines.push(`🛡 ${nameOf(t)} resists ${sp.name} (${C.save} save)`); continue; }
+                }
+                const before = { ...t }, add = C.add.filter((c) => !(t.conditions || []).includes(c));
+                t.conditions = [...(t.conditions || []), ...add];
+                if (sp.conc || C.ends) t.marks = [...(t.marks || []).filter((m) => !(m.by === key && m.spell === sp.name)), ...C.add.map((c) => ({ c, by: key, spell: sp.name, conc: !!sp.conc, ends: C.ends || '', save: C.ends === 'escape' ? 'STR' : C.save, dc, stage: C.ends === 'sleep' ? 1 : 0 }))];
+                tokenChanged(sc, t, before);
+                lines.push(`${C.ally ? '✨' : '🔗'} ${nameOf(t)}${C.save ? ' fails the save' : ''}: ${C.add.map(condName).join(' and ')}`);
+              }
+            }
           }
         } catch (e) { return send(ws, { type: 'error', message: e.message }); }
         for (const entry of rolls) { state.log.push(entry); clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'roll', entry })); }
         const entry = { kind: 'chat', who: u.name, text: lines.join('\n').slice(0, 1500), time: Date.now(), cast: true };
         state.log.push(entry); state.log = state.log.slice(-200); clients().forEach((c) => send(c, { type: 'chat', entry }));
         send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      case 'spellRetry': { // roll a held creature's save now (out of combat, or Fear), or its try to break free of Web or Entangle
+        if (!tok || !(u.isDM || (tok.owner && tok.owner === u.name))) return;
+        const mk = spellsOn(tok).find((m) => m.by === msg.by && m.spell === msg.spell); if (!mk) return;
+        retry(sc, tok, mk); save();
         break;
       }
       case 'charRes': { // tick a class feature used or back

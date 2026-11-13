@@ -129,7 +129,9 @@ const CONDITIONS = [
   ['stunned', 'Stunned', 'star-swirl', '#ca8a04'], ['unconscious', 'Unconscious', 'sleepy', '#334155'], ['exhaustion', 'Exhaustion', 'tired-eye', '#92400e'],
   ['concentrating', 'Concentrating', 'concentration-orb', '#6366f1'], ['bleeding', 'Bleeding', 'bleeding-wound', '#b91c1c'], ['blessed', 'Blessed', 'angel-wings', '#d97706'],
   ['hasted', 'Hasted', 'sprint', '#059669'], ['raging', 'Raging', 'enrage', '#dc2626'], ['burning', 'Burning', 'flame', '#ea580c'],
-  ['marked', 'Marked', 'targeted', '#e11d48'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
+  ['marked', 'Marked', 'targeted', '#e11d48'],
+  ['baned', 'Baned', 'cursed-star', '#9a3412'], ['slowed', 'Slowed', 'snail', '#0891b2'], ['outlined', 'Faerie fire', 'sparkles', '#a855f7'],
+  ['hexed', 'Hexed', 'pentacle', '#6d28d9'], ['shielded', 'Shield of Faith', 'magic-shield', '#2563eb'], ['banished', 'Banished', 'vortex', '#4c1d95'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
 ];
 
 const icons = {}, library = [], missing = [];

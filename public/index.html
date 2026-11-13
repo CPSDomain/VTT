@@ -427,7 +427,10 @@
   #charBody .spbtns { display:flex; flex-wrap:wrap; gap:4px; margin:6px 0 2px; }
   #charBody .spbtns button, #charBody .spbtns select { padding:3px 8px; font-size:12px; }
   #charBody .spdesc summary { text-transform:none; letter-spacing:0; }
-  #aimBar { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
+  #eMarks { display:flex; flex-direction:column; gap:4px; margin:6px 0; font-size:12px; }
+  #eMarks .mk { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:4px 6px; border-radius:6px; background:rgba(120,90,200,.12); }
+  #eMarks .mk span { flex:1 1 140px; min-width:0; } #eMarks .mk button { padding:2px 8px; font-size:12px; }
+  #aimBar { position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
   #aimBar #aimTitle { font-weight:600; } #aimBar #aimCount { color:#bfb39a; font-size:12px; } #aimBar #aimAmt { width:70px; }
   #charBody .res .rn { min-width:110px; } #charBody .res button:not(.pip) { margin-left:auto; padding:2px 8px; font-size:12px; }
   #charBody .sptext { font-size:12px; line-height:1.45; white-space:pre-wrap; color:#cfc6b8; max-height:220px; overflow:auto; }
@@ -727,6 +730,7 @@
         <div id="eSheet" class="hint" hidden></div>
         <div class="row dm-only" id="eCharRow" hidden><button id="eChar">🎒 Inventory and spells…</button></div>
         <div id="eConds" class="conds"></div>
+        <div id="eMarks" hidden></div>
         <div class="row dm-only"><button id="eToInit">⚔ Add to initiative</button><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
       </section>
 
