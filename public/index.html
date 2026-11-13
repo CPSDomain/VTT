@@ -436,6 +436,8 @@
   #eFx .fxgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; } #eFx .fxgrid > :first-child { grid-column:1 / -1; }
   #aimOpt { max-width:180px; }
   .sbuse { margin-left:6px; padding:1px 8px; font-size:12px; }
+  .sbspells { display:flex; flex-direction:column; gap:4px; margin:-4px 0 10px 12px; font-size:12px; } .sbspells > div { display:flex; flex-wrap:wrap; gap:4px; align-items:center; } .sbspells .sbuse { margin-left:0; }
+  #aimBar[hidden], #aimBar [hidden] { display:none !important; }
   #aimBar { position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
   #aimBar #aimTitle { font-weight:600; } #aimBar #aimCount { color:#bfb39a; font-size:12px; } #aimBar #aimAmt { width:70px; }
   #charBody .res .rn { min-width:110px; } #charBody .res button:not(.pip) { margin-left:auto; padding:2px 8px; font-size:12px; }
@@ -755,7 +757,16 @@
               <select id="fxType"><option value="">damage type</option><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select>
               <input id="fxRounds" type="number" min="0" max="600" placeholder="Rounds (10 = 1 minute)" title="How long it lasts in rounds (empty: until it ends another way)">
             </div>
-            <div class="row"><label>DC <input id="fxDc" type="number" min="1" max="40" value="13" style="width:56px"></label><label class="check"><input type="checkbox" id="fxRoll" checked> Roll its save now</label><button id="fxAdd" class="primary">Put it on</button></div>
+            <div id="fxCast" class="fxgrid" hidden>
+              <input id="fxSpell" list="spellNames" placeholder="Spell (Fireball, Hold Person…)">
+              <label>Slot level <input id="fxLevel" type="number" min="0" max="9" placeholder="its own" style="width:60px"></label>
+              <label>Save DC <input id="fxCastDc" type="number" min="1" max="40" value="15" style="width:56px"></label>
+              <label>Spell attack + <input id="fxCastAtk" type="number" min="-5" max="30" value="7" style="width:56px"></label>
+              <button id="fxCastGo" class="primary">✨ Cast on…</button>
+              <div class="hint" style="grid-column:1 / -1">For a wand, scroll or trap: it has no caster. Monsters cast their own spells from their stat block. Its rolls stay with you.</div>
+            </div>
+            <div class="row" id="fxRollRow"><label>DC <input id="fxDc" type="number" min="1" max="40" value="13" style="width:56px"></label><label class="check"><input type="checkbox" id="fxRoll" checked> Roll its save now</label><button id="fxAdd" class="primary">Put it on</button></div>
+            <datalist id="spellNames"></datalist>
             <div class="hint">With "Roll its save now" the effect lands only if the save fails. Without it, it's put straight on.</div>
           </div>
         </details>

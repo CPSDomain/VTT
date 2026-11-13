@@ -1214,6 +1214,14 @@ function showStatBlock(m, src = null) {
   el('hr');
   const section = (title, items, kind) => { if (!items || !items.length) return; if (title) el('h3', null, title); for (const [idx, it] of items.entries()) { const p = el('p'); const s = document.createElement('b'); s.textContent = it.n + '. '; s.style.fontStyle = 'italic'; p.appendChild(s); richText(p, it.d, (expr, what) => roll(expr, `${it.n}${what ? ' ' + what : ''}`));
     // use it on tokens: the attack (secret), the targets' saves, damage and conditions, and how they end
+    if (me.isDM && src && /Spellcasting/i.test(it.n) && globalThis.monsterFx) { // its spells, ready to cast at its DC and attack bonus
+      const sc0 = globalThis.monsterFx.spellcasting({ traits: [it] })[0];
+      if (sc0) { const box = document.createElement('div'); box.className = 'sbspells';
+        for (const l of sc0.lists) { const row = document.createElement('div'); row.append(Object.assign(document.createElement('span'), { textContent: l.label + ': ' }));
+          for (const n of l.spells) { const b = document.createElement('button'); b.className = 'sbuse'; b.textContent = '✨ ' + n; b.title = `Cast ${n} (DC ${sc0.dc}, ${sgn(sc0.attack || 0)} to hit)`;
+            b.onclick = () => { $('statModal').hidden = true; dmCast(n, { src, who: (sc().tokens[src] || {}).label || m.name, level: l.level || 0, dc: sc0.dc, attack: sc0.attack }); }; row.append(b); }
+          box.append(row); }
+        p.after(box); } }
     const P = globalThis.monsterFx && globalThis.monsterFx.parse(it.d, m.name, kind);
     if (me.isDM && src && P && (P.attack != null ? P.hit.length || P.variants.length : P.variants.length) && kind !== 'traits') {
       const b = document.createElement('button'); b.className = 'sbuse'; b.textContent = '🎯 Use on…'; b.title = P.variants.map((v) => `${v.name}${v.save ? ` (${v.save.abl} DC ${v.save.dc})` : ''}`).join(' · ') || 'Attack';
@@ -1949,27 +1957,47 @@ function renderMarks(t) {
   box.hidden = !box.children.length;
   $('eFx').hidden = !me.isDM;
 }
+// the 2024 spell table, for the DM's casting (names, levels, descriptions)
+let spellDb = null;
+async function loadSpells() { if (!spellDb) { const j = await (await fetch('spells.json')).json(); spellDb = { list: j.spells, by: new Map(j.spells.map((x) => [x.name.toLowerCase(), x])), alias: j.alias || {} }; const dl = $('spellNames'); if (dl) dl.innerHTML = j.spells.map((x) => `<option value="${x.name.replace(/"/g, '&quot;')}">`).join(''); } return spellDb; }
+const findSpell = (n) => { if (!spellDb) return null; const k = String(n || '').toLowerCase().trim(); return spellDb.by.get(k) || spellDb.by.get((spellDb.alias[k] || '').toLowerCase()) || null; };
+// the DM casts a spell on tokens: a monster from its stat block, or a wand, scroll or trap from the token panel
+async function dmCast(name, o = {}) {
+  await loadSpells(); const e = findSpell(name); if (!e) return toast(`No spell called ${name}`);
+  const info = (effectLists && effectLists.info && effectLists.info[e.name.toLowerCase()]) || {}, lv = Math.max(e.level, o.level || e.level);
+  const pieces = info.multi ? info.multi.n + (e.level > 0 ? info.multi.up * (lv - e.level) : 0) : 0;
+  const opts = info.options || (info.types ? info.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null);
+  startAim({ title: `${o.who ? o.who + ': ' : ''}${e.name}${lv > e.level ? ` at ${ORD(lv)} level` : ''}${o.dc ? ` (DC ${o.dc})` : ''}`, harm: !info.ally, color: info.ally ? '#22c55e' : '#a855f7', pieces, word: info.multi && info.multi.word, options: opts, allowNone: !info.lands,
+    send: (ids, amt, option) => sendMsg({ type: 'dmSpell', sceneId: editing, spell: e.name, src: o.src || null, level: lv, dc: o.dc, attack: o.attack, targets: ids, option, dmgType: option, again: !!o.again }) });
+  if (info.self && o.src) { aim.ids.add(o.src); aimBar(); draw(); }
+}
 // the DM's form: a Dungeon Master's Guide item, poison or hazard, a spell a monster casts, or an effect of your own
 let effectLists = null;
 function buildFxForm() {
   const sel = $('fxKind'); if (!sel || !effectLists) return;
   sel.innerHTML = '';
   const group = (label, items) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; g.append(o); } sel.append(g); };
-  group('Your own', [['custom:', 'A condition, with a save to end it…']]);
+  group('Your own', [['custom:', 'A condition, with a save to end it…'], ['cast:', 'Cast any spell (a wand, scroll or trap)…']]);
   group("Dungeon Master's Guide", effectLists.presets.map((p) => ['preset:' + p.name, `${p.name}${p.save ? ` (${p.save} ${p.dc})` : ''}`]));
   group('A spell a monster casts', effectLists.spells.flatMap((x) => (x.options.length ? x.options.map((o, i) => [`spell:${x.name}:${i}`, `${x.name.replace(/\b\w/g, (c) => c.toUpperCase())}: ${o}`]) : [[`spell:${x.name}:0`, x.name.replace(/\b\w/g, (c) => c.toUpperCase())]])));
   const cs = $('fxCond'); cs.innerHTML = conditions().map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
   fxKindChanged();
 }
 function fxKindChanged() {
-  const v = $('fxKind').value, custom = v.startsWith('custom:');
-  $('fxCustom').hidden = !custom;
+  const v = $('fxKind').value, custom = v.startsWith('custom:'), cast = v.startsWith('cast:');
+  $('fxCustom').hidden = !custom; $('fxCast').hidden = !cast; $('fxRollRow').hidden = cast; if (cast) loadSpells();
   if (v.startsWith('preset:')) { const p = effectLists.presets.find((x) => 'preset:' + x.name === v); if (p) $('fxDc').value = p.dc; }
 }
 $('fxKind') && ($('fxKind').onchange = fxKindChanged);
+$('fxCastGo') && ($('fxCastGo').onclick = () => {
+  // nobody casts it (a wand, scroll or trap): monsters cast their own spells from their stat block
+  dmCast($('fxSpell').value, { src: null, who: '', level: +$('fxLevel').value || 0, dc: +$('fxCastDc').value || 13, attack: +$('fxCastAtk').value || 0 });
+});
 $('fxAdd') && ($('fxAdd').onclick = () => {
   const t = sc() && sc().tokens[selected]; if (!t) return;
-  const v = $('fxKind').value, msg = { type: 'markAdd', sceneId: editing, id: t.id, dc: +$('fxDc').value || 10, roll: $('fxRoll').checked };
+  const v = $('fxKind').value;
+  if (v.startsWith('cast:')) return;
+  const msg = { type: 'markAdd', sceneId: editing, id: t.id, dc: +$('fxDc').value || 10, roll: $('fxRoll').checked };
   if (v.startsWith('preset:')) msg.preset = v.slice(7);
   else if (v.startsWith('spell:')) { const [, name, opt] = v.split(':'); msg.spell = name; msg.option = +opt; }
   else msg.custom = { cond: $('fxCond').value, save: $('fxSave').value, how: $('fxHow').value, dice: $('fxDice').value.trim().replace(/\s/g, ''), type: $('fxType').value, rounds: +$('fxRounds').value || 0, name: $('fxName').value };
@@ -3194,18 +3222,18 @@ function renderSpells(d, c, el) {
       cast.disabled = sp.level > 0 && sp.usesSlot && !options.length;
       const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi);
       const slotMsg = () => { const o = sel ? sel.value : options[0] && options[0].v; return { name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }; };
-      const harm = (sp.dice && !sp.heal && !sp.temp) || !!sp.multi || !!(sp.cond && !sp.cond.ally);
+      const harm = ((sp.dice && !sp.heal && !sp.temp) || !!sp.multi || !!(sp.cond && !sp.cond.ally)) && !(sp.cond && sp.cond.ally);
       cast.onclick = () => {
         if (!lands) return sendMsg({ type: 'charCast', ...slotMsg() });
         const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0;
-        startAim({ title: `Cast ${sp.name}`, harm, pieces, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly, allowNone: true,
-          options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : null,
-          send: (ids, amt, option) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
+        startAim({ title: `Cast ${sp.name}`, harm, pieces, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly || (sp.cond && sp.cond.self), allowNone: true,
+          options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : sp.types ? sp.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null,
+          send: (ids, amt, option) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, option, dmgType: option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
       };
       // while it lasts, some spells do it again without a new slot: Sunbeam's new line, Bigby's Hand, a creature walking into the web
-      if (sp.cond && sp.cond.again && (!sp.conc || c.concOn === sp.name)) {
+      if ((sp.cond && sp.cond.again && !sp.conc) || (sp.conc && c.concOn === sp.name && lands)) {
         const again = el('button', '', '↻ Use again'); again.title = 'No new slot: the spell is still going';
-        again.onclick = () => startAim({ title: `${sp.name}, again`, harm, color: harm ? '#ef4444' : '#22c55e', options: sp.cond.options ? sp.cond.options.map((o) => o.name) : null, send: (ids, amt, option) => sendMsg({ type: 'spellEffect', cast: false, targets: ids, option, ...slotMsg() }) });
+        again.onclick = () => startAim({ title: `${sp.name}, again`, harm, color: harm ? '#ef4444' : '#22c55e', options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : sp.types ? sp.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null, send: (ids, amt, option) => sendMsg({ type: 'spellEffect', cast: false, targets: ids, option, dmgType: option, ...slotMsg() }) });
         btns.append(again);
       }
       if (lands) cast.title = 'Spends the slot, then you pick the targets: rolls and hit points are done for you';
@@ -3255,7 +3283,8 @@ function renderChar() {
   actions.append(place, init); box.append(actions);
   const section = (title, open, fill) => { const d = el('details'); d.open = title in charOpen ? charOpen[title] : open; d.ontoggle = () => { charOpen[title] = d.open; }; d.append(el('summary', '', title)); fill(d); box.append(d); };
   const rollBtn2 = (label, bonus, what, pro) => { const b = el('button', pro ? 'pro' : ''); b.append(el('span', '', label), el('b', '', sgn(bonus))); b.title = `${what}: 1d20${sgn(bonus)} (Shift: advantage, Alt: disadvantage)`; b.onclick = (ev) => rollWith('1d20' + sgn(bonus), what, ev); return b; };
-  if (c.attacks.length) section('Attacks', true, (d) => { for (const a of c.attacks) { const row = el('div', 'atk'); row.append(el('span', '', a.name + (a.dc ? ` (save DC ${a.dc})` : ''))); const h = el('button', '', 'Hit ' + a.hit.replace('1d20', '')); h.onclick = (ev) => rollWith(a.hit, a.name.slice(0, 22) + ' hit', ev); row.append(h); if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
+  if (c.attacks.length) section('Attacks', true, (d) => { for (const a of c.attacks) { const row = el('div', 'atk'); row.append(el('span', '', a.name + (a.dc ? ` (save DC ${a.dc})` : ''))); const h = el('button', '', 'Hit ' + a.hit.replace('1d20', '')); h.onclick = (ev) => rollWith(a.hit, a.name.slice(0, 22) + ' hit', ev); row.append(h);
+      if (a.damage) { const tg = el('button', '', '🎯'); tg.title = 'Attack a token: Advantage, AC, damage and Hex or Hunter\'s Mark done for you'; tg.onclick = () => startAim({ title: `${a.name}: click the target`, harm: true, one: true, color: '#ef4444', send: (ids) => ids[0] && sendMsg({ type: 'attackEffect', name: a.name, target: ids[0] }) }); row.append(tg); } if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
   section('Ability checks', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.abilities) g.append(rollBtn2(a.name, a.mod, a.name + ' check')); d.append(g); });
   section('Saving throws', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.saves) g.append(rollBtn2(a.name, a.bonus, a.name + ' save', a.bonus !== (c.abilities.find((x) => x.name === a.name) || {}).mod)); d.append(g); });
   section('Skills', false, (d) => { const g = el('div', 'rolls'); for (const k of c.skills) g.append(rollBtn2(k.name, k.bonus, k.name, k.prof > 0)); d.append(g); });

@@ -200,6 +200,8 @@ Players can bring in their own characters: under **My character** in Tabletop Pl
 
 **Effects with a saving throw:** under a token's conditions, **＋ Effect with a saving throw…** puts on a Dungeon Master's Guide item, poison or hazard, a spell a monster casts, or your own condition with its save and how it ends. With **Roll its save now** the effect lands only if the save fails.
 
+**Monsters casting spells (1.17):** a stat block's Spellcasting lists every spell as a button. Click one and click the targets. The monster's DC and attack bonus come from its stat block, and it concentrates like a player does. For a wand, scroll or trap, use **＋ Effect with a saving throw… → Cast any spell** in a token's panel and set the DC and attack bonus yourself.
+
 **Legendary Resistance:** when a monster that has it fails a save, its token shows **Use Legendary Resistance**. Click it to make it succeed instead.
 
 **Death saves:** a character at 0 hit points rolls a death save at the start of their turn. The token shows the successes and failures, and **🎲 Death save** rolls one outside combat. You can still move, edit or delete their tokens as usual.

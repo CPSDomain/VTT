@@ -112,6 +112,24 @@
     return { magicResistance: /Magic Resistance/i.test(names), legendary: lr ? +lr[1] : /Legendary Resistance/i.test(names) ? 3 : 0 };
   };
 
-  const api = { parse, traits, condsIn };
+  // a monster's Spellcasting (or Innate Spellcasting) trait: its spell save DC, attack bonus, caster level and spell lists
+  function spellcasting(m) {
+    const out = [];
+    for (const t of [...(m.traits || []), ...(m.actions || [])]) {
+      if (!/Spellcasting/i.test(t.n)) continue;
+      const d = String(t.d || ''), dc = /spell save DC (\d+)/i.exec(d), atk = /([+-]\d+) to hit with spell attacks/i.exec(d), lv = /(\d+)(?:st|nd|rd|th)-level spellcaster/i.exec(d);
+      const abil = /(?:spellcasting ability is|ability is) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)/i.exec(d);
+      const lists = [];
+      for (const line of d.split(/\n+/)) {
+        const m2 = /^\s*[-•]?\s*([^:]{2,40}):\s*(.+)$/.exec(line); if (!m2) continue;
+        const label = m2[1].trim(), slot = /^(\d+)(?:st|nd|rd|th) level/i.exec(label), names = m2[2].split(/,\s*/).map((x) => x.replace(/\(.*?\)|\*/g, '').trim()).filter(Boolean);
+        if (!/cantrip|level|will|day|each/i.test(label)) continue;
+        lists.push({ label, level: slot ? +slot[1] : /cantrip|will/i.test(label) ? 0 : null, spells: names });
+      }
+      out.push({ name: t.n, dc: dc ? +dc[1] : null, attack: atk ? +atk[1] : null, level: lv ? +lv[1] : null, ability: abil ? ABL[abil[1].toLowerCase()] : null, lists });
+    }
+    return out;
+  }
+  const api = { parse, traits, condsIn, spellcasting };
   if (typeof module === 'object' && module.exports) module.exports = api; else globalThis.monsterFx = api;
 })();

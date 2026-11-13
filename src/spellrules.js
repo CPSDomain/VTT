@@ -92,7 +92,7 @@ const RULES = {
   'bless': R(['blessed'], null, { ally: true }),
   'bane': R(['baned'], 'CHA'),
   'faerie fire': R(['outlined'], 'DEX'),
-  'shield of faith': R(['shielded'], null, { ally: true }),
+  'shield of faith': R(['shielded'], null, { ally: true }), // +2 AC (worked out from the condition)
   'haste': R(['hasted'], null, { ally: true, afterEnd: { add: ['incapacitated'], expire: 'tgtEnd' } }),
   'heroism': R(['heroism'], null, { ally: true, removes: ['frightened'], tempTick: true }),
   'invisibility': R(['invisible'], null, { ally: true }),
@@ -129,9 +129,75 @@ const RULES = {
   "yolande's regal presence": R(['prone'], 'WIS', { again: true }),
   'earth tremor': R(['prone'], 'DEX'),
   'sleet storm': R(['prone'], 'DEX', { again: true, breakConc: true }),
-  'earthquake': R(['prone'], 'DEX', { again: true, breakConc: true })
+  'earthquake': R(['prone'], 'DEX', { again: true, breakConc: true }),
+  // ---- protections and boosts (1.17): what they change in combat is worked out from the marks on the token
+  //   ac +N · acBase 13 (+ Dex) · acMin 17 · saves +N · resist [types] or 'all' · disAgainst (attacks against it have
+  //   Disadvantage) · atkAgainst '-1d4' · disFrom [creature types] · sanctuary (attackers save first) · deathWard ·
+  //   advSaves [abilities, 'death'] · maxHeal (healing is maximised) · agathys (cold damage back when hit) · weaponDmg
+  'shield': R(['warded'], null, { ally: true, self: true, ac: 5, expire: 'srcStart' }),
+  'mage armor': R(['warded'], null, { ally: true, acBase: 13 }),
+  'barkskin': R(['warded'], null, { ally: true, acMin: 17 }),
+  'warding bond': R(['warded'], null, { ally: true, ac: 1, saves: 1, resist: 'all' }),
+  'stoneskin': R(['warded'], null, { ally: true, resist: ['bludgeoning', 'piercing', 'slashing'] }),
+  'protection from energy': R(['warded'], null, { ally: true, options: ['acid', 'cold', 'fire', 'lightning', 'thunder'].map((t) => ({ name: t[0].toUpperCase() + t.slice(1), resist: [t] })) }),
+  'fire shield': R(['warded'], null, { ally: true, self: true, options: [{ name: 'Warm shield (resist cold)', resist: ['cold'] }, { name: 'Chill shield (resist fire)', resist: ['fire'] }] }),
+  'aura of life': R(['warded'], null, { ally: true, resist: ['necrotic'] }),
+  'aura of purity': R(['warded'], null, { ally: true, resist: ['poison'] }),
+  'blur': R(['warded'], null, { ally: true, self: true, disAgainst: true }),
+  'blade ward': R(['warded'], null, { ally: true, self: true, atkAgainst: '-1d4' }),
+  'death ward': R(['warded'], null, { ally: true, deathWard: true }),
+  'protection from evil and good': R(['warded'], null, { ally: true, disFrom: ['aberration', 'celestial', 'elemental', 'fey', 'fiend', 'undead'] }),
+  'sanctuary': R(['warded'], null, { ally: true, sanctuary: true }),
+  'beacon of hope': R(['warded'], null, { ally: true, advSaves: ['WIS', 'death'], maxHeal: true }),
+  "heroes' feast": R(['warded'], null, { ally: true, resist: ['poison'], immune: ['frightened', 'poisoned'], maxUpDice: '2d10' }),
+  'armor of agathys': R(['warded'], null, { ally: true, self: true, agathys: 5 }),
+  'divine favor': R(['warded'], null, { ally: true, self: true, weaponDmg: { dice: '1d4', type: 'radiant' } }),
+  'elemental weapon': R(['warded'], null, { ally: true, weaponDmg: { dice: '1d4', type: 'fire' } }),
+  'guiding bolt': R(['glowing'], null, { advAgainst: 'once', expire: 'srcEnd', onHit: true }),
+  'mind spike': R([], null),
+  // ---- back from the brink
+  'power word heal': R([], null, { ally: true, healFull: true, removes: ['charmed', 'frightened', 'paralyzed', 'poisoned', 'stunned'] }),
+  'revivify': R([], null, { ally: true, revive: 1 }),
+  'raise dead': R([], null, { ally: true, revive: 1 }),
+  'resurrection': R([], null, { ally: true, revive: 'full' }),
+  'true resurrection': R([], null, { ally: true, revive: 'full' }),
+  'power word kill': R([], null, { pwk: 100 }),
+  'vampiric touch': R([], null, { drain: 0.5, again: true }),
+  'aura of vitality': R([], null, { ally: true, again: true, heal: '2d6' }),
+  // ---- damage that comes later: the second part isn't dealt straight away
+  "melf's acid arrow": R(['afflicted'], null, { onHit: true, noParts: true, tick: { when: 'end', dice: '2d4', type: 'acid' }, expire: 'tgtEnd' }),
+  'acid arrow': R(['afflicted'], null, { onHit: true, noParts: true, tick: { when: 'end', dice: '2d4', type: 'acid' }, expire: 'tgtEnd' }),
+  'vitriolic sphere': R(['afflicted'], null, { onFail: true, noParts: true, tick: { when: 'end', dice: '5d4', type: 'acid' }, expire: 'tgtEnd' }),
+  'delayed blast fireball': R([], null, { noParts: true }),
+  // ---- the rest that does something in a fight (1.17)
+  'aura of vitality ': R([], null),
+  'spare the dying': R([], null, { ally: true, stabilize: true }),
+  'lesser restoration': R([], null, { ally: true, cure: true, options: ['blinded', 'deafened', 'paralyzed', 'poisoned'].map((c) => ({ name: c[0].toUpperCase() + c.slice(1), cures: [c] })) }),
+  'greater restoration': R([], null, { ally: true, cure: true, options: [{ name: 'Charmed', cures: ['charmed'] }, { name: 'Petrified', cures: ['petrified'] }, { name: 'A curse', cures: ['cursed'] }, { name: 'One Exhaustion level', exhaustion: -1 }] }),
+  'protection from poison': R(['warded'], null, { ally: true, cure: true, cures: ['poisoned'], resist: ['poison'] }),
+  'remove curse': R([], null, { ally: true, cure: true, cures: ['cursed'] }),
+  'dispel magic': R([], null, { dispel: true }),
+  'dispel evil and good': R([], null, { ally: true, cure: true, cures: ['charmed', 'frightened'] }),
+  'freedom of movement': R(['warded'], null, { ally: true, cure: true, cures: ['paralyzed', 'restrained', 'grappled'], immune: ['paralyzed', 'restrained'] }),
+  'mind blank': R(['warded'], null, { ally: true, immune: ['charmed'], resist: ['psychic'] }),
+  'foresight': R(['warded'], null, { ally: true, advSaves: ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA', 'death'], disAgainst: true }),
+  'circle of power': R(['warded'], null, { ally: true, advSpell: true }),
+  'gaseous form': R(['warded'], null, { ally: true, resist: ['bludgeoning', 'piercing', 'slashing'] }),
+  'magic weapon': R(['warded'], null, { ally: true, weaponHit: 1, weaponDmg: { dice: '1', type: '' } }),
+  'enlarge/reduce': R(['warded'], 'CON', { options: [{ name: 'Enlarge (a willing creature)', add: ['warded'], save: null, ally: true, weaponDmg: { dice: '1d4', type: '' } }, { name: 'Reduce', add: ['enfeebled'] }] }),
+  'guardian of faith': R([], null, { dmg: { dice: '20', type: 'radiant' }, again: true }),
+  'maze': R(['banished'], null, { escape: 'check', checkAbl: 'INT', escapeDc: 20 }),
+  'polymorph': R(['transformed'], 'WIS'),
+  'true polymorph': R(['transformed'], 'WIS'),
+  'animal shapes': R(['transformed'], null, { ally: true }),
+  'shapechange': R(['transformed'], null, { ally: true, self: true }),
+  "otiluke's resilient sphere": R(['banished'], 'DEX'),
+  'resilient sphere': R(['banished'], 'DEX'),
+  'counterspell': R([], 'CON', { saveOnly: 'its spell fails' }),
+  'calm emotions': R([], null, { ally: true, cure: true, cures: ['charmed', 'frightened'] }),
+  'heroism ': R([], null)
 };
-delete RULES['faerie fire '];
+delete RULES['faerie fire ']; delete RULES['aura of vitality ']; delete RULES['heroism '];
 // a 1.14/1.15 name for the same table, so older code keeps working
 const CONDS = RULES;
 
@@ -144,8 +210,48 @@ function roundsOf(duration) {
   return +m[1] * ({ round: 1, minute: 10, hour: 600, day: 14400 })[m[2].toLowerCase()];
 }
 
+// the 2024 spell table (public/spells.json): fills in what D&D Beyond left out (a second damage type, healing, an area…)
+let DB = null;
+function dbSpell(name) {
+  if (!DB) { try { const j = require('../public/spells.json'); DB = { by: new Map(j.spells.map((x) => [x.name.toLowerCase(), x])), alias: j.alias || {} }; } catch { DB = { by: new Map(), alias: {} }; } }
+  const k = String(name || '').toLowerCase().replace(/[’]/g, "'").trim();
+  return DB.by.get(k) || DB.by.get((DB.alias[k] || '').toLowerCase()) || null;
+}
+const atLevel = (map, level) => { let d = ''; for (const [lv, x] of Object.entries(map || {})) if (level >= +lv) d = x; return d; };
+// a spell from the table in the shape the rest of Tabletop uses (dice, per, type, save, attack, heal…), for a caster
+// with this spell save DC, attack bonus, spellcasting modifier and level
+function fromDb(e, o = {}) {
+  const parts = e.dmg || [];
+  const sp = { name: e.name, level: e.level, school: e.school, time: e.time, range: e.range, duration: e.duration, comps: e.comps, conc: e.conc, ritual: e.ritual, prepared: true, usesSlot: e.level > 0,
+    dice: parts[0] ? (e.cantrip ? atLevel(e.cantrip, o.level || 1) || parts[0].dice : parts[0].dice) : '', per: e.per || '', type: parts[0] ? parts[0].type : '', dmgParts: parts.slice(1),
+    types: e.types || null, half: !!e.half, save: e.save ? `${e.save} save, DC ${o.dc || 10}` : '', attack: e.attack ? '1d20' + ((o.attack || 0) >= 0 ? '+' : '') + (o.attack || 0) : '',
+    heal: e.heal || '', healPer: e.healPer || '', healMod: e.healMod ? o.mod || 0 : 0, temp: e.temp || '', tempPer: e.tempPer || 0, maxUp: e.maxUp || 0, aoe: e.aoe || null,
+    desc: e.desc || (e.srd ? '' : 'Not in the free SRD: see the Player\'s Handbook for the full text.'), selfOnly: e.range === 'Self' && !e.aoe, reaction: !!e.reaction };
+  return enrich(sp, o.level || 1);
+}
 function enrich(sp, level) {
   if (!sp || !sp.name) return sp;
+  // fill the gaps from the 2024 table, keeping what D&D Beyond said
+  const e = dbSpell(sp.name);
+  if (e) {
+    const parts = e.dmg || [];
+    if (!sp.dice && parts[0]) { sp.dice = e.cantrip ? atLevel(e.cantrip, level) || parts[0].dice : parts[0].dice; sp.type = sp.type || parts[0].type; }
+    if (!sp.per && e.per) sp.per = e.per;
+    if (!sp.dmgParts && parts.length > 1) sp.dmgParts = parts.slice(1);
+    const rr = RULES[sp.name.toLowerCase().replace(/[’]/g, "'")]; if (rr && rr.noParts) sp.dmgParts = [];
+    if (rr && rr.heal && !sp.heal) sp.heal = rr.heal;
+    if (rr && rr.dmg && !sp.dice) { sp.dice = rr.dmg.dice; sp.type = rr.dmg.type; }
+    if (!sp.types && e.types) sp.types = e.types;
+    if (!sp.half && e.half) sp.half = true;
+    if (!sp.heal && e.heal) { sp.heal = e.heal; sp.healPer = sp.healPer || e.healPer || ''; }
+    if (!sp.temp && e.temp) sp.temp = e.temp;
+    if (!sp.tempPer && e.tempPer) sp.tempPer = e.tempPer;
+    if (!sp.maxUp && e.maxUp) sp.maxUp = e.maxUp;
+    if (!sp.aoe && e.aoe) sp.aoe = e.aoe;
+    if (!sp.desc && e.desc) sp.desc = e.desc;
+    if (!sp.duration && e.duration) sp.duration = e.duration;
+    if (e.reaction) sp.reaction = true;
+  }
   const key = sp.name.toLowerCase().replace(/[’]/g, "'"), c = RULES[key], d = plain(sp.desc);
   delete sp.cond;
   if (c) {
@@ -187,4 +293,4 @@ function enrichCharacter(ch) {
   return ch;
 }
 
-module.exports = { enrich, enrichCharacter, levelOf, classLevel, roundsOf, RULES, CONDS };
+module.exports = { enrich, enrichCharacter, levelOf, classLevel, roundsOf, RULES, CONDS, dbSpell, fromDb };

@@ -49,7 +49,7 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 **Characters from D&D Beyond**
 - Players paste their D&D Beyond link and get their portrait, hit points, AC and every roll on their sheet as a button
 - They place their own token on the map; the DM sees its AC and passive Perception
-- Spells and class features: slot pips, casting and upcasting, and healing, damage, temporary hit points and conditions that land on the chosen tokens straight away (attacks against AC, saves against the DC, resistances counted, concentration checked)
+- Every 2024 spell, weapon attacks and class features land on the chosen tokens straight away: attacks against AC with Advantage and Disadvantage, saves against the DC, damage, healing, conditions and how they end, concentration, death saves. Monsters cast the spells on their stat blocks too
 
 **Map building**
 - **Describe it, and it's generated:** type *"snowy fishing village on the coast with a lighthouse"* or *"kobold mine with a dragon's lair"* and the generator picks the settings, which you can adjust. Villages (green, snowy, desert or swamp; river, lake or coast; walled towns, hamlets, ruins), dungeons (stone halls, caves, crypts, mines, sewers, temples, lava forges, flooded halls), wilderness (forests, swamps, river crossings, mountain passes, oases, coastlines) and building interiors (taverns, temples, manors, shops, guardhouses, wizard towers). Seeds let you make the same map again.
@@ -199,5 +199,7 @@ The DM app makes a new secret key each time it starts and gives it only to its o
 Built-in token artwork is from [game-icons.net](https://game-icons.net) by Lorc, Delapouite and contributors, licensed [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). See [public/CREDITS.txt](public/CREDITS.txt). Map textures and props are drawn in code by Tabletop.
 
 The encounter builder's monsters and stat blocks include material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC, available at <https://dnd.wizards.com/resources/systems-reference-document>, licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/legalcode). The data was prepared by the [5e-database](https://github.com/5e-bits/5e-database) project (MIT). Encounter difficulty uses the XP budget per character from the D&D 2024 rules.
+
+Spell descriptions (`public/spells.json`) include material taken from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC, available at <https://dnd.wizards.com/resources/systems-reference-document>, licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/legalcode). Spells outside the SRD carry only their game numbers, not their text.
 
 The built-in music and ambiences were made for Tabletop (`build/make-audio.py`); the music is played on the FluidR3 GM soundfont by Frank Wen (MIT licence).

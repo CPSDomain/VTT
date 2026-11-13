@@ -34,6 +34,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.14 | Magic Missile darts and Scorching Ray/Eldritch Blast rays split between targets, automatic concentration checks, spells that put conditions on their targets and take them off when concentration ends |
 | 1.15 | Spells end on their targets by the 2024 rules: end-of-turn saves, saves when hurt, damage breaking charms and Sleep, Sleep's second save, breaking free of Web and Entangle |
 | 1.16 | Saving throws by the 2024 books: every PHB spell with a condition, monster abilities from the stat block, class features and feats, DMG items, poisons and hazards, save modifiers, Legendary Resistance, death saves |
+| 1.17 | Combat pass: the full 2024 spell table, monsters casting their spells, any spell from the DM, weapon attacks on targets, attack Advantage and Disadvantage by the rules, protections that change AC and damage |
 
 ## Next
 

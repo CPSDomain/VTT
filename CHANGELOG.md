@@ -2,6 +2,44 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.17.0] - 2026-11-13
+
+A combat pass: every spell in the 2024 Player's Handbook, every spell the monsters cast and every spell the Dungeon Master's Guide's items cast now works in the DM and player apps.
+
+### Added
+- **The 2024 spell table** (`public/spells.json`): all 391 Player's Handbook spells with their game numbers, and the descriptions of the 339 in the free SRD 5.2:
+  - **Numbers:** level, casting time, range, area, duration, concentration, saving throw, spell attack, every damage type, how damage grows with the slot or your level, healing, temporary hit points and conditions.
+  - **Characters from D&D Beyond** are filled in from it. Ice Storm and Flame Strike now deal both their damage types, and Healing Word and Spirit Guardians get what D&D Beyond leaves out.
+  - **Older names:** the 2014 and SRD names monsters use (Acid Arrow, Black Tentacles, Feeblemind…) find their 2024 spell.
+  - **Checked:** all 300 spells in the SRD monsters' spell lists, the 164 cast by 2025 Monster Manual monsters, and the 142 cast by the Dungeon Master's Guide's magic items.
+- **Monsters cast their spells.** A stat block's Spellcasting lists every spell as a button. Click it, then click the targets:
+  - The monster's spell save DC and attack bonus come from its stat block, and higher slots work.
+  - The monster concentrates: a new concentration spell ends its last one, and its Hold Person ends when it does.
+  - Its rolls stay secret; the table sees what happened.
+- **The DM casts any spell** from a token's panel (**＋ Effect with a saving throw… → Cast any spell**), for wands, scrolls and traps, with your own DC and attack bonus.
+- **Weapon attacks on a target:** **🎯** next to a weapon in **My character** rolls against the target's AC:
+  - Advantage and Disadvantage, Bless, critical hits and resistances count.
+  - Hex, Hunter's Mark, Divine Favor, Elemental Weapon and Magic Weapon are added for you.
+- **Attack rolls follow the 2024 rules**, for monsters and players:
+  - **The attacker:** Blinded, Frightened, Poisoned, Prone or Restrained gives Disadvantage; Invisible gives Advantage.
+  - **The target:** Blinded, Paralyzed, Petrified, Restrained, Stunned or Unconscious gives Advantage, as do Faerie Fire and Guiding Bolt. Prone gives Advantage up close and Disadvantage from range. Invisible or Blur gives Disadvantage.
+  - Hits from within 5 feet on a Paralyzed or Unconscious creature are critical hits.
+  - Protection from Evil and Good works against its creature types, and Sanctuary makes attackers save first.
+- **Protections and boosts that change the numbers:**
+  - **AC:** Shield (+5 until your next turn), Mage Armor, Barkskin, Shield of Faith, Haste, Slow, Warding Bond.
+  - **Resistance:** Stoneskin, Protection from Energy, Fire Shield, Aura of Life, Gaseous Form, Mind Blank.
+  - **Other protections:** Death Ward (drops to 1 hit point instead, once), Beacon of Hope (Advantage on Wisdom and death saves, healing maximised), Foresight, Circle of Power, Heroes' Feast, Freedom of Movement, and Armor of Agathys (cold damage back to whoever hits you).
+- **More spells that do their thing:**
+  - **Damage:** damage types you pick (Chromatic Orb, Dragon's Breath, Spirit Guardians), Power Word Kill, Vampiric Touch's drain, Melf's Acid Arrow and Vitriolic Sphere's later damage, Guardian of Faith.
+  - **Healing and revival:** Mass Heal's pool, Power Word Heal, Revivify, Raise Dead and Resurrection, Spare the Dying, Aura of Vitality.
+  - **Ending effects:** Lesser and Greater Restoration, Remove Curse, Protection from Poison, Dispel Magic, Dispel Evil and Good, Calm Emotions, Counterspell.
+  - **Holding or changing a creature:** Maze (Intelligence check to escape), Polymorph, Enlarge/Reduce.
+- **↻ Use again** works for any concentration spell that's still going (Moonbeam, Spirit Guardians, Call Lightning…), without a new slot.
+- The 149 spells with nothing to roll (summons, movement, divination, illusions) cast and show in the log.
+
+### Fixed
+- The bar for picking targets showed at the bottom of the map when nothing was being targeted.
+
 ## [1.16.0] - 2026-11-13
 
 Saving throws, checked against the 2024 Player's Handbook, Dungeon Master's Guide and Monster Manual.

@@ -135,7 +135,8 @@ const CONDITIONS = [
   ['confused', 'Confused', 'spiral-arrow', '#c026d3'], ['enfeebled', 'Enfeebled', 'despair', '#57534e'], ['muddled', 'Muddled', 'brain-freeze', '#7c3aed'],
   ['haunted', 'Phantasmal Killer', 'haunting', '#4338ca'], ['dancing', 'Dancing', 'swirl-string', '#db2777'], ['befuddled', 'Befuddled', 'brain', '#9333ea'],
   ['commanded', 'Commanded', 'tied-scroll', '#a16207'], ['heroism', 'Heroism', 'muscle-up', '#ea580c'], ['holyaura', 'Holy Aura', 'holy-symbol', '#facc15'],
-  ['cursed', 'Cursed', 'death-skull', '#581c87'], ['dazed', 'Dazed', 'magic-swirl', '#0e7490'], ['afflicted', 'Afflicted', 'bandaged', '#65a30d'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
+  ['cursed', 'Cursed', 'death-skull', '#581c87'], ['dazed', 'Dazed', 'magic-swirl', '#0e7490'], ['afflicted', 'Afflicted', 'bandaged', '#65a30d'],
+  ['warded', 'Spell protection', 'checked-shield', '#0284c7'], ['glowing', 'Guiding Bolt', 'sun', '#fbbf24'], ['transformed', 'Transformed', 'wolf-howl', '#15803d'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
 ];
 
 const icons = {}, library = [], missing = [];

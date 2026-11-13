@@ -15,3 +15,9 @@ Data prepared by the 5e-database project (https://github.com/5e-bits/5e-database
 Music and ambience (public/audio)
 Made for Tabletop (build/make-audio.py; sound effects build/make-sfx.py). The music is played on the FluidR3 GM soundfont by Frank Wen,
 MIT licence (https://member.keymusician.com/Member/FluidR3_GM/index.html).
+
+
+Spells (public/spells.json)
+Spell descriptions include material taken from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC,
+available at https://dnd.wizards.com/resources/systems-reference-document, licensed under the Creative Commons Attribution 4.0
+International License (https://creativecommons.org/licenses/by/4.0/legalcode). Spells outside the SRD carry only their game numbers.
