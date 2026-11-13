@@ -33,6 +33,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.13 | Spells and class features land on the map: healing, temporary hit points, attack and save spells against each target, resistances, Lay on Hands, Second Wind, Channel Divinity and other limited-use features |
 | 1.14 | Magic Missile darts and Scorching Ray/Eldritch Blast rays split between targets, automatic concentration checks, spells that put conditions on their targets and take them off when concentration ends |
 | 1.15 | Spells end on their targets by the 2024 rules: end-of-turn saves, saves when hurt, damage breaking charms and Sleep, Sleep's second save, breaking free of Web and Entangle |
+| 1.16 | Saving throws by the 2024 books: every PHB spell with a condition, monster abilities from the stat block, class features and feats, DMG items, poisons and hazards, save modifiers, Legendary Resistance, death saves |
 
 ## Next
 

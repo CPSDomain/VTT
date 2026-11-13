@@ -229,7 +229,14 @@ function readCharacter(d) {
   spellsOut.sort((a, b) => a.level - b.level || a.name.localeCompare(b.name));
 
   const avatar = (d.decorations && d.decorations.avatarUrl) || d.avatarUrl || null;
+  // what changes this character's saving throws: Advantage from race, class or feats (Fey Ancestry, Dwarven Resilience…),
+  // damage resistances and condition immunities, and feats such as War Caster
+  const saveAdv = mods.filter((m) => m.type === 'advantage' && /saving-throws$/.test(m.subType || '')).map((m) => ({ abl: (/^(strength|dexterity|constitution|intelligence|wisdom|charisma)/.exec(m.subType || '') || [])[1] ? SHORT[STATS.indexOf((/^(\w+)/.exec(m.subType))[1])] : '', vs: String(m.restriction || '').toLowerCase().slice(0, 120) })).slice(0, 20);
+  const resist = [...new Set(mods.filter((m) => m.type === 'resistance').map((m) => String(m.subType || '').toLowerCase()))].slice(0, 20);
+  const immuneCond = [...new Set(mods.filter((m) => m.type === 'immunity').map((m) => String(m.subType || '').toLowerCase()))].slice(0, 20);
+  const feats = (d.feats || []).map((f) => f.definition && f.definition.name).filter(Boolean).slice(0, 40);
   return enrichCharacter({
+    saveAdv, resist, immuneCond, feats, subclasses: classes.map((c) => c.sub).filter(Boolean),
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,

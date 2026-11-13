@@ -26,6 +26,7 @@
   .hint { color:var(--dim); font-size:12px; margin-top:6px; }
   .dm-only, .build-only { display:none !important; }
   body.dm .dm-only { display:revert !important; }
+  body.dm .dm-only[hidden] { display:none !important; }
   body.dm.build .build-only { display:revert !important; }
   body.dm.build .play-only { display:none !important; }
 
@@ -430,6 +431,11 @@
   #eMarks { display:flex; flex-direction:column; gap:4px; margin:6px 0; font-size:12px; }
   #eMarks .mk { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:4px 6px; border-radius:6px; background:rgba(120,90,200,.12); }
   #eMarks .mk span { flex:1 1 140px; min-width:0; } #eMarks .mk button { padding:2px 8px; font-size:12px; }
+  #eFx { margin:6px 0; font-size:12px; } #eFx summary { cursor:pointer; color:var(--dim); }
+  #eFx .fxform { display:flex; flex-direction:column; gap:6px; margin-top:6px; } #eFx select, #eFx input { font-size:12px; min-width:0; }
+  #eFx .fxgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; } #eFx .fxgrid > :first-child { grid-column:1 / -1; }
+  #aimOpt { max-width:180px; }
+  .sbuse { margin-left:6px; padding:1px 8px; font-size:12px; }
   #aimBar { position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
   #aimBar #aimTitle { font-weight:600; } #aimBar #aimCount { color:#bfb39a; font-size:12px; } #aimBar #aimAmt { width:70px; }
   #charBody .res .rn { min-width:110px; } #charBody .res button:not(.pip) { margin-left:auto; padding:2px 8px; font-size:12px; }
@@ -731,6 +737,28 @@
         <div class="row dm-only" id="eCharRow" hidden><button id="eChar">🎒 Inventory and spells…</button></div>
         <div id="eConds" class="conds"></div>
         <div id="eMarks" hidden></div>
+        <details id="eFx" class="dm-only" hidden><summary>＋ Effect with a saving throw…</summary>
+          <div class="fxform">
+            <select id="fxKind"></select>
+            <div id="fxCustom" class="fxgrid">
+              <input id="fxName" placeholder="Name (Ghoul venom, Net…)">
+              <select id="fxCond" title="The condition"></select>
+              <select id="fxSave" title="The save that ends it"><option value="CON">CON save</option><option value="STR">STR save</option><option value="DEX">DEX save</option><option value="INT">INT save</option><option value="WIS">WIS save</option><option value="CHA">CHA save</option><option value="">No save</option></select>
+              <select id="fxHow" title="How it ends">
+                <option value="end">Save at the end of each of its turns</option><option value="start">Save at the start of each of its turns</option>
+                <option value="hurtSave">Save whenever it takes damage</option><option value="hurtEnd">Ends when it takes damage</option>
+                <option value="athletics">Its action: Strength (Athletics) check</option><option value="grapple">Its action: Athletics or Acrobatics (escape DC)</option>
+                <option value="tgtEnd">Until the end of its next turn</option><option value="tgtStart">Until the start of its next turn</option>
+                <option value="manual">I'll say when it saves</option><option value="">Until I take it off</option>
+              </select>
+              <input id="fxDice" placeholder="Damage each turn (2d6)" title="Damage at the start of each of its turns (optional)">
+              <select id="fxType"><option value="">damage type</option><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select>
+              <input id="fxRounds" type="number" min="0" max="600" placeholder="Rounds (10 = 1 minute)" title="How long it lasts in rounds (empty: until it ends another way)">
+            </div>
+            <div class="row"><label>DC <input id="fxDc" type="number" min="1" max="40" value="13" style="width:56px"></label><label class="check"><input type="checkbox" id="fxRoll" checked> Roll its save now</label><button id="fxAdd" class="primary">Put it on</button></div>
+            <div class="hint">With "Roll its save now" the effect lands only if the save fails. Without it, it's put straight on.</div>
+          </div>
+        </details>
         <div class="row dm-only"><button id="eToInit">⚔ Add to initiative</button><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
       </section>
 
@@ -824,7 +852,7 @@
     </div>
   </div>
 </div>
-<div id="aimBar" hidden><span id="aimTitle"></span><span id="aimCount"></span><input id="aimAmt" type="number" min="1" title="How many hit points" hidden><button id="aimSelf" title="Add your own token">Me</button><button id="aimArea" title="Every token inside the area you placed">In my area</button><button id="aimGo" class="primary">Apply</button><button id="aimCancel">Cancel</button></div>
+<div id="aimBar" hidden><span id="aimTitle"></span><span id="aimCount"></span><select id="aimOpt" hidden></select><input id="aimAmt" type="number" min="1" title="How many hit points" hidden><button id="aimSelf" title="Add your own token">Me</button><button id="aimArea" title="Every token inside the area you placed">In my area</button><button id="aimGo" class="primary">Apply</button><button id="aimCancel">Cancel</button></div>
 <div class="modal" id="charModal" hidden>
   <div class="dialog">
     <div class="dhead"><h2 style="margin:0" id="cmName"></h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
@@ -904,6 +932,7 @@
 </div>
 
 <script src="js/vision.js"></script>
+<script src="js/monsterfx.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

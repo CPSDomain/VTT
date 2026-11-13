@@ -40,6 +40,8 @@ You get your portrait, hit points, AC, speed, initiative and darkvision, and a b
 - **Darts, rays and beams** (Magic Missile, Scorching Ray, Eldritch Blast): click a token once for every dart or ray you send at it, Shift+click to take one back.
 - **Spells with conditions** (Hold Person, Bless, Bane, Faerie Fire, Web…) put the condition on each target that fails its save. If you're concentrating and get hurt, Tabletop rolls your concentration save for you; if it fails, or you cast another concentration spell, the spell's conditions come off.
 - **When a spell holds you** (Hold Person, Web…), your token shows which spell and how it ends. End-of-turn saves roll for you when the DM moves the turn on; for Web or Entangle, click **🪢 Try to break free** on your token when you use your action for it.
+- **Features that make a creature save** (Stunning Strike, Cunning Strike, Turn Undead, Grapple, Shove…) are listed with their DC: click **🎯**, click the target, then **Apply**.
+- **Your saving throws roll for you**, with Bless, Bane, Exhaustion, your Advantages from D&D Beyond, a paladin's aura nearby, and conditions that change them. At 0 hit points your death saves roll at the start of your turn.
 - **Class features** such as Lay on Hands, Second Wind, Channel Divinity or Bardic Inspiration sit under **Class features**: click a pip to use one. **💛 Heal…** for Lay on Hands lets you pick who and how many hit points from your pool.
 - **Coins and inventory** show your money, what you carry (and in which bag) and your spells by level.
 - **↻ Update from D&D Beyond** after you level up, spend gold or change gear.

@@ -56,6 +56,7 @@ function onMessage(msg) {
       handouts = st.handouts || []; renderHandouts();
       audioLib = st.audio || []; soundNow = st.sound || { music: null, amb: [] }; snd.apply(soundNow, st.now); renderSound();
       encounters = st.encounters || [];
+      effectLists = st.effects || null; buildFxForm();
       if (me.isDM) dmChars = st.characters || {};
       if (me.isDM) loadMonsters().then(() => renderEditor()).catch(() => {});
       setTimeout(renderChatTargets, 0);
@@ -1192,7 +1193,7 @@ function placeEncounter() {
   if (placed) { $('encModal').hidden = true; toast(`Placed ${placed} monster${placed === 1 ? '' : 's'}${$('encHidden').checked ? ', hidden from players' : ''}. Select one for its stat block.`, 5000); }
 }
 // a stat block, with its attacks, damage and ability checks clickable to roll
-function showStatBlock(m) {
+function showStatBlock(m, src = null) {
   const b = $('sbBody'); b.innerHTML = '';
   $('sbName').textContent = m.name;
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; b.appendChild(e); return e; };
@@ -1211,8 +1212,15 @@ function showStatBlock(m) {
   line('Damage Immunities', m.immune); line('Condition Immunities', m.cimmune); line('Senses', m.senses); line('Languages', m.lang);
   line('Challenge', `${crText(m.cr)} (${m.xp.toLocaleString()} XP)`);
   el('hr');
-  const section = (title, items) => { if (!items || !items.length) return; if (title) el('h3', null, title); for (const it of items) { const p = el('p'); const s = document.createElement('b'); s.textContent = it.n + '. '; s.style.fontStyle = 'italic'; p.appendChild(s); richText(p, it.d, (expr, what) => roll(expr, `${it.n}${what ? ' ' + what : ''}`)); } };
-  section(null, m.traits); section('Actions', m.actions); section('Reactions', m.reactions); section('Legendary Actions', m.legendary);
+  const section = (title, items, kind) => { if (!items || !items.length) return; if (title) el('h3', null, title); for (const [idx, it] of items.entries()) { const p = el('p'); const s = document.createElement('b'); s.textContent = it.n + '. '; s.style.fontStyle = 'italic'; p.appendChild(s); richText(p, it.d, (expr, what) => roll(expr, `${it.n}${what ? ' ' + what : ''}`));
+    // use it on tokens: the attack (secret), the targets' saves, damage and conditions, and how they end
+    const P = globalThis.monsterFx && globalThis.monsterFx.parse(it.d, m.name, kind);
+    if (me.isDM && src && P && (P.attack != null ? P.hit.length || P.variants.length : P.variants.length) && kind !== 'traits') {
+      const b = document.createElement('button'); b.className = 'sbuse'; b.textContent = '🎯 Use on…'; b.title = P.variants.map((v) => `${v.name}${v.save ? ` (${v.save.abl} DC ${v.save.dc})` : ''}`).join(' · ') || 'Attack';
+      b.onclick = () => { $('statModal').hidden = true; startAim({ title: `${(sc().tokens[src] || {}).label || m.name}: ${it.n}`, harm: true, color: '#ef4444', options: P.variants.length > 1 ? P.variants.map((v) => v.name) : null, send: (ids, amt, variant) => sendMsg({ type: 'monsterEffect', sceneId: editing, src, kind, idx, variant, targets: ids }) }); };
+      p.appendChild(b);
+    } } };
+  section(null, m.traits, 'traits'); section('Actions', m.actions, 'actions'); section('Reactions', m.reactions, 'reactions'); section('Legendary Actions', m.legendary, 'legendary');
   const c = el('p', 'hint'); c.textContent = 'From the SRD 5.1 by Wizards of the Coast, CC BY 4.0.';
   $('statModal').hidden = false;
 }
@@ -1248,7 +1256,7 @@ $('encLoad').onchange = () => {
   enc = { id: e.id, picked: e.monsters.map((m) => ({ ...m })) }; $('encName').value = e.name;
   $('encSize').value = e.party.size; $('encLevel').value = e.party.level; renderEncPicked();
 };
-$('eStat').onclick = async () => { await loadMonsters(); const m = monsterOf(selected && sc().tokens[selected]); if (m) showStatBlock(m); else toast('No SRD stat block for this token'); };
+$('eStat').onclick = async () => { await loadMonsters(); const m = monsterOf(selected && sc().tokens[selected]); if (m) showStatBlock(m, selected); else toast('No SRD stat block for this token'); };
 
 // ---------- chat ----------
 // Table talk in the log. Whispers go to one person (and the DM sees them); the DM can speak as an NPC.
@@ -1891,22 +1899,82 @@ function renderEditor() {
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
   renderMarks(t);
 }
-// spells holding this token, and how each one ends (2024 rules); a button to roll the save or break free now
-const ENDS = { end: (m) => `${m.save} save DC ${m.dc} at the end of each of its turns`, 'end+hurtAdv': (m) => `${m.save} save DC ${m.dc} at the end of each of its turns, and with Advantage when hurt`, hurt: (m) => `${m.save} save DC ${m.dc} whenever it takes damage`,
-  damage: () => 'ends if it takes damage', sleep: (m) => (m.stage === 1 ? `${m.save} save DC ${m.dc} at the end of its next turn, or it falls asleep` : 'asleep until it takes damage or is shaken awake'), escape: (m) => `its action: Strength (Athletics) DC ${m.dc} to break free`, fear: (m) => `${m.save} save DC ${m.dc} if it ends its turn out of sight of the caster` };
+// what holds this token and how each thing ends (2024 rules), with a button to roll the save or break free now;
+// a monster's Legendary Resistance; a character's death saves; and for the DM, putting an effect with a save on it
+const ABLN = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution', INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
+function howItEnds(m) {
+  const sv = `${m.save || ''} save DC ${m.dc}`, out = [];
+  if (m.cnt) out.push(`${sv} at the end of each of its turns: three successes end it, three failures and it lasts (${m.cnt.s} ✔ ${m.cnt.f} ✖)`);
+  else if (m.end) out.push(`${sv} at the end of each of its turns`);
+  if (m.start) out.push(`${sv} at the start of each of its turns`);
+  if (m.stage === 1 && m.then) out.push(`${sv} at the end of its next turn, or ${m.then.add.includes('petrified') ? 'it turns to stone' : 'it falls asleep'}`);
+  if (m.hurt === 'end') out.push('ends if it takes damage'); else if (m.hurt === 'save') out.push(`${sv} whenever it takes damage`); else if (m.hurt === 'adv') out.push(`${sv} with Advantage when it takes damage`);
+  if (m.escape === 'athletics') out.push(`its action: Strength (Athletics) DC ${m.escapeDc || m.dc} to break free`);
+  else if (m.escape === 'grapple') out.push(`its action: Athletics or Acrobatics DC ${m.escapeDc || m.dc} to escape`);
+  else if (m.escape === 'check') out.push(`its action: ${ABLN[m.checkAbl] || 'Strength'}${m.skill ? ' (' + m.skill + ')' : ''} check DC ${m.escapeDc} to get free`);
+  else if (m.escape === 'save') out.push(`its action: repeat the ${sv}`);
+  if (m.expire) out.push({ tgtEnd: 'until the end of its next turn', tgtStart: 'until the start of its next turn', srcEnd: "until the end of the caster's next turn", srcStart: "until the start of the caster's next turn" }[m.expire]);
+  if (m.tick) out.push(`${m.tick.dice}${m.tick.type ? ' ' + m.tick.type : ''} damage at the start of ${m.tick.when === 'srcStart' ? "the source's" : 'its'} turns${m.tick.save ? ` (${m.tick.save.abl} save DC ${m.tick.save.dc} avoids it)` : ''}${m.tick.onFail ? ' on a failed save' : ''}`);
+  if (m.manual) out.push(m.manual);
+  if (m.until) out.push(`runs out after round ${m.until}`);
+  if (m.conc) out.push('while the caster concentrates');
+  return out.join(' · ');
+}
 function renderMarks(t) {
   const box = $('eMarks'), seen = new Map();
   for (const m of t.marks || []) { const k = m.by + '|' + m.spell; if (!seen.has(k)) seen.set(k, { ...m, cs: [] }); seen.get(k).cs.push(m.c); }
-  box.hidden = !seen.size; box.innerHTML = '';
+  box.innerHTML = '';
   const mine = me.isDM || (t.owner && t.owner === me.name);
+  const btn = (text, onclick) => { const b = document.createElement('button'); b.textContent = text; b.onclick = onclick; return b; };
   for (const m of seen.values()) {
     const row = document.createElement('div'); row.className = 'mk';
-    const tx = document.createElement('span'); tx.textContent = `✨ ${m.spell}` + (m.ends && ENDS[m.ends] ? ': ' + ENDS[m.ends](m) : m.conc ? ': while the caster concentrates' : ''); row.append(tx);
-    const canRoll = mine && (m.ends === 'escape' || m.ends === 'end' || m.ends === 'end+hurtAdv' || m.ends === 'hurt' || m.ends === 'fear' || (m.ends === 'sleep' && m.stage === 1));
-    if (canRoll) { const b = document.createElement('button'); b.textContent = m.ends === 'escape' ? '🪢 Try to break free' : '🎲 Roll the save'; b.onclick = () => sendMsg({ type: 'spellRetry', sceneId: editing, id: t.id, by: m.by, spell: m.spell }); row.append(b); }
+    const tx = document.createElement('span'); tx.textContent = `✨ ${m.spell}: ` + (howItEnds(m) || 'until it’s taken off'); row.append(tx);
+    const send2 = (how) => sendMsg({ type: 'spellRetry', sceneId: editing, id: t.id, by: m.by, spell: m.spell, how });
+    if (mine && (m.end || m.start || m.hurt === 'save' || m.hurt === 'adv' || m.manual || m.escape === 'save' || (m.stage === 1 && m.then))) row.append(btn('🎲 Roll the save', () => send2('')));
+    if (mine && m.escape && m.escape !== 'save') row.append(btn(m.escape === 'grapple' ? '🪢 Try to escape' : '🪢 Try to break free', () => send2('escape')));
     box.append(row);
   }
+  if (me.isDM && t.lrOffer && t.lrLeft > 0) { const row = document.createElement('div'); row.className = 'mk'; const tx = document.createElement('span'); tx.textContent = `🛡 Failed its save against ${t.lrOffer.spell}`; row.append(tx, btn(`Use Legendary Resistance (${t.lrLeft} left)`, () => sendMsg({ type: 'lrUse', sceneId: editing, id: t.id }))); box.append(row); }
+  if (t.owner && t.hp === 0 && t.maxHp && !(t.conditions || []).includes('dead')) {
+    const d = t.death || { s: 0, f: 0 }, row = document.createElement('div'); row.className = 'mk';
+    const tx = document.createElement('span'); tx.textContent = d.stable ? '🩹 Stable: unconscious, no more death saves' : `💀 Death saves: ${'✔'.repeat(d.s)}${'·'.repeat(3 - d.s)}  ${'✖'.repeat(d.f)}${'·'.repeat(3 - d.f)}`; row.append(tx);
+    if (mine && !d.stable) row.append(btn('🎲 Death save', () => sendMsg({ type: 'deathSave', sceneId: editing, id: t.id })));
+    box.append(row);
+  }
+  if ((t.conditions || []).includes('exhaustion')) { // 2024: each level takes 2 off every d20 test, saves included
+    const row = document.createElement('div'); row.className = 'mk'; const tx = document.createElement('span'); tx.textContent = '😩 Exhaustion level (−2 per level to d20 tests)';
+    const sel = document.createElement('select'); for (let i = 1; i <= 6; i++) { const o = document.createElement('option'); o.value = i; o.textContent = i; sel.append(o); } sel.value = t.exhaustion || 1; sel.disabled = !mine;
+    sel.onchange = () => updateSelected({ exhaustion: +sel.value }); row.append(tx, sel); box.append(row);
+  }
+  box.hidden = !box.children.length;
+  $('eFx').hidden = !me.isDM;
 }
+// the DM's form: a Dungeon Master's Guide item, poison or hazard, a spell a monster casts, or an effect of your own
+let effectLists = null;
+function buildFxForm() {
+  const sel = $('fxKind'); if (!sel || !effectLists) return;
+  sel.innerHTML = '';
+  const group = (label, items) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of items) { const o = document.createElement('option'); o.value = v; o.textContent = t; g.append(o); } sel.append(g); };
+  group('Your own', [['custom:', 'A condition, with a save to end it…']]);
+  group("Dungeon Master's Guide", effectLists.presets.map((p) => ['preset:' + p.name, `${p.name}${p.save ? ` (${p.save} ${p.dc})` : ''}`]));
+  group('A spell a monster casts', effectLists.spells.flatMap((x) => (x.options.length ? x.options.map((o, i) => [`spell:${x.name}:${i}`, `${x.name.replace(/\b\w/g, (c) => c.toUpperCase())}: ${o}`]) : [[`spell:${x.name}:0`, x.name.replace(/\b\w/g, (c) => c.toUpperCase())]])));
+  const cs = $('fxCond'); cs.innerHTML = conditions().map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  fxKindChanged();
+}
+function fxKindChanged() {
+  const v = $('fxKind').value, custom = v.startsWith('custom:');
+  $('fxCustom').hidden = !custom;
+  if (v.startsWith('preset:')) { const p = effectLists.presets.find((x) => 'preset:' + x.name === v); if (p) $('fxDc').value = p.dc; }
+}
+$('fxKind') && ($('fxKind').onchange = fxKindChanged);
+$('fxAdd') && ($('fxAdd').onclick = () => {
+  const t = sc() && sc().tokens[selected]; if (!t) return;
+  const v = $('fxKind').value, msg = { type: 'markAdd', sceneId: editing, id: t.id, dc: +$('fxDc').value || 10, roll: $('fxRoll').checked };
+  if (v.startsWith('preset:')) msg.preset = v.slice(7);
+  else if (v.startsWith('spell:')) { const [, name, opt] = v.split(':'); msg.spell = name; msg.option = +opt; }
+  else msg.custom = { cond: $('fxCond').value, save: $('fxSave').value, how: $('fxHow').value, dice: $('fxDice').value.trim().replace(/\s/g, ''), type: $('fxType').value, rounds: +$('fxRounds').value || 0, name: $('fxName').value };
+  sendMsg(msg);
+});
 function buildConditionGrid() {
   const box = $('eConds'); box.innerHTML = '';
   for (const c of conditions()) {
@@ -3032,6 +3100,8 @@ function startAim(o) {
   const s = sc(); if (!s) return toast('Open a map first');
   aim = { color: '#22c55e', ids: new Set(), count: new Map(), ...o };
   if (o.self) for (const t of myTokens(s).slice(0, 1)) aim.ids.add(t.id);
+  const opt = $('aimOpt'); opt.hidden = !(o.options && o.options.length > 1); opt.innerHTML = (o.options || []).map((n, i) => `<option value="${i}">${n.replace(/</g, '&lt;')}</option>`).join('');
+  $('aimSelf').hidden = me.isDM;
   aimBar(); draw();
 }
 function stopAim() { aim = null; $('aimBar').hidden = true; draw(); }
@@ -3050,13 +3120,13 @@ $('aimCancel').onclick = stopAim;
 $('aimSelf').onclick = () => { const s = sc(); if (!s || !aim) return; const t = myTokens(s)[0]; if (!t) return toast('Your token isn’t on this map'); if (aim.one) aim.ids.clear(); aim.ids.add(t.id); if (aim.pieces && [...aim.count.values()].reduce((x, y) => x + y, 0) < aim.pieces) aim.count.set(t.id, (aim.count.get(t.id) || 0) + 1); aimBar(); draw(); };
 $('aimArea').onclick = () => { // every token in my most recent area on this map
   const s = sc(); if (!s || !aim) return;
-  const mine = Object.values(s.templates || {}).filter((t) => t.owner === me.name).pop();
+  const mine = Object.values(s.templates || {}).filter((t) => (me.isDM ? !t.owner : t.owner === me.name)).pop();
   if (!mine) return toast('Place your area on the map first (◎ Area)');
   const cells = new Set(tplCells(s, mine).map(([x, y]) => x + ',' + y));
   for (const t of Object.values(s.tokens)) { let inside = false; for (let y = t.y; y < t.y + t.size && !inside; y++) for (let x = t.x; x < t.x + t.size; x++) if (cells.has(x + ',' + y)) { inside = true; break; } if (inside) aim.ids.add(t.id); }
   aimBar(); draw();
 };
-$('aimGo').onclick = () => { if (!aim) return; const amt = Math.max(1, Math.min(+$('aimAmt').value || 0, aim.amount || 1e9)); aim.send(aim.pieces ? [...aim.count].flatMap(([id, n]) => Array(n).fill(id)) : [...aim.ids], amt); $('aimAmt').value = ''; stopAim(); };
+$('aimGo').onclick = () => { if (!aim) return; const amt = Math.max(1, Math.min(+$('aimAmt').value || 0, aim.amount || 1e9)); aim.send(aim.pieces ? [...aim.count].flatMap(([id, n]) => Array(n).fill(id)) : [...aim.ids], amt, +$('aimOpt').value || 0); $('aimAmt').value = ''; stopAim(); };
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && aim) stopAim(); });
 
 function renderResources(d, c, el) {
@@ -3071,6 +3141,17 @@ function renderResources(d, c, el) {
     else if (r.heal) { const b = el('button', '', '💚 ' + r.heal); b.disabled = !left; b.onclick = () => (r.self ? sendMsg({ type: 'spellEffect', res: r.name, targets: [] }) : startAim({ title: r.name, one: true, send: (ids) => sendMsg({ type: 'spellEffect', res: r.name, targets: ids }) })); row.append(b); }
     else if (r.max > 10) { const b = el('button', '', 'Use 1'); b.disabled = !left; b.onclick = () => sendMsg({ type: 'charRes', name: r.name, used: r.used + 1 }); row.append(b); }
     d.append(row);
+  }
+}
+// class features and feats that make a creature save (Stunning Strike, Cunning Strike, Turn Undead…), and Grapple and Shove
+function renderFeatures(d, c, el) {
+  if (!(c.featureInfo || []).length) return;
+  d.append(el('div', 'splvl', 'Features that make a creature save'));
+  for (const f of c.featureInfo) {
+    const row = el('div', 'slots res'); row.append(el('span', 'sl rn', f.name)); row.title = (f.note ? f.note + ' ' : '') + `DC ${f.dc}${f.cost ? ' · uses ' + f.cost : ''}`;
+    const b = el('button', '', `🎯 DC ${f.dc}`);
+    b.onclick = () => startAim({ title: `${f.name} (DC ${f.dc})`, harm: true, color: '#ef4444', options: f.options && f.options.length ? f.options : null, send: (ids, amt, option) => sendMsg({ type: 'featEffect', name: f.name, option, targets: ids }) });
+    row.append(b); d.append(row);
   }
 }
 function renderSpells(d, c, el) {
@@ -3089,6 +3170,7 @@ function renderSpells(d, c, el) {
   };
   (c.slots || []).forEach((sl) => slotRow(sl, false)); (c.pact || []).forEach((sl) => slotRow(sl, true));
   renderResources(d, c, el);
+  renderFeatures(d, c, el);
   // the spells, by level
   let lvl = -1;
   for (const sp of c.spells) {
@@ -3117,8 +3199,15 @@ function renderSpells(d, c, el) {
         if (!lands) return sendMsg({ type: 'charCast', ...slotMsg() });
         const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0;
         startAim({ title: `Cast ${sp.name}`, harm, pieces, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly, allowNone: true,
-          send: (ids) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
+          options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : null,
+          send: (ids, amt, option) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
       };
+      // while it lasts, some spells do it again without a new slot: Sunbeam's new line, Bigby's Hand, a creature walking into the web
+      if (sp.cond && sp.cond.again && (!sp.conc || c.concOn === sp.name)) {
+        const again = el('button', '', '↻ Use again'); again.title = 'No new slot: the spell is still going';
+        again.onclick = () => startAim({ title: `${sp.name}, again`, harm, color: harm ? '#ef4444' : '#22c55e', options: sp.cond.options ? sp.cond.options.map((o) => o.name) : null, send: (ids, amt, option) => sendMsg({ type: 'spellEffect', cast: false, targets: ids, option, ...slotMsg() }) });
+        btns.append(again);
+      }
       if (lands) cast.title = 'Spends the slot, then you pick the targets: rolls and hit points are done for you';
       btns.append(cast); if (sel) btns.append(sel);
       if (sp.ritual && sp.level > 0 && !lands) { const r = el('button', '', 'As a ritual'); r.title = 'Takes 10 minutes longer, uses no slot'; r.onclick = () => sendMsg({ type: 'charCast', name: sp.name, free: true, ritual: true }); btns.append(r); }

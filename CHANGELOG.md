@@ -2,6 +2,56 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.16.0] - 2026-11-13
+
+Saving throws, checked against the 2024 Player's Handbook, Dungeon Master's Guide and Monster Manual.
+
+### Added
+- **Every 2024 Player's Handbook spell that puts a condition on a creature** (79 spells) knows how it ends:
+  - **A save at the end of each of its turns:** Hold Person and Hold Monster, Slow, Confusion, Crown of Madness, Ray of Enfeeblement, Synaptic Static, Sunburst, Power Word Stun, Blinding Smite, Wrathful Smite. Phantasmal Killer and Weird also deal their damage again on a failure.
+  - **A save at the start of each of its turns:** Searing Smite burns first, then the save. Conjure Elemental deals its damage on a failure.
+  - **Three successes or three failures:** Contagion lasts 7 days after three failures. Flesh to Stone turns the creature to stone after three failures.
+  - **For a set time:** Color Spray, Staggering Smite, Ray of Sickness and Telekinesis last until the end of the caster's next turn. Sunbeam and Conjure Fey last until the start of it. Command and Stinking Cloud last until the end of the target's next turn.
+  - **Breaking free as an action:** Evard's Black Tentacles, Bigby's Hand and Grasping Vine (Athletics or Acrobatics against the escape DC). Irresistible Dance: repeat the save; a creature that saves still dances until the end of its next turn.
+  - **Picking an option:** Eyebite (Asleep, Panicked, Sickened), Blindness/Deafness, Command, Symbol, Imprisonment, Antipathy/Sympathy, Prismatic Spray and Prismatic Wall.
+  - **Effects by hit points:** Divine Word works by the target's current hit points.
+  - **Concentration:** Earthquake and Sleet Storm break the target's concentration. Haste leaves the target incapacitated until the end of its next turn when it ends. Heroism gives temporary hit points every turn and stops fear.
+  - **Running out:** effects with a duration end after their rounds in combat (1 minute = 10 rounds), and concentration ends at the spell's duration.
+  - **↻ Use again:** for spells that keep working while you concentrate (Sunbeam's new line, Bigby's Hand, a creature walking into the Web). No new slot is spent.
+- **Monster abilities from the stat block.** **🎯 Use on…** next to a monster's attacks and abilities, then click its targets:
+  - The attack roll stays secret; the table hears hit or miss.
+  - Each target makes its save and takes its damage and conditions.
+  - It's read from all 334 SRD monsters (263 abilities): ghoul paralysis with a save each turn, grapples with an escape DC, a mummy's glare (paralyzed too if the save fails by 5 or more), a basilisk's gaze (restrained, then stone), a gelatinous cube's engulf (acid at the start of each of the cube's turns), dragon breath with each breath as an option, Frightful Presence.
+- **Class features and feats that make a creature save**, in **My character**:
+  - Stunning Strike, Open Hand Topple, Cunning Strike (Poison, Trip), Devious Strikes (Daze, Knock Out, Obscure), Rend Mind, Intimidating Presence, Turn Undead, Abjure Foes, Nature's Wrath, Beguiling Magic, Beguiling Twist, Stalker's Flurry, Hurl Through Hell, Menacing Attack, Trip Attack, Telekinetic Thrust, Shield Master and Poisoner.
+  - Grapple and Shove from an Unarmed Strike, for everyone.
+  - Each feature uses its own DC, and spends Focus, Channel Divinity or Superiority Dice if you have them.
+- **The DM can put any effect with a saving throw on a token** (**＋ Effect with a saving throw…** under its conditions):
+  - Dungeon Master's Guide items, poisons and hazards: Wand of Paralysis, Yellow Mold, Carrion Crawler Mucus, Burnt Othur Fumes, Tentacle Rod, Whelm, Mace of Terror, Pipes of Haunting, Gem of Brightness, Rod of Lordly Might, Green Slime, Vicious Vine, Cackle Fever and more.
+  - Any spell a monster casts.
+  - Your own: a condition, the save, how it ends, damage each turn and how long it lasts.
+- **Saving throws follow the 2024 rules**:
+  - Paralyzed, Stunned, Unconscious and Petrified creatures fail Strength and Dexterity saves automatically.
+  - Restrained: Disadvantage on Dexterity saves. Haste gives Advantage on them and Slow takes 2 off.
+  - Bless and Bane add or take off 1d4.
+  - Exhaustion takes 2 off per level (set the level on the token).
+  - Magic Resistance gives Advantage against spells. Holy Aura gives Advantage.
+  - A character's own Advantages come from D&D Beyond (Fey Ancestry, Dwarven Resilience, Gnome Cunning…). War Caster helps concentration saves.
+  - A paladin's Aura of Protection adds to nearby allies' saves, and Aura of Courage stops fear. Evasion applies.
+  - Damage resistances and condition immunities count, for monsters and characters.
+  - No automatic success or failure on a 20 or a 1 for saves.
+- **Legendary Resistance:** when a monster that has it fails a save, the DM gets a button to succeed instead. Any damage it took over half is given back.
+- **Death saving throws:**
+  - A character at 0 hit points rolls one at the start of each turn: three successes and it's stable, three failures and it dies.
+  - A 1 counts as two failures, and a 20 brings it back with 1 hit point.
+  - Damage at 0 is a failed save (a critical hit counts as two), and damage of at least its hit point maximum kills outright.
+  - When Unconscious ends, the creature is left Prone.
+- **What's holding a token** shows under its conditions, with **🎲 Roll the save** and **🪢 Try to break free** buttons.
+- New conditions: Confused, Enfeebled, Muddled, Phantasmal Killer, Dancing, Befuddled, Commanded, Heroism, Holy Aura, Cursed, Dazed, Afflicted.
+
+### Fixed
+- Rows that only the DM sees in the token panel (such as **🎒 Inventory and spells…**) no longer show for tokens they don't apply to.
+
 ## [1.15.0] - 2026-11-13
 
 ### Added
