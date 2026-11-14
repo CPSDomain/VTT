@@ -2,6 +2,16 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.19.1] - 2026-11-14
+
+### Added
+- **Summons in the initiative order**, for the players' summons and the DM's, by the 2024 rules:
+  - **Sharing a turn:** spirits from the Summon spells, Find Steed, Giant Insect and Animate Objects share their caster's initiative and go right after the caster. They show with ↳ under the caster and move with the caster's score.
+  - **Their own roll:** Find Familiar, Animate Dead, Create Undead and Unseen Servant roll their own initiative. A monster's summon rolls secretly, and a player's rolls on the table.
+  - **Joining a fight:** a summon made during a fight joins the order straight away. One already on the map joins when its caster is added to the fight.
+  - **Players' Init button:** **🎲 Init** also rolls the player's summons that roll for themselves.
+  - **Not in the order:** Spiritual Weapon, Bigby's Hand and other spell effects act on the caster's turn, so they stay out of it.
+
 ## [1.19.0] - 2026-11-14
 
 The last gaps from the combat pass: the 2024 monsters, reactions, grapples that drag, summons and teleports on the map.

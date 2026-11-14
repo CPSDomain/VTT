@@ -2164,7 +2164,9 @@ function renderInit() {
     else if (frac != null) { const bar = document.createElement('div'); bar.className = 'minibar'; const f = document.createElement('div'); f.style.width = frac * 100 + '%'; f.style.background = frac > 0.5 ? '#22c55e' : frac > 0.25 ? '#f59e0b' : '#ef4444'; bar.appendChild(f); hp.appendChild(bar); }
     row.appendChild(hp);
     // initiative: editable by the DM, and by a player for their own token
-    if (me.isDM || mine(t)) {
+    const lead = e.after && s.combat.entries.find((x) => x.id === e.after);
+    if (lead) { const ini = document.createElement('span'); ini.className = 'ini'; ini.textContent = '↳'; ini.title = `Shares ${(s.tokens[lead.id] || {}).label || 'its caster'}'s initiative and goes right after`; row.appendChild(ini); }
+    else if (me.isDM || mine(t)) {
       if (e.init == null && (mine(t) || !me.isDM)) { const rb = document.createElement('button'); rb.className = 'rl'; rb.textContent = '🎲'; rb.title = `Roll initiative (1d20${t.initBonus ? (t.initBonus > 0 ? '+' : '') + t.initBonus : ''})`; rb.onclick = (ev) => { ev.stopPropagation(); sendMsg({ type: 'combatRoll', sceneId: editing, tokenIds: [t.id] }); }; row.appendChild(rb); }
       const inp = document.createElement('input'); inp.type = 'number'; inp.value = e.init ?? ''; inp.placeholder = '–'; inp.title = 'Initiative';
       inp.onclick = (ev) => ev.stopPropagation();
@@ -3372,7 +3374,7 @@ function renderChar() {
   box.append(stats);
   const actions = el('div', 'row'), place = el('button', 'primary', '📍 Put my token on the map'); place.title = 'Your token appears in the middle of your view (or is updated if it is already on this map)';
   place.onclick = () => { const s = sc(); if (!s) return; const r = canvas.getBoundingClientRect(); sendMsg({ type: 'charToken', x: Math.floor((r.width / 2 - view.x) / view.zoom / CELL), y: Math.floor((r.height / 2 - view.y) / view.zoom / CELL) }); };
-  const init = el('button', 'fixed', '🎲 Init'); init.title = 'Roll initiative: 1d20' + sgn(c.init); init.onclick = (ev) => { const s = sc(), t = s && Object.values(s.tokens).find((x) => x.ddb === c.link && x.owner && sameName(x.owner, me.name)); if (t && s.combat && s.combat.active && s.combat.entries.some((e) => e.id === t.id)) sendMsg({ type: 'combatRoll', tokenIds: [t.id] }); else rollWith('1d20' + sgn(c.init), 'Initiative', ev); }; // in a fight, it goes on the initiative list
+  const init = el('button', 'fixed', '🎲 Init'); init.title = 'Roll initiative: 1d20' + sgn(c.init); init.onclick = (ev) => { const s = sc(), t = s && Object.values(s.tokens).find((x) => x.ddb === c.link && x.owner && sameName(x.owner, me.name)); if (t && s.combat && s.combat.active && s.combat.entries.some((e) => e.id === t.id)) sendMsg({ type: 'combatRoll', tokenIds: [t.id, ...s.combat.entries.filter((e) => !e.after && e.init == null && s.tokens[e.id] && s.tokens[e.id].sum && s.tokens[e.id].owner === me.name).map((e) => e.id)] }); else rollWith('1d20' + sgn(c.init), 'Initiative', ev); }; // in a fight, it goes on the initiative list
   actions.append(place, init); box.append(actions);
   const section = (title, open, fill) => { const d = el('details'); d.open = title in charOpen ? charOpen[title] : open; d.ontoggle = () => { charOpen[title] = d.open; }; d.append(el('summary', '', title)); fill(d); box.append(d); };
   const rollBtn2 = (label, bonus, what, pro) => { const b = el('button', pro ? 'pro' : ''); b.append(el('span', '', label), el('b', '', sgn(bonus))); b.title = `${what}: 1d20${sgn(bonus)} (Shift: advantage, Alt: disadvantage)`; b.onclick = (ev) => rollWith('1d20' + sgn(bonus), what, ev); return b; };

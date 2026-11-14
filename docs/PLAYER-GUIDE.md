@@ -103,7 +103,7 @@ When the DM shows you a handout (a letter, a picture, a clue), it pops up on you
 - **Actions:** select your token for **🛡 Dodge**, **🏃 Disengage**, **🤝 Help**, **🫥 Hide**, **💨 Dash** and **⏳ Ready**.
 - **Rests:** spend Hit Dice from My character after a **☾ Short rest**.
 - **Reactions:** when a foe leaves your reach, a card asks if you want to make an opportunity attack; when someone nearby casts a spell and you have Counterspell, a card asks if you want to counter it. Click a button or let it time out.
-- **Summons:** creatures you summon appear next to you. Drag them, and attack with them from **Your summons** in My character. Misty Step and Dimension Door ask you to click where you appear.
+- **Summons:** creatures you summon appear next to you. Drag them, and attack with them from **Your summons** in My character. In a fight, most summons go right after you; a familiar or undead rolls its own initiative when you click **🎲 Init**. Misty Step and Dimension Door ask you to click where you appear.
 
 ## Items from the DM
 

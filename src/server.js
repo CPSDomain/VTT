@@ -14,7 +14,7 @@ const FX = require('../public/js/monsterfx.js');
 const SUMS = require('./summons');
 const ddb = require('./ddb');
 
-const VERSION = '1.19.0';
+const VERSION = '1.19.1';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -423,7 +423,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   function sortCombat(sc) {
     const c = combatOf(sc);
     c.entries = c.entries.filter((e) => sc.tokens[e.id]);
-    c.entries.sort((a, b) => (b.init ?? -999) - (a.init ?? -999) || ((sc.tokens[b.id].initBonus || 0) - (sc.tokens[a.id].initBonus || 0)) || sc.tokens[a.id].label.localeCompare(sc.tokens[b.id].label));
+    // summoned spirits share their caster's Initiative and take their turn right after the caster (2024)
+    const lead = c.entries.filter((e) => !(e.after && c.entries.some((x) => x.id === e.after && !x.after))), fol = c.entries.filter((e) => !lead.includes(e));
+    lead.sort((a, b) => (b.init ?? -999) - (a.init ?? -999) || ((sc.tokens[b.id].initBonus || 0) - (sc.tokens[a.id].initBonus || 0)) || sc.tokens[a.id].label.localeCompare(sc.tokens[b.id].label));
+    c.entries = lead.flatMap((e) => [e, ...fol.filter((f) => f.after === e.id).map((f) => { f.init = e.init; return f; })]);
     // until the first Next, the turn stays with whoever is top of the order as initiatives come in
     if (!c.started || (c.turnId && !c.entries.some((e) => e.id === c.turnId))) c.turnId = c.entries[0] ? c.entries[0].id : null;
     if (!c.turnId && c.entries.length) c.turnId = c.entries[0].id;
@@ -1278,6 +1281,17 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     for (let d = 0; d < 12; d++) for (let y = cy - d; y <= cy + d; y++) for (let x = cx - d; x <= cx + d; x++) if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) === d && freeAt(sc, x, y, n, skip)) return [x, y];
     return null;
   }
+  const entryFor = (t) => (t.sum && t.sum.init === 'share' && t.sum.casterId ? { id: t.id, init: null, after: t.sum.casterId } : { id: t.id, init: null });
+  // a summon made during a fight joins the initiative: right after its caster, or with its own roll (a familiar, the undead)
+  function summonToInit(sc, t) {
+    const c = sc.combat; if (!c || !c.active || !t.sum || !t.sum.init || c.entries.some((e) => e.id === t.id)) return;
+    const e = entryFor(t);
+    if (!e.after || !c.entries.some((x) => x.id === e.after)) {
+      delete e.after; const b = t.initBonus || 0, r = rollDice('1d20' + (b ? sgnS(b) : '')); e.init = r.total;
+      const mine = !!t.owner; post({ who: mine ? t.owner : 'DM', label: str(`${t.label} · Initiative`, 30), expr: r.expr || '1d20' + (b ? sgnS(b) : ''), ...r, private: !mine, ...(mine ? {} : { to: ['DM'] }), time: Date.now(), skin: mine ? skinOf(t.owner) : null });
+    }
+    c.entries.push(e); sortCombat(sc); sendCombat(sc);
+  }
   // a spell that puts creatures or things on the map: next to the caster, owned by the caster's player (who moves them)
   function summonFrom(sc, sp, cast, ctx) {
     const S = SUMS.SUMMONS[sp.name.toLowerCase().replace(/[’]/g, "'")], caster = cast.caster; if (!S || !caster) return;
@@ -1292,8 +1306,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       const id = uid(), atk = cast.atk != null ? cast.atk : 5;
       const attacks = mon ? [] : (f.attacks || []).map((a) => ({ name: a.name, dice: a.dice(L, mod), type: a.type, melee: !!a.melee, reach: a.reach || 5, range: a.range || 0, extra: a.extra || null }));
       sc.tokens[id] = { id, ...tokenFields({ label: label.slice(0, 24), icon: mon ? mon.token.icon : S.icon || 'ghost', color: mon ? mon.token.color : S.color || '#7dd3fc', size, owner, x: at[0], y: at[1], hp, maxHp: hp, ac: mon ? mon.ac : S.object ? null : (f.ac || S.ac || (() => 10))(L, mod), srd: mon ? mon.id : null, light: S.light || undefined }, sc) };
-      sc.tokens[id].sum = { by: ctx.by, spell: sp.name, conc: !!sp.conc && !S.keep, keep: !!S.keep, owner, attack: atk, attacks, multi: S.multi ? Math.max(1, S.multi(L)) : 1 };
-      tokenChanged(sc, sc.tokens[id], null); made.push(sc.tokens[id]);
+      sc.tokens[id].initBonus = mon ? mon.token.init : caster.initBonus || 0;
+      sc.tokens[id].sum = { casterId: caster.id, init: S.init || null, by: ctx.by, spell: sp.name, conc: !!sp.conc && !S.keep, keep: !!S.keep, owner, attack: atk, attacks, multi: S.multi ? Math.max(1, S.multi(L)) : 1 };
+      tokenChanged(sc, sc.tokens[id], null); made.push(sc.tokens[id]); summonToInit(sc, sc.tokens[id]);
       if (S.zone) startPackZone(sc, sp, sc.tokens[id], S.zone, f, L, cast, ctx);
     }
     if (made.length) ctx.lines.push(`✨ ${made.length > 1 ? made.length + ' × ' + made[0].label.replace(/ \d+$/, '') : made[0].label} appear${made.length > 1 ? '' : 's'} next to ${caster.label || '?'}${owner ? ' (drag to move; its attacks are under My character)' : ''}${made[0].sum.attacks.length && made[0].sum.multi > 1 ? ` · ${made[0].sum.multi} attacks a turn` : ''}`);
@@ -1905,7 +1920,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (msg.type === 'combatStart' && !c.active) Object.assign(c, { active: true, round: 1, turnId: null, started: false, entries: [] });
         c.active = true;
         const ids = Array.isArray(msg.ids) ? msg.ids : [];
-        for (const id of ids.slice(0, 200)) if (sc.tokens[id] && !c.entries.some((e) => e.id === id)) c.entries.push({ id, init: null });
+        for (const id of ids.slice(0, 200)) if (sc.tokens[id] && !c.entries.some((e) => e.id === id)) c.entries.push(entryFor(sc.tokens[id]));
+        // a summon whose caster joins the fight comes with it
+        for (const t of Object.values(sc.tokens)) if (t.sum && t.sum.init && ids.includes(t.sum.casterId) && !c.entries.some((e) => e.id === t.id)) c.entries.push(entryFor(t));
         sortCombat(sc); sendCombat(sc); save();
         break;
       }
@@ -1929,6 +1946,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         else if (Array.isArray(msg.tokenIds)) list = list.filter((e) => msg.tokenIds.includes(e.id));
         if (!u.isDM) list = list.filter((e) => sc.tokens[e.id].owner === u.name);
         if (msg.onlyUnrolled) list = list.filter((e) => e.init == null);
+        list = list.filter((e) => !(e.after && c.entries.some((x) => x.id === e.after))); // they go with their caster
         for (const e of list.slice(0, 100)) {
           const t = sc.tokens[e.id], b = t.initBonus || 0, surprised = (t.conditions || []).includes('surprised');
           const r = rollDice('1d20' + (b ? (b > 0 ? '+' : '') + b : '') + (surprised ? 'dis' : '')); // 2024: surprised rolls initiative with Disadvantage
