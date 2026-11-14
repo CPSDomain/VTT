@@ -130,6 +130,32 @@
     }
     return out;
   }
-  const api = { parse, traits, condsIn, spellcasting };
+  // limits on an action: Recharge 5–6, 3/Day, a legendary action's cost; and what a Multiattack is made of
+  const NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  function meta(a, m) {
+    const n = String(a.n || ''), d = String(a.d || ''), out = {};
+    let x;
+    if (a.recharge) out.recharge = a.recharge; if (a.perDay) out.perDay = a.perDay; if (a.rest) out.rest = true;
+    if ((x = /Recharge (\d)(?:[–-](\d))?/i.exec(n))) out.recharge = +x[1];
+    if (/Recharges after a (?:Short or )?Long Rest/i.test(n)) out.rest = true;
+    if ((x = /\((\d+)\/Day/i.exec(n))) out.perDay = +x[1];
+    if ((x = /Costs (\d+) Actions/i.exec(n))) out.cost = +x[1];
+    if (/^Multiattack/i.test(n) && Array.isArray(a.ma)) out.multi = a.ma.filter((y) => (m.actions || []).some((z) => z.n.replace(/\s*\(.*?\)\s*$/, '') === y.name && (/to hit|saving throw/i.test(z.d))));
+    else if (/^Multiattack/i.test(n)) {
+      const names = [...(m.actions || [])].map((y) => y.n.replace(/\s*\(.*?\)\s*$/, '')).filter((y) => !/^Multiattack/i.test(y));
+      const list = [];
+      for (const part of d.split(/[:,;]| and /)) for (const nm of names) {
+        const re = new RegExp('(one|two|three|four|\\d+) (?:attacks? )?with (?:its |his |her )?' + nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + 's?\\b', 'i'), y = re.exec(part);
+        if (y) list.push({ name: nm, n: NUM[y[1].toLowerCase()] || +y[1] || 1 });
+      }
+      if (!list.length) { const y = /makes (one|two|three|four) (?:melee |ranged )?attacks/i.exec(d); const atk = (m.actions || []).find((z) => /to hit/i.test(z.d)); if (y && atk) list.push({ name: atk.n.replace(/\s*\(.*?\)\s*$/, ''), n: NUM[y[1].toLowerCase()] }); }
+      out.multi = list;
+    }
+    const reach = /reach (\d+) ft/i.exec(d); if (reach) out.reach = +reach[1];
+    const range = /range (\d+)\/(\d+) ft/i.exec(d); if (range) out.range = { normal: +range[1], long: +range[2] };
+    return out;
+  }
+  const legendaryCount = (m) => { const x = /can take (\d+) legendary actions/i.exec(JSON.stringify(m.legendary || []) + JSON.stringify(m.traits || [])); return x ? +x[1] : (m.legendary || []).length ? 3 : 0; };
+  const api = { parse, traits, condsIn, spellcasting, meta, legendaryCount };
   if (typeof module === 'object' && module.exports) module.exports = api; else globalThis.monsterFx = api;
 })();

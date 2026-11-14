@@ -136,7 +136,11 @@ const CONDITIONS = [
   ['haunted', 'Phantasmal Killer', 'haunting', '#4338ca'], ['dancing', 'Dancing', 'swirl-string', '#db2777'], ['befuddled', 'Befuddled', 'brain', '#9333ea'],
   ['commanded', 'Commanded', 'tied-scroll', '#a16207'], ['heroism', 'Heroism', 'muscle-up', '#ea580c'], ['holyaura', 'Holy Aura', 'holy-symbol', '#facc15'],
   ['cursed', 'Cursed', 'death-skull', '#581c87'], ['dazed', 'Dazed', 'magic-swirl', '#0e7490'], ['afflicted', 'Afflicted', 'bandaged', '#65a30d'],
-  ['warded', 'Spell protection', 'checked-shield', '#0284c7'], ['glowing', 'Guiding Bolt', 'sun', '#fbbf24'], ['transformed', 'Transformed', 'wolf-howl', '#15803d'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
+  ['warded', 'Spell protection', 'checked-shield', '#0284c7'], ['glowing', 'Guiding Bolt', 'sun', '#fbbf24'], ['transformed', 'Transformed', 'wolf-howl', '#15803d'],
+  ['dodging', 'Dodging', 'dodging', '#0891b2'], ['disengaged', 'Disengaged', 'run', '#4d7c0f'], ['distracted', 'Helped against (next attack has Advantage)', 'hand', '#ca8a04'],
+  ['sapped', 'Sapped (Disadvantage on its next attack)', 'broken-shield', '#78350f'], ['vexed', 'Vexed (Advantage on the next attack against it)', 'targeted', '#be123c'], ['hobbled', 'Slowed by a weapon (-10 ft)', 'snail', '#0e7490'],
+  ['cover-half', 'Half cover (+2 AC and Dex saves)', 'stone-wall', '#57534e'], ['cover-3q', 'Three-quarters cover (+5 AC and Dex saves)', 'stone-tower', '#44403c'],
+  ['mirrored', 'Mirror Image', 'mirror-mirror', '#7c3aed'], ['surprised', 'Surprised (Disadvantage on initiative)', 'surprised', '#f59e0b'], ['blinking', 'Blink (in the Ethereal Plane)', 'teleport', '#6d28d9'], ['hidden', 'Hidden', 'hood', '#1f2937'], ['dead', 'Dead', 'skull-crossed-bones', '#111827']
 ];
 
 const icons = {}, library = [], missing = [];

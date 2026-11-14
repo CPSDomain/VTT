@@ -50,6 +50,9 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Players paste their D&D Beyond link and get their portrait, hit points, AC and every roll on their sheet as a button
 - They place their own token on the map; the DM sees its AC and passive Perception
 - Every 2024 spell, weapon attacks and class features land on the chosen tokens straight away: attacks against AC with Advantage and Disadvantage, saves against the DC, damage, healing, conditions and how they end, concentration, death saves. Monsters cast the spells on their stat blocks too
+- Spell areas like Spirit Guardians and Spike Growth hit creatures that move into them; Dodge, Disengage, Help, Hide, opportunity attack alerts, cover, Weapon Mastery, Multiattack, recharge and legendary actions follow the 2024 rules
+- The DM makes magic weapons, armour, potions, scrolls, wands and wondrous items and gives them to players, who use them in combat
+- Round portrait tokens from any picture, with a frame
 
 **Map building**
 - **Describe it, and it's generated:** type *"snowy fishing village on the coast with a lighthouse"* or *"kobold mine with a dragon's lair"* and the generator picks the settings, which you can adjust. Villages (green, snowy, desert or swamp; river, lake or coast; walled towns, hamlets, ruins), dungeons (stone halls, caves, crypts, mines, sewers, temples, lava forges, flooded halls), wilderness (forests, swamps, river crossings, mountain passes, oases, coastlines) and building interiors (taverns, temples, manors, shops, guardhouses, wizard towers). Seeds let you make the same map again.

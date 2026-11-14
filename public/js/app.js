@@ -2,7 +2,7 @@ import { CELL, TERRAINS, PROPS, PROP_CATS, DM_ONLY, texture, drawProp, swatch } 
 import { generate, SCHEMA, defaults } from './generate.js';
 import { interpret, EXAMPLES } from './prompt.js';
 import { readMapTool, layout as mapToolLayout, inArea as inMapToolArea } from './maptool.js';
-import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb } from './tokens.js';
+import { drawTokenArt, thumb, builtins, credit, whenArtLoads, conditions, drawCondition, conditionThumb, FRAME_NAMES } from './tokens.js';
 import { createSound } from './audio.js';
 import { createWeather, TINT, MATCH } from './weather.js';
 import { createLighting } from './lighting.js';
@@ -57,6 +57,7 @@ function onMessage(msg) {
       audioLib = st.audio || []; soundNow = st.sound || { music: null, amb: [] }; snd.apply(soundNow, st.now); renderSound();
       encounters = st.encounters || [];
       effectLists = st.effects || null; buildFxForm();
+      myItems = st.inventory || []; dmItems = st.items || {}; dmInv = st.inventories || {}; renderItemList();
       if (me.isDM) dmChars = st.characters || {};
       if (me.isDM) loadMonsters().then(() => renderEditor()).catch(() => {});
       setTimeout(renderChatTargets, 0);
@@ -131,6 +132,11 @@ function onMessage(msg) {
       break;
     case 'propRemove': if (s) delete s.props[msg.propId]; break;
     case 'template': if (s) { const old = (s.templates = s.templates || {})[msg.tpl.id]; s.templates[msg.tpl.id] = msg.tpl; if (msg.tpl.fx && (msg.tpl.cast || 0) > ((old && old.cast) || 0) && msg.sceneId === editing) castSpell(s, msg.tpl); } break;
+    case 'inventory': myItems = msg.items || []; renderChar(); break;
+    case 'items': dmItems = msg.items || {}; renderItemList(); break;
+    case 'inventories': dmInv = msg.inventories || {}; renderItemList(); break;
+    case 'zones': if (s) { s.zones = msg.zones || {}; draw(); } break;
+    case 'sceneFlags': if (s) { s.underwater = msg.underwater; s.flanking = msg.flanking; if (msg.sceneId === editing) { $('optWater').checked = !!msg.underwater; $('optFlank').checked = !!msg.flanking; } } break;
     case 'templateRemove': if (s && s.templates) { msg.ids.forEach((id) => delete s.templates[id]); if (msg.ids.includes(selTpl)) selTpl = null; } break;
     case 'label': if (s) { (s.labels = s.labels || {})[msg.label.id] = msg.label; } break;
     case 'labelRemove': if (s && s.labels) { delete s.labels[msg.id]; if (labelEdit && labelEdit.id === msg.id) closeLabelEditor(); } break;
@@ -666,6 +672,7 @@ function render() {
   drawVision(s);
   drawFog(s);
   drawTemplates(s);
+  drawZones(s);
   drawLabels(s);
 
   // tokens (hidden ones only ever reach the DM, drawn faded)
@@ -746,7 +753,7 @@ function render() {
   drawToolPreview(s);
   weather.update();
   // fire flickers and water moves: keep drawing, about 30 times a second, while there's some in view
-  if (!animTimer && ((aim && aim.ids.size) || efx.active() || (s.atmo && s.atmo.mood && s.atmo.mood !== 'none' && moving) || (lit && moving && mode !== 'build' && life.active(s, (s.atmo && s.atmo.time) || 'day', amb && !lighting.isDay(amb))) || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
+  if (!animTimer && ((aim && aim.ids.size) || Object.values(s.zones || {}).some((z) => z.follow) || efx.active() || (s.atmo && s.atmo.mood && s.atmo.mood !== 'none' && moving) || (lit && moving && mode !== 'build' && life.active(s, (s.atmo && s.atmo.time) || 'day', amb && !lighting.isDay(amb))) || (moving && (lighting.animating(s, cells) || Object.values(s.tokens).some((t) => (t.conditions || []).some((c) => LIVE_CONDITIONS.has(c))))))) animTimer = setTimeout(tick, 33);
 }
 
 function drawSelection(s) {
@@ -1223,12 +1230,19 @@ function showStatBlock(m, src = null) {
           box.append(row); }
         p.after(box); } }
     const P = globalThis.monsterFx && globalThis.monsterFx.parse(it.d, m.name, kind);
-    if (me.isDM && src && P && (P.attack != null ? P.hit.length || P.variants.length : P.variants.length) && kind !== 'traits') {
+    const MT = globalThis.monsterFx && globalThis.monsterFx.meta(it, m), tok0 = src && sc().tokens[src], short = it.n.replace(/\s*\(.*?\)\s*$/, '');
+    if (me.isDM && tok0 && MT) { // how often: Recharge, X/Day, legendary cost
+      const used = (tok0.uses || {})[short], tag = MT.recharge ? (used === 'spent' ? ` ⏳ recharging (${MT.recharge}–6)` : ` ✔ ready (Recharge ${MT.recharge}–6)`) : MT.rest ? (used === 'spent' ? ' ⏳ used until a rest' : '') : MT.perDay ? ` (${MT.perDay - (used || 0)}/${MT.perDay} left today)` : MT.cost ? ` (costs ${MT.cost})` : '';
+      if (tag) p.appendChild(Object.assign(document.createElement('small'), { className: 'sbtag', textContent: tag }));
+    }
+    if (me.isDM && src && P && ((P.attack != null ? P.hit.length || P.variants.length : P.variants.length) || (MT && MT.multi && MT.multi.length)) && kind !== 'traits') {
       const b = document.createElement('button'); b.className = 'sbuse'; b.textContent = '🎯 Use on…'; b.title = P.variants.map((v) => `${v.name}${v.save ? ` (${v.save.abl} DC ${v.save.dc})` : ''}`).join(' · ') || 'Attack';
       b.onclick = () => { $('statModal').hidden = true; startAim({ title: `${(sc().tokens[src] || {}).label || m.name}: ${it.n}`, harm: true, color: '#ef4444', options: P.variants.length > 1 ? P.variants.map((v) => v.name) : null, send: (ids, amt, variant) => sendMsg({ type: 'monsterEffect', sceneId: editing, src, kind, idx, variant, targets: ids }) }); };
       p.appendChild(b);
     } } };
-  section(null, m.traits, 'traits'); section('Actions', m.actions, 'actions'); section('Reactions', m.reactions, 'reactions'); section('Legendary Actions', m.legendary, 'legendary');
+  section(null, m.traits, 'traits'); section('Actions', m.actions, 'actions'); section('Reactions', m.reactions, 'reactions');
+  const tk = src && sc().tokens[src], lc = globalThis.monsterFx ? globalThis.monsterFx.legendaryCount(m) : 0;
+  section((m.legendary || []).length ? `Legendary Actions${tk && lc ? ` (${tk.legLeft != null ? tk.legLeft : lc} of ${lc} left this round)` : ''}` : 'Legendary Actions', m.legendary, 'legendary');
   const c = el('p', 'hint'); c.textContent = 'From the SRD 5.1 by Wizards of the Coast, CC BY 4.0.';
   $('statModal').hidden = false;
 }
@@ -1512,6 +1526,18 @@ function tplContains(t, px, py) {
   if (t.shape === 'cone') return perp <= along / 2 + e;
   if (t.shape === 'line') return perp <= (t.width || 5) / 10 + e;
   return perp <= L(t) / 2 + e; // cube
+}
+// areas that keep working (Spirit Guardians around its caster, Moonbeam on its template): a soft glow and their name
+function drawZones(s) {
+  for (const z of Object.values(s.zones || {})) {
+    let cx, cy, r;
+    if (z.follow) { const c = s.tokens[z.follow]; if (!c) continue; cx = (c.x + c.size / 2) * CELL; cy = (c.y + c.size / 2) * CELL; r = (z.radius / 5 + c.size / 2) * CELL; }
+    else { const t = (s.templates || {})[z.tpl]; if (!t) continue; cx = t.x * CELL; cy = t.y * CELL; r = 0; }
+    ctx.save();
+    if (r) { const g = ctx.createRadialGradient(cx, cy, r * 0.6, cx, cy, r); g.addColorStop(0, 'rgba(250,220,120,0.05)'); g.addColorStop(1, 'rgba(250,220,120,0.22)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill(); ctx.setLineDash([8 / view.zoom, 6 / view.zoom]); ctx.lineDashOffset = -performance.now() / 80; ctx.strokeStyle = 'rgba(250,220,120,.8)'; ctx.lineWidth = 2 / view.zoom; ctx.stroke(); }
+    ctx.font = `700 ${12 / view.zoom}px system-ui`; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,240,200,.95)'; ctx.fillText('🌀 ' + z.spell, cx, cy - (r || CELL) - 6 / view.zoom);
+    ctx.restore();
+  }
 }
 // squares whose centre is inside the template: the ones the spell hits
 function tplCells(s, t) {
@@ -1906,7 +1932,48 @@ function renderEditor() {
   const on = new Set(t.conditions || []);
   $('eConds').querySelectorAll('button').forEach((b) => b.classList.toggle('on', on.has(b.dataset.id)));
   renderMarks(t);
+  const mine2 = me.isDM || (t.owner && t.owner === me.name);
+  $('eActs').hidden = !mine2;
+  // a portrait: frame, zoom and where the picture sits in the circle
+  $('ePortrait').hidden = !mine2;
+  if (!$('eFrame').options.length) $('eFrame').innerHTML = Object.entries(FRAME_NAMES).map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+  $('eFrame').value = t.frame || ''; if (!portDrag) $('eZoom').value = (t.imgPos && t.imgPos.z) || 1;
+  drawPort(t);
+  $('eDying').hidden = !(t.owner && t.hp === 0 && !(t.conditions || []).includes('dead') && !(t.death && t.death.stable));
+  $('eSurp').checked = (t.conditions || []).includes('surprised');
 }
+let portDrag = null;
+function drawPort(t, pos) {
+  const c = $('ePort'), g = c.getContext('2d'); g.clearRect(0, 0, c.width, c.height);
+  const tt = pos ? { ...t, imgPos: pos } : t; drawTokenArt(g, tt, 60, 60, 54, () => drawPort(t, pos));
+  if (!t.img) { g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(8, 48, 104, 24); g.fillStyle = '#fff'; g.font = '11px system-ui'; g.textAlign = 'center'; g.fillText('Change art for a picture', 60, 64); }
+}
+const curPos = (t) => ({ x: 0, y: 0, z: 1, ...(t.imgPos || {}) });
+$('ePort').onpointerdown = (e) => { const t = sc() && sc().tokens[selected]; if (!t || !t.img) return; $('ePort').setPointerCapture(e.pointerId); portDrag = { sx: e.clientX, sy: e.clientY, p: curPos(t) }; };
+$('ePort').onpointermove = (e) => { if (!portDrag) return; const t = sc() && sc().tokens[selected]; if (!t) return; const k = 1 / 44; portDrag.now = { ...portDrag.p, x: Math.max(-1, Math.min(1, portDrag.p.x - (e.clientX - portDrag.sx) * k)), y: Math.max(-1, Math.min(1, portDrag.p.y - (e.clientY - portDrag.sy) * k)) }; drawPort(t, portDrag.now); };
+$('ePort').onpointerup = () => { if (portDrag && portDrag.now) updateSelected({ imgPos: portDrag.now }); portDrag = null; };
+$('eZoom').oninput = () => { const t = sc() && sc().tokens[selected]; if (t) drawPort(t, { ...curPos(t), z: +$('eZoom').value }); };
+$('eZoom').onchange = () => { const t = sc() && sc().tokens[selected]; if (t) updateSelected({ imgPos: { ...curPos(t), z: +$('eZoom').value } }); };
+$('eFrame').onchange = () => updateSelected({ frame: $('eFrame').value });
+$('ePortReset').onclick = () => updateSelected({ imgPos: null });
+// any picture as the token: kept square-ish and small (512 px) so it travels to every screen quickly
+$('ePic').onchange = () => {
+  const f = $('ePic').files[0]; $('ePic').value = ''; const t = sc() && sc().tokens[selected]; if (!f || !t) return;
+  const url = URL.createObjectURL(f), img = new Image();
+  img.onload = () => { const n = 512, k = Math.min(1, n / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); sendMsg({ type: 'tokenPicture', sceneId: editing, id: t.id, img: c.toDataURL('image/jpeg', 0.88) }); toast('Picture sent'); };
+  img.onerror = () => toast('That picture could not be read'); img.src = url;
+};
+document.querySelectorAll('#eActs button').forEach((b) => b.onclick = () => {
+  const t = sc() && sc().tokens[selected]; if (!t) return;
+  if (b.dataset.act === 'help') return startAim({ title: `${t.label}: Help against which foe?`, one: true, harm: true, color: '#facc15', send: (ids) => ids[0] && sendMsg({ type: 'combatAction', sceneId: editing, id: t.id, action: 'help', target: ids[0] }) });
+  sendMsg({ type: 'combatAction', sceneId: editing, id: t.id, action: b.dataset.act });
+});
+$('eStab').onclick = () => { const t = sc() && sc().tokens[selected]; if (t) sendMsg({ type: 'stabilize', sceneId: editing, id: t.id }); };
+$('eFall').onclick = () => { const t = sc() && sc().tokens[selected]; if (t) sendMsg({ type: 'hazard', sceneId: editing, id: t.id, kind: 'fall', feet: +$('eFallFt').value || 10 }); };
+$('eSurp').onchange = () => { const t = sc() && sc().tokens[selected]; if (!t) return; const set = new Set(t.conditions || []); $('eSurp').checked ? set.add('surprised') : set.delete('surprised'); updateSelected({ conditions: [...set] }); };
+$('optWater').onchange = () => sendMsg({ type: 'sceneFlags', sceneId: editing, underwater: $('optWater').checked });
+$('optFlank').onchange = () => sendMsg({ type: 'sceneFlags', sceneId: editing, flanking: $('optFlank').checked });
+$('monRest').onclick = () => sendMsg({ type: 'monsterRest', sceneId: editing });
 // what holds this token and how each thing ends (2024 rules), with a button to roll the save or break free now;
 // a monster's Legendary Resistance; a character's death saves; and for the DM, putting an effect with a save on it
 const ABLN = { STR: 'Strength', DEX: 'Dexterity', CON: 'Constitution', INT: 'Intelligence', WIS: 'Wisdom', CHA: 'Charisma' };
@@ -1967,7 +2034,8 @@ async function dmCast(name, o = {}) {
   const info = (effectLists && effectLists.info && effectLists.info[e.name.toLowerCase()]) || {}, lv = Math.max(e.level, o.level || e.level);
   const pieces = info.multi ? info.multi.n + (e.level > 0 ? info.multi.up * (lv - e.level) : 0) : 0;
   const opts = info.options || (info.types ? info.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null);
-  startAim({ title: `${o.who ? o.who + ': ' : ''}${e.name}${lv > e.level ? ` at ${ORD(lv)} level` : ''}${o.dc ? ` (DC ${o.dc})` : ''}`, harm: !info.ally, color: info.ally ? '#22c55e' : '#a855f7', pieces, word: info.multi && info.multi.word, options: opts, allowNone: !info.lands,
+  const max = info.targets ? info.targets.n + (info.targets.up || 0) * (lv - e.level) : 0;
+  startAim({ title: `${o.who ? o.who + ': ' : ''}${e.name}${lv > e.level ? ` at ${ORD(lv)} level` : ''}${o.dc ? ` (DC ${o.dc})` : ''}`, harm: !info.ally, color: info.ally ? '#22c55e' : '#a855f7', pieces, max, word: info.multi && info.multi.word, options: opts, allowNone: !info.lands,
     send: (ids, amt, option) => sendMsg({ type: 'dmSpell', sceneId: editing, spell: e.name, src: o.src || null, level: lv, dc: o.dc, attack: o.attack, targets: ids, option, dmgType: option, again: !!o.again }) });
   if (info.self && o.src) { aim.ids.add(o.src); aimBar(); draw(); }
 }
@@ -2204,7 +2272,7 @@ canvas.addEventListener('pointerdown', (e) => {
       else if (e.shiftKey) { if (n > 1) aim.count.set(t.id, n - 1); else { aim.count.delete(t.id); aim.ids.delete(t.id); } }
       else { aim.count.set(t.id, n + 1); aim.ids.add(t.id); }
       aimBar(); draw();
-    } else if (t) { if (aim.ids.has(t.id)) aim.ids.delete(t.id); else { if (aim.one) aim.ids.clear(); aim.ids.add(t.id); } aimBar(); draw(); }
+    } else if (t) { if (aim.ids.has(t.id)) aim.ids.delete(t.id); else { if (aim.one) aim.ids.clear(); if (aim.max && aim.ids.size >= aim.max) return toast(`${aim.max} target${aim.max === 1 ? '' : 's'} at most at this level`); aim.ids.add(t.id); } aimBar(); draw(); }
     return;
   }
 
@@ -3137,7 +3205,7 @@ function aimBar() {
   const bar = $('aimBar'); bar.hidden = !aim; if (!aim) return;
   $('aimTitle').textContent = aim.title;
   const used = [...aim.count.values()].reduce((a, b) => a + b, 0);
-  $('aimCount').textContent = aim.pieces ? `${used} of ${aim.pieces} ${aim.word}s placed · Shift+click takes one back` : aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
+  $('aimCount').textContent = aim.max && !aim.pieces && aim.ids.size ? `${aim.ids.size} of ${aim.max} chosen` : aim.pieces ? `${used} of ${aim.pieces} ${aim.word}s placed · Shift+click takes one back` : aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
   $('aimArea').hidden = !!aim.one || !!aim.pieces;
   $('aimAmt').hidden = !aim.amount; if (aim.amount && !$('aimAmt').value) $('aimAmt').value = aim.amount;
   $('aimAmt').max = aim.amount || '';
@@ -3190,6 +3258,8 @@ function renderSpells(d, c, el) {
   const longR = el('button', '', '⛺ Long rest'); longR.title = 'All spell slots and hit points come back; concentration ends';
   longR.onclick = () => { if (longR.dataset.armed) return sendMsg({ type: 'charRest', kind: 'long' }); longR.dataset.armed = 1; longR.textContent = 'Sure? Click again'; setTimeout(() => { delete longR.dataset.armed; longR.textContent = '⛺ Long rest'; }, 3000); };
   rests.append(shortR, longR); d.append(rests);
+  // Hit Dice to spend on a short rest
+  if ((c.hitDice || []).length) { const hr = el('div', 'row'); for (const hd of c.hitDice) { const b = el('button', '', `🎲 Hit Die d${hd.die} (${hd.max - hd.used}/${hd.max})`); b.disabled = hd.used >= hd.max; b.title = 'Spend one on a short rest: the die plus your Constitution back'; b.onclick = () => sendMsg({ type: 'hitDie', die: hd.die }); hr.append(b); } d.append(hr); }
   // slots: a pip per slot, click to tick one off or back
   const slotRow = (sl, pact) => {
     const row = el('div', 'slots'); row.append(el('span', 'sl', (pact ? 'Pact ' : '') + ORD(sl.level)));
@@ -3224,9 +3294,11 @@ function renderSpells(d, c, el) {
       const slotMsg = () => { const o = sel ? sel.value : options[0] && options[0].v; return { name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }; };
       const harm = ((sp.dice && !sp.heal && !sp.temp) || !!sp.multi || !!(sp.cond && !sp.cond.ally)) && !(sp.cond && sp.cond.ally);
       cast.onclick = () => {
+        // True Strike: a weapon attack with your spellcasting ability, Radiant damage
+        if (/^true strike$/i.test(sp.name)) { const ws = (c.attacks || []).filter((a) => a.damage); if (!ws.length) return toast('No weapon to strike with'); return startAim({ title: 'True Strike: pick the weapon, click the target', harm: true, one: true, color: '#facc15', options: ws.map((a) => a.name), send: (ids, amt, option) => ids[0] && sendMsg({ type: 'attackEffect', name: ws[option || 0].name, target: ids[0], trueStrike: true, radiant: true }) }); }
         if (!lands) return sendMsg({ type: 'charCast', ...slotMsg() });
-        const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0;
-        startAim({ title: `Cast ${sp.name}`, harm, pieces, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly || (sp.cond && sp.cond.self), allowNone: true,
+        const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0, max = sp.targets && !sp.multi ? sp.targets.n + (sp.targets.up || 0) * (lv - sp.level) : 0;
+        startAim({ title: `Cast ${sp.name}`, harm, pieces, max, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly || (sp.cond && sp.cond.self), allowNone: true,
           options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : sp.types ? sp.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null,
           send: (ids, amt, option) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, option, dmgType: option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
       };
@@ -3284,12 +3356,13 @@ function renderChar() {
   const section = (title, open, fill) => { const d = el('details'); d.open = title in charOpen ? charOpen[title] : open; d.ontoggle = () => { charOpen[title] = d.open; }; d.append(el('summary', '', title)); fill(d); box.append(d); };
   const rollBtn2 = (label, bonus, what, pro) => { const b = el('button', pro ? 'pro' : ''); b.append(el('span', '', label), el('b', '', sgn(bonus))); b.title = `${what}: 1d20${sgn(bonus)} (Shift: advantage, Alt: disadvantage)`; b.onclick = (ev) => rollWith('1d20' + sgn(bonus), what, ev); return b; };
   if (c.attacks.length) section('Attacks', true, (d) => { for (const a of c.attacks) { const row = el('div', 'atk'); row.append(el('span', '', a.name + (a.dc ? ` (save DC ${a.dc})` : ''))); const h = el('button', '', 'Hit ' + a.hit.replace('1d20', '')); h.onclick = (ev) => rollWith(a.hit, a.name.slice(0, 22) + ' hit', ev); row.append(h);
-      if (a.damage) { const tg = el('button', '', '🎯'); tg.title = 'Attack a token: Advantage, AC, damage and Hex or Hunter\'s Mark done for you'; tg.onclick = () => startAim({ title: `${a.name}: click the target`, harm: true, one: true, color: '#ef4444', send: (ids) => ids[0] && sendMsg({ type: 'attackEffect', name: a.name, target: ids[0] }) }); row.append(tg); } if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
+      if (a.damage) { const tg = el('button', '', '🎯'); tg.title = 'Attack a token: Advantage, AC, damage and Hex or Hunter\'s Mark done for you'; tg.onclick = () => startAim({ title: `${a.name}: click the target`, harm: true, one: true, color: '#ef4444', options: ['Attack', 'Attack: knock it out if it drops'], send: (ids, amt, option) => ids[0] && sendMsg({ type: 'attackEffect', name: a.name, target: ids[0], knockout: option === 1 }) }); row.append(tg); } if (a.damage) { const g = el('button', '', a.damage); g.title = 'Damage' + (a.type ? ' (' + a.type + ')' : ''); g.onclick = () => rollWith(a.damage, a.name.slice(0, 20) + ' damage'); row.append(g); } else row.append(el('span')); d.append(row); } });
   section('Ability checks', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.abilities) g.append(rollBtn2(a.name, a.mod, a.name + ' check')); d.append(g); });
   section('Saving throws', false, (d) => { const g = el('div', 'rolls six'); for (const a of c.saves) g.append(rollBtn2(a.name, a.bonus, a.name + ' save', a.bonus !== (c.abilities.find((x) => x.name === a.name) || {}).mod)); d.append(g); });
   section('Skills', false, (d) => { const g = el('div', 'rolls'); for (const k of c.skills) g.append(rollBtn2(k.name, k.bonus, k.name, k.prof > 0)); d.append(g); });
   if ((c.spells || []).length) section('Spells', true, (d) => renderSpells(d, c, el));
   fillGear(box, c, section, false, true);
+  if (myItems.length) section('From the DM', true, (d) => renderMyItems(d, el));
   const foot = el('div', 'row'); foot.style.marginTop = '8px';
   const refresh = el('button', '', charBusy ? 'Reading…' : '↻ Update from D&D Beyond'); refresh.disabled = charBusy; refresh.title = 'After levelling up or changing gear. Your token on this map is updated too when you click Put my token on the map.';
   refresh.onclick = () => { charBusy = true; renderChar(); sendMsg({ type: 'ddbImport', link: c.link }); };
@@ -3297,6 +3370,80 @@ function renderChar() {
   forget.onclick = () => { if (forget.dataset.armed) return sendMsg({ type: 'charForget' }); forget.dataset.armed = 1; forget.textContent = 'Sure?'; setTimeout(() => { delete forget.dataset.armed; forget.textContent = '✕'; }, 3000); };
   foot.append(refresh, forget); box.append(foot);
 }
+// ---------- 1.18: items the DM made, in the player's panel ----------
+let myItems = [], dmItems = {}, dmInv = {}, itemEdit = null;
+function itemLine(it) {
+  if (it.kind === 'weapon' && it.weapon) return `${it.weapon.dice}${it.weapon.bonus ? ' +' + it.weapon.bonus : ''} ${it.weapon.type}${it.weapon.extra ? ` + ${it.weapon.extra.dice} ${it.weapon.extra.type}` : ''}${it.weapon.range ? ' · range ' + it.weapon.range : ''}`;
+  if ((it.kind === 'armor' || it.kind === 'shield') && it.armor) return it.kind === 'shield' ? `+${it.armor.base + it.armor.bonus} AC` : `AC ${it.armor.base}${it.armor.dexMax === 0 ? '' : it.armor.dexMax != null && it.armor.dexMax < 99 ? ` + Dex (max ${it.armor.dexMax})` : ' + Dex'}${it.armor.bonus ? ' +' + it.armor.bonus : ''}`;
+  if (it.kind === 'potion' && it.potion) return [it.potion.heal ? 'heals ' + it.potion.heal : '', it.potion.temp ? it.potion.temp + ' temp HP' : '', (it.potion.cures || []).length ? 'ends ' + it.potion.cures.join(', ') : '', it.potion.resist ? 'resist ' + it.potion.resist : ''].filter(Boolean).join(' · ');
+  if ((it.kind === 'scroll' || it.kind === 'wand') && it.spell) return `${it.spell.name}${it.spell.level ? ' (level ' + it.spell.level + ')' : ''}${it.spell.dc === 'yours' ? '' : ' · DC ' + it.spell.dc}`;
+  if (it.kind === 'wondrous' && it.effect) return `${it.effect.save ? it.effect.save + ' save DC ' + it.effect.dc + ' or ' : ''}${it.effect.cond}${it.effect.dice ? ` · ${it.effect.dice} ${it.effect.type}` : ''}`;
+  return '';
+}
+function renderMyItems(d, el) {
+  for (const x of myItems) {
+    const it = x.item, row = el('div', 'dmitem');
+    const head = el('div', 'dmih'); head.append(el('b', '', (x.qty > 1 ? x.qty + ' × ' : '') + it.name), el('small', '', [it.rarity, itemLine(it), it.charges ? `${it.charges.max - x.used}/${it.charges.max} charges` : '', it.bonus && (it.bonus.ac || it.bonus.saves || (it.bonus.resist || []).length) ? [it.bonus.ac ? '+' + it.bonus.ac + ' AC' : '', it.bonus.saves ? '+' + it.bonus.saves + ' saves' : '', ...(it.bonus.resist || []).map((r) => 'resist ' + r)].filter(Boolean).join(', ') : ''].filter(Boolean).join(' · ')));
+    row.append(head);
+    const b = el('div', 'row');
+    const btn = (t, f, title) => { const k = el('button', '', t); if (title) k.title = title; k.onclick = f; b.append(k); return k; };
+    if (it.kind === 'weapon') btn('🎯 Attack', () => startAim({ title: `${it.name}: click the target`, harm: true, one: true, color: '#ef4444', options: it.charges ? ['Attack', 'Attack and use a charge'] : null, send: (ids, amt, o) => ids[0] && sendMsg({ type: 'attackEffect', inv: x.id, target: ids[0], useCharge: o === 1 }) }));
+    if (it.kind === 'potion') { btn('🧪 Drink', () => sendMsg({ type: 'itemUse', inv: x.id, targets: [] })); btn('Give to…', () => startAim({ title: `${it.name}: who drinks it?`, one: true, color: '#22c55e', send: (ids) => ids[0] && sendMsg({ type: 'itemUse', inv: x.id, targets: ids }) })); }
+    if ((it.kind === 'scroll' || it.kind === 'wand') && it.spell) btn(it.kind === 'scroll' ? '📜 Read' : '🪄 Use a charge', () => startAim({ title: `${it.name}: ${it.spell.name}`, harm: true, color: '#a855f7', allowNone: true, send: (ids, amt, o) => sendMsg({ type: 'itemUse', inv: x.id, targets: ids, option: o }) }));
+    if (it.kind === 'wondrous' && it.effect) btn('✨ Use on…', () => startAim({ title: `${it.name}: click the targets`, harm: true, color: '#a855f7', send: (ids) => sendMsg({ type: 'itemUse', inv: x.id, targets: ids }) }));
+    if (['armor', 'shield', 'wondrous', 'weapon', 'gear'].includes(it.kind) && (it.kind === 'armor' || it.kind === 'shield' || (it.bonus && (it.bonus.ac || it.bonus.saves || it.bonus.attack || (it.bonus.resist || []).length)))) { const e = btn(x.equipped ? '✔ Worn' : 'Wear', () => sendMsg({ type: 'itemEquip', inv: x.id, on: !x.equipped }), 'Its AC and bonuses count while you wear it'); if (x.equipped) e.className = 'primary'; }
+    btn('Drop', () => { sendMsg({ type: 'itemDrop', inv: x.id }); }).classList.add('quiet');
+    row.append(b);
+    if (it.desc) { const ds = el('details'); ds.append(el('summary', '', 'Description'), el('div', 'sptext', it.desc)); row.append(ds); }
+    d.append(row);
+  }
+}
+// the DM's item list: make, change, give, and who holds what
+function renderItemList() {
+  const box = $('itemList'); if (!box || !me.isDM) return; box.innerHTML = '';
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const list = Object.values(dmItems).sort((a, b) => a.name.localeCompare(b.name));
+  if (!list.length) box.append(el('div', 'hint', 'Make magic weapons, armour, potions, scrolls, wands and wondrous items, then give them to players. They can use them in combat.'));
+  for (const it of list) { const r = el('div', 'il'); r.append(el('span', '', `${it.name} · ${it.kind}`)); const b = el('button', '', 'Edit / give'); b.onclick = () => openItem(it); r.append(b); box.append(r); }
+  const held = Object.entries(dmInv).filter(([, v]) => v.length);
+  for (const [who, inv] of held) { const nice = [...players, ...Object.values(dmChars).map((c) => c.player)].find((n) => n && n.toLowerCase() === who) || who; box.append(el('div', 'who', nice + ' holds:')); for (const x of inv) { const r = el('div', 'il'); r.append(el('span', '', `${x.qty > 1 ? x.qty + ' × ' : ''}${x.item.name}${x.item.charges ? ` (${x.item.charges.max - x.used}/${x.item.charges.max})` : ''}${x.equipped ? ' · worn' : ''}`)); const b = el('button', '', 'Take back'); b.onclick = () => sendMsg({ type: 'itemTake', player: who, inv: x.id }); r.append(b); box.append(r); } }
+}
+const iv = (id) => $(id).value.trim();
+function itemKindChanged() { const k = $('iKind').value; document.querySelectorAll('#itemModal fieldset').forEach((f) => { f.hidden = !f.dataset.kinds.split(' ').includes(k); }); }
+function openItem(it) {
+  itemEdit = it ? it.id : null; loadSpells();
+  if (!$('iECond').options.length) $('iECond').innerHTML = conditions().map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  const w = (it && it.weapon) || {}, a = (it && it.armor) || {}, p = (it && it.potion) || {}, sp = (it && it.spell) || {}, ch = (it && it.charges) || {}, e = (it && it.effect) || {}, bo = (it && it.bonus) || {};
+  const set = (id, v) => { $(id).value = v == null ? '' : v; };
+  set('iName', it ? it.name : ''); set('iKind', it ? it.kind : 'weapon'); set('iRarity', it && it.rarity); set('iValue', it && it.value); $('iAttune').checked = !!(it && it.attune); set('iDesc', it && it.desc);
+  set('iWDice', w.dice || '1d8'); set('iWType', w.type || 'slashing'); set('iWBonus', w.bonus || 0); set('iWAbil', w.ability || 'STR'); set('iWRange', w.range); set('iWReach', w.reach || 5); set('iWExtra', w.extra ? w.extra.dice : ''); set('iWExtraT', w.extra ? w.extra.type : 'fire'); set('iWMastery', w.mastery || '');
+  set('iABase', a.base ?? 14); set('iADex', a.dexMax == null ? 99 : a.dexMax); set('iABonus', a.bonus || 0);
+  set('iPHeal', p.heal); set('iPTemp', p.temp); set('iPCures', (p.cures || []).join(', ')); set('iPResist', p.resist || '');
+  set('iSName', sp.name); set('iSLevel', sp.level); set('iSDc', sp.dc === 'yours' || sp.dc == null ? 15 : sp.dc); set('iSAtk', sp.attack === 'yours' || sp.attack == null ? 7 : sp.attack); $('iSYours').checked = sp.dc === 'yours';
+  set('iCMax', ch.max || 0); set('iCRegain', ch.regain);
+  set('iECond', e.cond || 'restrained'); set('iESave', e.save || ''); set('iEDc', e.dc || 13); set('iEHow', e.how || 'end'); set('iEDice', e.dice); set('iEType', e.type || '');
+  set('iBAc', bo.ac || 0); set('iBSaves', bo.saves || 0); set('iBAtk', bo.attack || 0); set('iBRes', (bo.resist || []).join(', '));
+  $('iDelete').hidden = !it;
+  const names = [...new Set([...players, ...Object.values(dmChars).map((c) => c.player).filter(Boolean)])];
+  $('iGiveTo').innerHTML = names.length ? names.map((n) => `<option>${n.replace(/</g, '&lt;')}</option>`).join('') : '<option value="">No players yet</option>';
+  itemKindChanged(); $('itemModal').hidden = false;
+}
+function itemFromForm() {
+  const list = (v) => v.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return { id: itemEdit || undefined, name: iv('iName'), kind: $('iKind').value, rarity: iv('iRarity'), value: iv('iValue'), attune: $('iAttune').checked, desc: $('iDesc').value,
+    weapon: { dice: iv('iWDice'), type: $('iWType').value, bonus: +$('iWBonus').value || 0, ability: $('iWAbil').value, range: iv('iWRange'), reach: +$('iWReach').value || 5, extraDice: iv('iWExtra'), extraType: $('iWExtraT').value, mastery: $('iWMastery').value },
+    armor: { base: +$('iABase').value || 0, dexMax: $('iADex').value === '' ? 99 : +$('iADex').value, bonus: +$('iABonus').value || 0 },
+    potion: { heal: iv('iPHeal'), temp: iv('iPTemp'), cures: list(iv('iPCures')), resist: $('iPResist').value },
+    spell: { name: iv('iSName'), level: iv('iSLevel') === '' ? undefined : +iv('iSLevel'), dc: $('iSYours').checked ? 'yours' : +$('iSDc').value, attack: $('iSYours').checked ? 'yours' : +$('iSAtk').value },
+    charges: { max: +$('iCMax').value || 0, regain: iv('iCRegain') },
+    effect: { cond: $('iECond').value, save: $('iESave').value, dc: +$('iEDc').value || 13, how: $('iEHow').value, dice: iv('iEDice'), type: $('iEType').value },
+    bonus: { ac: +$('iBAc').value || 0, saves: +$('iBSaves').value || 0, attack: +$('iBAtk').value || 0, resist: list(iv('iBRes')) } };
+}
+$('newItem').onclick = () => openItem(null);
+$('iKind').onchange = () => { if (!itemEdit) $('iABase').value = $('iKind').value === 'shield' ? 2 : 14; itemKindChanged(); };
+$('iSave').onclick = () => { const it = itemFromForm(); if (!it.name) return toast('Give it a name'); if (!itemEdit) itemEdit = uid(); it.id = itemEdit; sendMsg({ type: 'itemSave', item: it }); toast('Saved to the item list'); };
+$('iDelete').onclick = () => { if (itemEdit) sendMsg({ type: 'itemDelete', id: itemEdit }); $('itemModal').hidden = true; };
+$('iGive').onclick = () => { const who = $('iGiveTo').value; if (!who) return toast('No player to give it to yet'); const it = itemFromForm(); if (!it.name) return toast('Give it a name'); if (!itemEdit) itemEdit = uid(); it.id = itemEdit; sendMsg({ type: 'itemSave', item: it }); setTimeout(() => sendMsg({ type: 'itemGive', id: itemEdit, player: who, qty: +$('iQty').value || 1 }), 150); toast(`Given to ${who}`); };
 // coins, inventory and spells: in the player's panel, and in the DM's look at a character
 function fillGear(box, c, section, open, noSpells) {
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };

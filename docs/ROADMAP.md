@@ -35,6 +35,7 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.15 | Spells end on their targets by the 2024 rules: end-of-turn saves, saves when hurt, damage breaking charms and Sleep, Sleep's second save, breaking free of Web and Entangle |
 | 1.16 | Saving throws by the 2024 books: every PHB spell with a condition, monster abilities from the stat block, class features and feats, DMG items, poisons and hazards, save modifiers, Legendary Resistance, death saves |
 | 1.17 | Combat pass: the full 2024 spell table, monsters casting their spells, any spell from the DM, weapon attacks on targets, attack Advantage and Disadvantage by the rules, protections that change AC and damage |
+| 1.18 | The rest of combat: spell areas that trigger on movement, Smite, Mirror Image, Blink, True Strike and Resistance, target limits, Dodge/Disengage/Help/Hide/Dash/Ready, opportunity attack alerts, cover, range and reach, Weapon Mastery, dying, falls and Hit Dice, Multiattack, recharge and legendary actions, DM-made items, portrait tokens |
 
 ## Next
 

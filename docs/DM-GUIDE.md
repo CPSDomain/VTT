@@ -248,6 +248,22 @@ The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under 
 
 **Conditions:** click the icons under Conditions to toggle them; they appear on the token and in the initiative list.
 
+**Automated combat (1.18):** aim attacks and spells at tokens and Tabletop rolls to hit or the save, applies damage, healing and conditions, and keeps your rolls secret:
+- **Monster attacks:** **🎯 Use on…** in a stat block. Multiattack runs every attack. Recharge, daily uses and legendary actions are tracked; **🌅 New day** under the initiative list gives daily uses back.
+- **Spell areas stay on the map:** Spirit Guardians, Moonbeam, Spike Growth, Hunger of Hadar and the rest hit creatures that enter, or start or end a turn inside, once per turn.
+- **Actions:** the token panel has **🛡 Dodge**, **🏃 Disengage**, **🤝 Help**, **🫥 Hide**, **💨 Dash** and **⏳ Ready**. You get an alert when a creature in combat leaves a foe's reach without Disengaging (an opportunity attack).
+- **Optional rules:** **Under water** and **Flanking** are tick boxes under the initiative list. **Surprised** in the token panel gives Disadvantage on initiative.
+- **Falls:** set the feet and click **🪂 Fall**.
+- **Dying:** a dying character can be stabilised with **🩺 Stabilise**.
+
+## Items
+
+Under **Items** in your panel, click **+ Make an item**: a magic weapon, armour or a shield, a potion, a spell scroll or wand, a wondrous item with an effect and a save, or plain gear. Set its numbers (damage, bonus, healing, the spell and DC, charges that come back at dawn, AC and save bonuses while worn) and a description for the players. Pick a player and click **🎁 Give**. The list shows who holds what; **Take back** removes an item.
+
+## Portrait tokens
+
+Select a token and click **📷 Picture…** to turn any picture into a round token. Drag the picture to frame the face, set the zoom and pick a frame. Players can do the same for their own token.
+
 **Players** click their own token to get the same HP box for their character: they can track their own damage, temp HP, initiative bonus and conditions (but nobody else's). Monsters they can't see (hidden, or in the fog) don't appear in their initiative list.
 
 ## Table tools

@@ -121,8 +121,11 @@ function readCharacter(d) {
     const a = ranged ? M[1] : finesse ? Math.max(M[0], M[1]) : M[0];
     const magic = (def.grantedModifiers || []).filter((g) => g.type === 'bonus' && g.subType === 'magic').reduce((s, g) => s + (g.value || 0), 0);
     const hit = a + (profWith(def) ? prof : 0) + magic, dmg = a + magic;
-    attacks.push({ name: (i.definition.name || 'Weapon').slice(0, 24), hit: '1d20' + sign(hit), damage: def.damage.diceString + (dmg ? sign(dmg) : ''), type: def.damageType || '' });
+    attacks.push({ name: (i.definition.name || 'Weapon').slice(0, 24), base: def.type || def.name || '', hit: '1d20' + sign(hit), damage: def.damage.diceString + (dmg ? sign(dmg) : ''), type: def.damageType || '', mod: dmg,
+      ranged, range: def.range ? (def.longRange ? `${def.range}/${def.longRange}` : '') : '', reach: props.includes('Reach') ? 10 : 5, light: props.includes('Light'), thrown: props.includes('Thrown') });
   }
+  // everyone can punch: an Unarmed Strike (1 + Strength bludgeoning)
+  attacks.push({ name: 'Unarmed Strike', base: 'Unarmed Strike', hit: '1d20' + sign(M[0] + prof), damage: String(Math.max(1, 1 + M[0])), type: 'Bludgeoning', mod: M[0], reach: 5 });
   const casters = classes.filter((c) => c.cast);
   const seenStat = new Set();
   for (const c of casters) {
@@ -203,6 +206,9 @@ function readCharacter(d) {
     const TABLE = [[], [2], [3], [4, 2], [4, 3], [4, 3, 2], [4, 3, 3], [4, 3, 3, 1], [4, 3, 3, 2], [4, 3, 3, 3, 1], [4, 3, 3, 3, 2], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 2, 1, 1, 1, 1], [4, 3, 3, 3, 3, 1, 1, 1, 1], [4, 3, 3, 3, 3, 2, 1, 1, 1], [4, 3, 3, 3, 3, 2, 2, 1, 1]];
     slots = (TABLE[Math.min(20, cl)] || []).map((max, i) => ({ level: i + 1, max, used: 0 }));
   }
+  // Hit Dice for short rests: the class's die, one per level
+  const HD = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10, Sorcerer: 6, Wizard: 6 };
+  const hitDice = classes.map((c) => ({ die: HD[c.name] || 8, max: c.level, used: 0, cls: c.name })).filter((x) => x.max > 0);
   const casting = { attack: prof + M[firstCaster - 1], dc: 8 + prof + M[firstCaster - 1], ability: STAT[firstCaster - 1] };
   // class resources: Lay on Hands, Channel Divinity, Ki, Sorcery Points, Bardic Inspiration, Second Wind, Rage…
   const resources = [], seenRes = new Set();
@@ -236,7 +242,7 @@ function readCharacter(d) {
   const immuneCond = [...new Set(mods.filter((m) => m.type === 'immunity').map((m) => String(m.subType || '').toLowerCase()))].slice(0, 20);
   const feats = (d.feats || []).map((f) => f.definition && f.definition.name).filter(Boolean).slice(0, 40);
   return enrichCharacter({
-    saveAdv, resist, immuneCond, feats, subclasses: classes.map((c) => c.sub).filter(Boolean),
+    saveAdv, resist, immuneCond, feats, hitDice, subclasses: classes.map((c) => c.sub).filter(Boolean),
     name: String(d.name).slice(0, 40), level, prof, race: (d.race && (d.race.fullName || d.race.baseName)) || '',
     classes: classes.map((c) => `${c.name || ''}${c.sub ? ' (' + c.sub + ')' : ''} ${c.level}`.trim()).join(' / '),
     hp, maxHp, tempHp: d.temporaryHitPoints || 0, ac, speed, init, darkvision,

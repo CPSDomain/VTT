@@ -99,4 +99,16 @@ When the DM shows you a handout (a letter, a picture, a clue), it pops up on you
 - Whose turn it is glows gold on the map and is highlighted in the list.
 - **Click your token** to open your character's box: set your HP and max HP, temporary HP and initiative bonus, type an amount and press **Damage** or **Heal**, and toggle conditions like Concentrating or Prone.
 
+- **Attack a target:** click **🎯** next to a weapon in My character, then the target. Tabletop rolls against its AC and takes the damage off. Cast spells with **Cast** and click the targets.
+- **Actions:** select your token for **🛡 Dodge**, **🏃 Disengage**, **🤝 Help**, **🫥 Hide**, **💨 Dash** and **⏳ Ready**.
+- **Rests:** spend Hit Dice from My character after a **☾ Short rest**.
+
+## Items from the DM
+
+Items the DM gives you appear under **From the DM** in My character. Use them from there: **🎯 Attack** with a weapon, **🧪 Drink** a potion (or **Give to…** someone else), **📜 Read** a scroll, **🪄 Use a charge** of a wand, **✨ Use on…** for a wondrous item, and **Wear** armour, shields, rings and cloaks so their AC and bonuses count.
+
+## Your token's picture
+
+Select your token and click **📷 Picture…** to use any picture as a round token. Drag it to frame your face, set the zoom and pick a frame.
+
 Keep your character sheet in D&D Beyond as usual; Tabletop is for the map and the dice.

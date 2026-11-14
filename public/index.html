@@ -435,9 +435,18 @@
   #eFx .fxform { display:flex; flex-direction:column; gap:6px; margin-top:6px; } #eFx select, #eFx input { font-size:12px; min-width:0; }
   #eFx .fxgrid { display:grid; grid-template-columns:1fr 1fr; gap:6px; } #eFx .fxgrid > :first-child { grid-column:1 / -1; }
   #aimOpt { max-width:180px; }
+  .sbtag { margin-left:6px; color:var(--dim); font-size:11px; }
   .sbuse { margin-left:6px; padding:1px 8px; font-size:12px; }
   .sbspells { display:flex; flex-direction:column; gap:4px; margin:-4px 0 10px 12px; font-size:12px; } .sbspells > div { display:flex; flex-wrap:wrap; gap:4px; align-items:center; } .sbspells .sbuse { margin-left:0; }
   #aimBar[hidden], #aimBar [hidden] { display:none !important; }
+  .portrait label.btn { display:inline-block; padding:3px 8px; border:1px solid rgba(255,255,255,.18); border-radius:6px; cursor:pointer; }
+  .portrait { display:flex; gap:10px; align-items:center; margin:6px 0; } .portrait canvas { width:88px; height:88px; cursor:grab; touch-action:none; } .portrait .pcol { display:flex; flex-direction:column; gap:4px; font-size:12px; min-width:0; }
+  .itemform { display:flex; flex-direction:column; gap:8px; } .itemform fieldset { border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px; } .itemform legend { font-size:12px; color:var(--dim); }
+  .igrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:6px; font-size:12px; } .igrid label { display:flex; flex-direction:column; gap:2px; } .igrid label.check { flex-direction:row; align-items:center; }
+  .dmitem { border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:6px 8px; margin:4px 0; } .dmitem .dmih { display:flex; flex-direction:column; gap:1px; } .dmitem small { color:var(--dim); } .dmitem .row { flex-wrap:wrap; gap:4px; } .dmitem button { padding:2px 8px; font-size:12px; }
+  #itemList .il { display:flex; justify-content:space-between; gap:6px; align-items:center; padding:3px 0; font-size:13px; } #itemList .il span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } #itemList .who { font-size:12px; color:var(--dim); margin-top:6px; }
+  #eActs { flex-wrap:wrap; gap:4px; } #eActs button { padding:2px 7px; font-size:12px; }
+  .cbopts { flex-wrap:wrap; gap:8px; font-size:12px; }
   #aimBar { position:fixed; left:50%; bottom:64px; transform:translateX(-50%); z-index:40; display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:center; max-width:min(760px,94vw); padding:10px 14px; border-radius:10px; background:rgba(24,20,16,.95); border:1px solid #6b5a3a; box-shadow:0 8px 30px rgba(0,0,0,.6); color:#f3e6c6; }
   #aimBar #aimTitle { font-weight:600; } #aimBar #aimCount { color:#bfb39a; font-size:12px; } #aimBar #aimAmt { width:70px; }
   #charBody .res .rn { min-width:110px; } #charBody .res button:not(.pip) { margin-left:auto; padding:2px 8px; font-size:12px; }
@@ -693,6 +702,7 @@
         <div id="initList"></div>
         <div class="row dm-only"><button id="initAddSel" title="Add the selected token">+ Selected</button><button id="initAddAll" title="Add every token players can see, plus all monsters">+ All on map</button></div>
         <div class="row dm-only"><button id="initRollMon" title="Roll 1d20 + initiative bonus for every monster without a score">🎲 Roll for monsters</button><button id="initEnd" class="danger">End combat</button></div>
+        <div class="row dm-only cbopts"><label class="check" title="2024 rules: most melee weapons and ranged attacks have Disadvantage, ranged attacks miss past normal range, everything resists fire"><input type="checkbox" id="optWater"> Under water</label><label class="check" title="Optional rule (Dungeon Master's Guide): melee attacks have Advantage when an ally is on the opposite side of the target"><input type="checkbox" id="optFlank"> Flanking</label><button id="monRest" title="Daily uses, abilities that come back after a rest, Legendary Resistances">🌅 New day</button></div>
       </section>
       <section id="startSec" class="dm-only">
         <div class="row" style="margin:0"><button id="combatStart" title="Start initiative with every token on this map">⚔ Start combat</button></div>
@@ -705,6 +715,10 @@
             <div style="flex:1;min-width:0"><input id="eLabel" placeholder="Name"><div class="row"><button id="eArt">Change art…</button><input id="eColor" type="color" class="fixed" style="width:40px;padding:2px;height:31px"></div></div></div>
           <div class="row"><input id="eOwner" placeholder="Owner (player name, * = anyone)"><select id="eSize" class="fixed"><option value="1">Medium</option><option value="2">Large</option><option value="3">Huge</option><option value="4">Garg.</option></select></div>
           <label class="check"><input type="checkbox" id="eHidden"> Hidden from players</label>
+        </div>
+        <div class="portrait" id="ePortrait" hidden>
+          <canvas id="ePort" width="120" height="120" title="Drag the picture to move it in the circle"></canvas>
+          <div class="pcol"><label>Frame <select id="eFrame"></select></label><label>Zoom <input id="eZoom" type="range" min="1" max="4" step="0.05" value="1"></label><label class="btn" style="text-align:center">📷 Picture…<input type="file" id="ePic" accept="image/*" hidden></label><button id="ePortReset">Centre it</button><div class="hint" style="margin:0">Drag the picture to move it.</div></div>
         </div>
         <div class="hpbox">
           <div class="hprow">
@@ -770,6 +784,9 @@
             <div class="hint">With "Roll its save now" the effect lands only if the save fails. Without it, it's put straight on.</div>
           </div>
         </details>
+        <div class="row acts" id="eActs"><button data-act="dodge" title="Attacks against it have Disadvantage; Advantage on Dex saves, until its next turn">🛡 Dodge</button><button data-act="disengage" title="No opportunity attacks against it this turn">🏃 Disengage</button><button data-act="help" title="Pick a foe: an ally's next attack on it has Advantage">🤝 Help</button><button data-act="hide" title="Stealth check, DC 15">🫥 Hide</button><button data-act="dash">💨 Dash</button><button data-act="ready">⏳ Ready</button></div>
+        <div class="row" id="eDying" hidden><button id="eStab" title="Wisdom (Medicine) check, DC 10">🩺 Stabilise</button></div>
+        <div class="row dm-only"><label>Fall <input id="eFallFt" type="number" min="10" step="10" value="20" style="width:60px"> ft</label><button id="eFall" title="1d6 bludgeoning per 10 feet (20d6 at most), prone if hurt">🪂 Fall</button><label class="check" title="2024: Disadvantage on its initiative roll"><input type="checkbox" id="eSurp"> Surprised</label></div>
         <div class="row dm-only"><button id="eToInit">⚔ Add to initiative</button><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
       </section>
 
@@ -777,6 +794,11 @@
         <h2>Handouts</h2>
         <div id="handoutList"></div>
         <div class="row dm-only"><button id="newHandout">+ New handout</button></div>
+      </section>
+      <section id="itemSec" class="dm-only">
+        <h2>Items</h2>
+        <div id="itemList"></div>
+        <div class="row"><button id="newItem">+ Make an item</button></div>
       </section>
       <section id="charSec" hidden>
         <h2>My character</h2>
@@ -864,6 +886,43 @@
   </div>
 </div>
 <div id="aimBar" hidden><span id="aimTitle"></span><span id="aimCount"></span><select id="aimOpt" hidden></select><input id="aimAmt" type="number" min="1" title="How many hit points" hidden><button id="aimSelf" title="Add your own token">Me</button><button id="aimArea" title="Every token inside the area you placed">In my area</button><button id="aimGo" class="primary">Apply</button><button id="aimCancel">Cancel</button></div>
+<div class="modal" id="itemModal" hidden>
+  <div class="dialog">
+    <div class="dhead"><h2 style="margin:0">Item</h2><div class="spacer"></div><button class="close" data-close>✕</button></div>
+    <div class="hbody itemform">
+      <div class="row"><input id="iName" placeholder="Name (Flame Tongue, Potion of Healing…)"><select id="iKind" class="fixed"><option value="weapon">Weapon</option><option value="armor">Armour</option><option value="shield">Shield</option><option value="potion">Potion</option><option value="scroll">Spell scroll</option><option value="wand">Wand, staff or rod</option><option value="wondrous">Wondrous item</option><option value="gear">Other gear</option></select></div>
+      <div class="row"><input id="iRarity" placeholder="Rarity (uncommon…)"><input id="iValue" placeholder="Value (50 gp)"><label class="check"><input type="checkbox" id="iAttune"> Needs attunement</label></div>
+      <fieldset data-kinds="weapon"><legend>Weapon</legend><div class="igrid">
+        <label>Damage <input id="iWDice" value="1d8"></label><label>Type <select id="iWType"><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select></label>
+        <label>Magic bonus <input id="iWBonus" type="number" min="0" max="3" value="0"></label>
+        <label>Uses <select id="iWAbil"><option value="STR">Strength</option><option value="DEX">Dexterity (ranged)</option><option value="finesse">Finesse (the better)</option><option value="spell">Spellcasting ability</option></select></label>
+        <label>Range <input id="iWRange" placeholder="80/320 if ranged"></label><label>Reach (ft) <input id="iWReach" type="number" min="5" max="15" step="5" value="5"></label>
+        <label>Extra damage <input id="iWExtra" placeholder="2d6"></label><label>of type <select id="iWExtraT"><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select></label>
+        <label>Mastery <select id="iWMastery"><option value="">none</option><option>Cleave</option><option>Graze</option><option>Nick</option><option>Push</option><option>Sap</option><option>Slow</option><option>Topple</option><option>Vex</option></select></label></div></fieldset>
+      <fieldset data-kinds="armor shield"><legend>Armour</legend><div class="igrid">
+        <label>AC <input id="iABase" type="number" min="0" max="20" value="14"></label><label>Dex counts up to <input id="iADex" type="number" min="0" max="99" value="2" title="0 for heavy armour, 99 for light"></label><label>Magic bonus <input id="iABonus" type="number" min="0" max="3" value="0"></label></div></fieldset>
+      <fieldset data-kinds="potion"><legend>Potion</legend><div class="igrid">
+        <label>Heals <input id="iPHeal" placeholder="2d4+2"></label><label>Temp HP <input id="iPTemp" placeholder="2d4"></label>
+        <label>Ends <input id="iPCures" placeholder="poisoned, paralyzed"></label><label>Resist for an hour <select id="iPResist"><option value="">none</option><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select></label></div></fieldset>
+      <fieldset data-kinds="scroll wand"><legend>Spell</legend><div class="igrid">
+        <label>Spell <input id="iSName" list="spellNames" placeholder="Fireball"></label><label>At level <input id="iSLevel" type="number" min="0" max="9" placeholder="its own"></label>
+        <label>Save DC <input id="iSDc" type="number" min="1" max="30" value="15"></label><label>Spell attack + <input id="iSAtk" type="number" min="-5" max="20" value="7"></label>
+        <label class="check"><input type="checkbox" id="iSYours"> Use the holder's own DC and attack</label></div></fieldset>
+      <fieldset data-kinds="wand wondrous weapon"><legend>Charges</legend><div class="igrid">
+        <label>Charges <input id="iCMax" type="number" min="0" max="50" value="0" title="0: no charges"></label><label>Back at dawn <input id="iCRegain" placeholder="1d6+1 (empty: all)"></label></div></fieldset>
+      <fieldset data-kinds="wondrous"><legend>Effect on a target</legend><div class="igrid">
+        <label>Condition <select id="iECond"></select></label><label>Save <select id="iESave"><option value="">none</option><option>STR</option><option>DEX</option><option>CON</option><option>INT</option><option>WIS</option><option>CHA</option></select></label>
+        <label>DC <input id="iEDc" type="number" min="1" max="30" value="13"></label>
+        <label>Ends <select id="iEHow"><option value="end">save at the end of each of its turns</option><option value="start">save at the start of each of its turns</option><option value="hurtEnd">when it takes damage</option><option value="athletics">its action: Athletics check</option><option value="grapple">its action: escape DC</option><option value="tgtEnd">at the end of its next turn</option><option value="">when the DM takes it off</option></select></label>
+        <label>Damage <input id="iEDice" placeholder="3d6"></label><label>of type <select id="iEType"><option value=""></option><option>acid</option><option>bludgeoning</option><option>cold</option><option>fire</option><option>force</option><option>lightning</option><option>necrotic</option><option>piercing</option><option>poison</option><option>psychic</option><option>radiant</option><option>slashing</option><option>thunder</option></select></label></div></fieldset>
+      <fieldset data-kinds="weapon armor shield wondrous gear"><legend>While worn</legend><div class="igrid">
+        <label>+AC <input id="iBAc" type="number" min="0" max="5" value="0"></label><label>+ saves <input id="iBSaves" type="number" min="0" max="5" value="0"></label><label>+ attacks <input id="iBAtk" type="number" min="0" max="3" value="0"></label><label>Resists <input id="iBRes" placeholder="fire, cold"></label></div></fieldset>
+      <textarea id="iDesc" rows="4" placeholder="What it is and what it does (the players read this)"></textarea>
+      <div class="row"><button id="iSave" class="primary">Save to the item list</button><button id="iDelete" class="danger">Delete</button></div>
+      <div class="row"><select id="iGiveTo"></select><input id="iQty" type="number" min="1" max="99" value="1" style="width:60px"><button id="iGive">🎁 Give</button></div>
+    </div>
+  </div>
+</div>
 <div class="modal" id="charModal" hidden>
   <div class="dialog">
     <div class="dhead"><h2 style="margin:0" id="cmName"></h2><div class="spacer"></div><button class="close" data-close>✕</button></div>

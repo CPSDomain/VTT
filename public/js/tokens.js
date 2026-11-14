@@ -65,8 +65,11 @@ export function drawTokenArt(g, t, cx, cy, rad, redraw = () => {}) {
   const img = t.img ? photo(t.img, redraw) : null;
   if (img && img.complete && img.naturalWidth) {
     g.save(); g.beginPath(); g.arc(cx, cy, rad - 1, 0, Math.PI * 2); g.clip();
-    const s = Math.max((rad * 2) / img.naturalWidth, (rad * 2) / img.naturalHeight);
-    g.drawImage(img, cx - (img.naturalWidth * s) / 2, cy - (img.naturalHeight * s) / 2, img.naturalWidth * s, img.naturalHeight * s);
+    // a portrait: zoomed and moved inside the circle as its owner set it (imgPos: x, y from -1 to 1, z from 1 to 4)
+    const p = t.imgPos || {}, z = Math.max(1, Math.min(4, p.z || 1));
+    const s = Math.max((rad * 2) / img.naturalWidth, (rad * 2) / img.naturalHeight) * z, w = img.naturalWidth * s, h = img.naturalHeight * s;
+    const ox = (p.x || 0) * Math.max(0, (w - rad * 2) / 2), oy = (p.y || 0) * Math.max(0, (h - rad * 2) / 2);
+    g.drawImage(img, cx - w / 2 - ox, cy - h / 2 - oy, w, h);
     g.restore();
   } else {
     const ic = t.icon ? iconImage(t.icon, iconColor(col), redraw) : null;
@@ -78,6 +81,22 @@ export function drawTokenArt(g, t, cx, cy, rad, redraw = () => {}) {
       g.fillText(initials(t.label), cx, cy + 1);
     }
   }
+  drawFrame(g, t, cx, cy, rad);
+}
+
+// a frame round the token: gold, silver, iron, wood, or the token's own colour
+const FRAMES = { gold: ['#fff2b0', '#d4a23a', '#7a5212'], silver: ['#ffffff', '#b8c0c8', '#5c6670'], iron: ['#9aa3ab', '#4b535b', '#1f2428'], wood: ['#d9a46a', '#8a5a2b', '#4a2e14'], bronze: ['#ffd29a', '#b0702e', '#5a3412'] };
+export const FRAME_NAMES = { '': 'No frame', gold: 'Gold', silver: 'Silver', bronze: 'Bronze', iron: 'Iron', wood: 'Wood', color: 'Its colour' };
+export function drawFrame(g, t, cx, cy, rad) {
+  if (!t.frame) return;
+  const w = Math.max(2, rad * 0.16), r = rad - w / 2 + 1;
+  const cols = t.frame === 'color' ? [shade(t.color || '#888888', 0.5), t.color || '#888888', shade(t.color || '#888888', -0.5)] : FRAMES[t.frame]; if (!cols) return;
+  const gr = g.createLinearGradient(cx - rad, cy - rad, cx + rad, cy + rad);
+  gr.addColorStop(0, cols[0]); gr.addColorStop(0.45, cols[1]); gr.addColorStop(0.55, cols[2]); gr.addColorStop(1, cols[1]);
+  g.save(); g.lineWidth = w; g.strokeStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke();
+  g.lineWidth = Math.max(1, w * 0.18); g.strokeStyle = 'rgba(0,0,0,.45)'; g.beginPath(); g.arc(cx, cy, r - w / 2, 0, Math.PI * 2); g.stroke(); // inner edge
+  g.strokeStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.arc(cx, cy, r + w / 2 - 0.5, Math.PI * 1.05, Math.PI * 1.7); g.stroke(); // a glint
+  g.restore();
 }
 
 function shade(hex, amt) {

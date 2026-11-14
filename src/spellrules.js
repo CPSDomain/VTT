@@ -86,7 +86,7 @@ const RULES = {
   'conjure fey': R(['frightened'], null, { expire: 'srcStart', again: true }),
   'fount of moonlight': R(['blinded'], 'CON', { expire: 'srcEnd', again: true, reaction: true }),
   'holy aura': R(['holyaura'], null, { ally: true, again: true }),
-  'stinking cloud': R(['poisoned'], 'CON', { expire: 'tgtEnd', again: true }),
+  'stinking cloud': R(['poisoned'], 'CON', { expire: 'thisTurn', again: true }),
   'command': R(['commanded'], 'WIS', { expire: 'tgtEnd', options: [{ name: 'Approach' }, { name: 'Drop' }, { name: 'Flee' }, { name: 'Grovel', add: ['commanded', 'prone'] }, { name: 'Halt' }] }),
   // ---- until the spell ends (concentration, or its duration)
   'bless': R(['blessed'], null, { ally: true }),
@@ -194,6 +194,11 @@ const RULES = {
   "otiluke's resilient sphere": R(['banished'], 'DEX'),
   'resilient sphere': R(['banished'], 'DEX'),
   'counterspell': R([], 'CON', { saveOnly: 'its spell fails' }),
+  'mirror image': R(['mirrored'], null, { ally: true, self: true, dupes: 3 }),
+  'blink': R(['warded'], null, { ally: true, self: true, blink: true }),
+  'resistance': R(['warded'], null, { ally: true, options: ['acid', 'bludgeoning', 'cold', 'fire', 'lightning', 'necrotic', 'piercing', 'poison', 'radiant', 'slashing', 'thunder'].map((t) => ({ name: t[0].toUpperCase() + t.slice(1), reduce: { type: t, dice: '1d4' } })) }),
+  'divine smite': R([], null, { vsTypes: { types: ['fiend', 'undead'], dice: '1d8' } }),
+  'true strike': R([], null, { trueStrike: true }),
   'calm emotions': R([], null, { ally: true, cure: true, cures: ['charmed', 'frightened'] }),
   'heroism ': R([], null)
 };
@@ -251,6 +256,7 @@ function enrich(sp, level) {
     if (!sp.desc && e.desc) sp.desc = e.desc;
     if (!sp.duration && e.duration) sp.duration = e.duration;
     if (e.reaction) sp.reaction = true;
+    if (e.targets && !sp.targets) sp.targets = e.targets;
   }
   const key = sp.name.toLowerCase().replace(/[’]/g, "'"), c = RULES[key], d = plain(sp.desc);
   delete sp.cond;
@@ -289,8 +295,43 @@ function enrichCharacter(ch) {
   ch.evasion = classLevel(ch, 'Rogue') >= 7 || classLevel(ch, 'Monk') >= 7;
   const FE = require('./features');
   ch.features = FE.featuresFor(ch);
+  // characters brought in before 1.18: an Unarmed Strike and Hit Dice
+  if (Array.isArray(ch.attacks) && !ch.attacks.some((x) => x.name === 'Unarmed Strike')) { const st = ((ch.abilities || [])[0] || {}).mod || 0; ch.attacks.push({ name: 'Unarmed Strike', base: 'Unarmed Strike', hit: '1d20' + (st + (ch.prof || 2) >= 0 ? '+' : '') + (st + (ch.prof || 2)), damage: String(Math.max(1, 1 + st)), type: 'Bludgeoning', mod: st, reach: 5 }); }
+  if (!ch.hitDice) { const HD = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10, Sorcerer: 6, Wizard: 6 }; ch.hitDice = [...String(ch.classes || '').matchAll(/(\w+)(?: \([^)]*\))? (\d+)/g)].map((m) => ({ die: HD[m[1]] || 8, max: +m[2], used: 0, cls: m[1] })); }
+  // Weapon Mastery (2024): Barbarians, Fighters, Paladins, Rangers and Rogues use their weapons' mastery properties
+  ch.mastery = ['Barbarian', 'Fighter', 'Paladin', 'Ranger', 'Rogue'].some((c) => classLevel(ch, c) >= 1);
   ch.featureInfo = ch.features.map((n) => { const f = FE.FEATURES.find((x) => x.name === n); return { name: n, options: (f.options || []).map((o) => o.name), note: f.note || '', cost: f.cost || '', save: f.save || '', dc: FE.dcFor(ch, f.dc) }; });
   return ch;
 }
 
-module.exports = { enrich, enrichCharacter, levelOf, classLevel, roundsOf, RULES, CONDS, dbSpell, fromDb };
+// areas that keep working after the spell is cast (1.18): when a creature enters, starts or ends its turn there.
+//  'spell' means the spell's own save, damage and conditions; follow: the area moves with the caster (Spirit Guardians);
+//  others: only the caster's foes; inside: conditions while in the area (Silence: deafened); move: damage per 5 feet
+//  moved in it (Spike Growth); once a turn for each creature
+const ZONES = {
+  'spirit guardians': { follow: 15, others: true, enter: 'spell', end: 'spell' },
+  "yolande's regal presence": { follow: 10, others: true, enter: 'spell', end: 'spell' },
+  'moonbeam': { enter: 'spell', end: 'spell' },
+  'cloudkill': { enter: 'spell', end: 'spell' },
+  'cloud of daggers': { enter: 'spell', end: 'spell' },
+  'incendiary cloud': { enter: 'spell', end: 'spell' },
+  'insect plague': { enter: 'spell', end: 'spell' },
+  'blade barrier': { enter: 'spell', end: 'spell' },
+  'wall of thorns': { enter: 'spell', end: 'spell' },
+  'wall of fire': { enter: 'nosave', end: 'nosave' },
+  "jallarzi's storm of radiance": { enter: 'spell', end: 'spell', inside: ['blinded', 'deafened'] },
+  "evard's black tentacles": { enter: 'spell', end: 'spell' },
+  'web': { enter: 'spell', start: 'spell' },
+  'grease': { enter: 'spell', end: 'spell' },
+  'sleet storm': { enter: 'spell', start: 'spell' },
+  'stinking cloud': { start: 'spell' },
+  'guardian of faith': { others: true, enter: 'spell', start: 'spell' },
+  'flaming sphere': { end: 'spell' },
+  'hunger of hadar': { inside: ['blinded'], start: { dmg: [{ dice: '2d6', type: 'cold' }] }, end: { save: 'DEX', dmg: [{ dice: '2d6', type: 'acid' }] } },
+  'spike growth': { move: { dice: '2d4', type: 'piercing' } },
+  'silence': { inside: ['deafened'] },
+  'darkness': { inside: ['blinded'] },
+  'fog cloud': { inside: ['blinded'] }
+};
+
+module.exports = { ZONES, enrich, enrichCharacter, levelOf, classLevel, roundsOf, RULES, CONDS, dbSpell, fromDb };

@@ -2,6 +2,50 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.18.0] - 2026-11-14
+
+The rest of combat: spell areas that work when creatures move, the actions every creature can take on its turn, dying and falling, monster abilities used by the rules, items the DM makes and gives out, and round portrait tokens.
+
+### Added
+- **Spell areas that stay on the map.** A creature that enters one, or starts or ends its turn inside, gets the save and damage once per turn:
+  - **Areas:** Spirit Guardians, Moonbeam, Cloudkill, Cloud of Daggers, Incendiary Cloud, Insect Plague, Blade Barrier, Wall of Thorns, Wall of Fire, Evard's Black Tentacles, Web, Grease, Sleet Storm, Stinking Cloud, Guardian of Faith, Flaming Sphere, Hunger of Hadar, Spike Growth, Silence, Darkness, Fog Cloud and more.
+  - **Moving with the caster:** Spirit Guardians follows its caster and spares the caster's allies.
+  - **Spike Growth** hurts for every 5 feet moved through it.
+  - **Conditions while inside:** Silence deafens and Darkness blinds only while a creature is in it.
+  - **Ending:** the area ends when concentration ends or the template is removed.
+- **Spells that were done by hand now work on their own:**
+  - **Damage:** Divine Smite's extra die against fiends and undead, and True Strike (spell ability for the attack, radiant damage, more at levels 5, 11 and 17).
+  - **Defence:** Mirror Image duplicates take hits, Blink rolls at the end of the caster's turn, and the Resistance cantrip takes a die off one hit each turn.
+- **Spell target limits:** Bless and the like stop at their number of targets, plus more for higher slots.
+- **Actions on a turn** (buttons in the token panel): Dodge, Disengage, Help (the foe it distracts), Hide (Stealth against DC 15), Dash and Ready.
+- **Attack rules:**
+  - **Range and reach:** attacks past long range or out of reach are blocked, and past normal range have Disadvantage.
+  - **Close in:** a ranged attack with a foe within 5 feet has Disadvantage.
+  - **Cover:** half and three-quarters cover add +2 or +5 to AC and Dexterity saves.
+  - **Optional rules:** Under water and Flanking tick boxes.
+- **Opportunity attacks:** when a creature leaves a foe's reach without Disengaging, the DM gets an alert, and so does the player who could strike.
+- **Weapon Mastery (2024):** Sap, Vex, Topple, Push, Graze, Slow, Cleave and Nick for Barbarians, Fighters, Paladins, Rangers and Rogues. Melee attacks can knock out instead of kill.
+- **Dying, rests and falls:**
+  - **Dying:** Stabilise with Medicine DC 10.
+  - **Hit Dice:** spent from My character after a short rest; a long rest gives them all back.
+  - **Falls:** 1d6 per 10 feet (20d6 at most), and the creature lands prone.
+  - **Surprise:** gives Disadvantage on initiative.
+- **Monster abilities by the rules:**
+  - **Multiattack** runs each listed attack.
+  - **Recharge:** abilities stay spent until a recharge roll, made secretly at the start of the monster's turn.
+  - **Daily uses** count down; **🌅 New day** gives them back.
+  - **Legendary actions** spend their cost and reset on the monster's turn.
+- **Items the DM makes and gives** (**Items → + Make an item**):
+  - **Kinds:** magic weapons, armour and shields, potions, spell scrolls, wands, wondrous items with an effect and a save, and gear.
+  - **Charges** come back at dawn.
+  - **Players** use them from **From the DM** in My character: attack, drink, give, read, use a charge, wear.
+  - **Worn bonuses** count in every attack and save.
+- **Portrait tokens:** any picture becomes a round token. Drag and zoom to frame the face, and pick a gold, silver, bronze, iron, wood or coloured frame. Players can do this for their own token.
+
+### Fixed
+- **Stinking Cloud:** the poisoned condition now lasts only the turn it's failed.
+- **Spirit Guardians:** radiant or necrotic is now a choice, not both.
+
 ## [1.17.0] - 2026-11-13
 
 A combat pass: every spell in the 2024 Player's Handbook, every spell the monsters cast and every spell the Dungeon Master's Guide's items cast now works in the DM and player apps.

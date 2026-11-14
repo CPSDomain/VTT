@@ -64,6 +64,17 @@ for (const s of data) {
   const area = /(\d+)-foot(?:-radius)? (Sphere|Cone|Cube|Line|Emanation|Cylinder)/i.exec(main) || /(Line)[^.]*?(\d+) feet long/i.exec(main);
   if (area) e.aoe = /^\d/.test(area[1]) ? { shape: area[2].toLowerCase(), size: +area[1] } : { shape: 'line', size: +area[2] };
   if (s.conditionInflict) e.conds = s.conditionInflict;
+  // how many it can target: "up to three creatures", "a creature you can see", and more with a higher slot
+  const W = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12 };
+  {
+    const lead = main.split(/(?<=\.)\s+/).slice(0, 3).join(' ');
+    let m3 = /\bup to (one|two|three|four|five|six|seven|eight|nine|ten|twelve) (?:willing |other )?(?:creatures?|targets?|Humanoids?|Beasts?|allies)/i.exec(main) || (!e.aoe && /\b(one|a|an) (?:willing |other )?(?:creature|target|Humanoid|Beast|Undead|corpse|ally)\b(?! or object)/i.exec(lead));
+    if (m3 && !(e.aoe && !/up to/i.test(m3[0])) && !/(dart|ray|beam)s?\b/i.test(main.slice(0, 200))) {
+      e.targets = { n: W[m3[1].toLowerCase()] || 1 };
+      const more = /(one|two|three) additional (?:creature|target|Humanoid|Beast|Undead|ally|ray|dart|beam)s? for each (?:spell )?slot level above/i.exec(clean(higher));
+      if (more) e.targets.up = W[more[1].toLowerCase()];
+    }
+  }
   if (s.srd52) e.desc = (clean(main) + (higher ? '\n\n' + clean(higher) : '')).replace(/\s*\n\s*/g, '\n').slice(0, 2400);
   else e.desc = '';
   e.srd = !!s.srd52;

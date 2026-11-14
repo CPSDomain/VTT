@@ -70,4 +70,11 @@ function dcFor(ch, dc) {
   return 8 + (ch.prof || 2) + Math.max(...abls.map((a) => ((ch.abilities || [])[ix[a]] || {}).mod || 0));
 }
 
-module.exports = { FEATURES, PRESETS, featuresFor, dcFor };
+// Weapon Mastery properties (2024 Player's Handbook)
+const MASTERY = { club: 'Slow', dagger: 'Nick', greatclub: 'Push', handaxe: 'Vex', javelin: 'Slow', 'light hammer': 'Nick', mace: 'Sap', quarterstaff: 'Topple', sickle: 'Nick', spear: 'Sap',
+  dart: 'Vex', 'light crossbow': 'Slow', shortbow: 'Vex', sling: 'Slow', battleaxe: 'Topple', flail: 'Sap', glaive: 'Graze', greataxe: 'Cleave', greatsword: 'Graze', halberd: 'Cleave', lance: 'Topple',
+  longsword: 'Sap', maul: 'Topple', morningstar: 'Sap', pike: 'Push', rapier: 'Vex', scimitar: 'Nick', shortsword: 'Vex', trident: 'Topple', warhammer: 'Push', 'war pick': 'Sap', whip: 'Slow',
+  blowgun: 'Vex', 'hand crossbow': 'Vex', 'heavy crossbow': 'Push', longbow: 'Slow', musket: 'Slow', pistol: 'Vex' };
+const masteryOf = (name) => { const n = String(name || '').toLowerCase(); let best = ''; for (const k of Object.keys(MASTERY)) if (n.includes(k) && k.length > best.length) best = k; return best ? MASTERY[best] : ''; };
+
+module.exports = { FEATURES, PRESETS, featuresFor, dcFor, MASTERY, masteryOf };

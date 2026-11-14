@@ -29,7 +29,16 @@ function art(m) {
 }
 const mod = (v) => Math.floor((v - 10) / 2);
 const list = (xs) => (xs || []).map((x) => (typeof x === 'string' ? x : x.name)).join(', ');
-const entries = (xs) => (xs || []).map((x) => ({ n: x.name, d: x.desc }));
+// each action, trait or legendary action: its text, plus how often it can be used (Recharge 5–6, 3/Day, after a rest)
+// and, for a Multiattack, the attacks it's made of
+const entries = (xs) => (xs || []).map((x) => {
+  const e = { n: x.name, d: x.desc }, u = x.usage;
+  if (u && u.type === 'recharge on roll') e.recharge = u.min_value;
+  else if (u && u.type === 'per day') e.perDay = u.times;
+  else if (u && u.type === 'recharge after rest') e.rest = true;
+  if (Array.isArray(x.actions) && x.actions.length) e.ma = x.actions.map((a) => ({ name: a.action_name, n: +a.count || 1 }));
+  return e;
+});
 
 const out = data.map((m) => {
   const t = art(m), type = String(m.type || '').toLowerCase().startsWith('swarm') ? 'swarm' : String(m.type || '').toLowerCase();

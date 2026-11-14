@@ -13,7 +13,7 @@ const FEATS = require('./features');
 const FX = require('../public/js/monsterfx.js');
 const ddb = require('./ddb');
 
-const VERSION = '1.17.0';
+const VERSION = '1.18.0';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
@@ -85,6 +85,7 @@ function loadState(file) {
     s.sound = s.sound && typeof s.sound === 'object' ? s.sound : { music: null, amb: [] };
     s.diceSkins = s.diceSkins && typeof s.diceSkins === 'object' ? s.diceSkins : {};
     s.characters = s.characters && typeof s.characters === 'object' ? s.characters : {};
+    s.items = s.items && typeof s.items === 'object' ? s.items : {}; s.inventory = s.inventory && typeof s.inventory === 'object' ? s.inventory : {};
     for (const ch of Object.values(s.characters)) RULES.enrichCharacter(ch); // spells brought in before 1.14 learn their conditions and darts
     for (const sc of Object.values(s.scenes)) sc.fog = sc.fog || { on: false, data: '' };
     // spells holding tokens, saved by 1.15: say how they end the 1.16 way
@@ -98,7 +99,7 @@ function loadState(file) {
     }
     return s;
   }
-  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] }, diceSkins: {}, characters: {} };
+  const state = { version: 2, scenes: {}, order: [], activeScene: null, log: [], macros: {}, library: [], passcode: '', blocked: [], pins: {}, encounters: [], audio: [], sound: { music: null, amb: [] }, diceSkins: {}, characters: {}, items: {}, inventory: {} };
   if (s && s.map) { // migrate the single-map format from v0.1/v0.2
     const sc = newScene('Imported map', s.map.cols, s.map.rows);
     if (s.map.url) sc.bg = { url: s.map.url };
@@ -455,7 +456,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     // walls and doors from imported maps are only for the DM's tools (they'd give away the layout). Imported lights
     // go to players for the look of the map: their screen shows light only where their character can see.
     const { walls, doors, ...rest } = sc;
-    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, combat: combatFor(sc, u), sight: sightData(sc, u),
+    return { ...rest, tiles, props, tokens, labels, templates: sc.templates || {}, zones: sc.zones || {}, combat: combatFor(sc, u), sight: sightData(sc, u),
       floors: floorsOf(sc).map((f) => ({ id: f.id, level: f.level || 0, floor: f.floor || '' })) };
   }
   function sendSceneFull(sc) {
@@ -495,6 +496,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   // Haste (+2), Warding Bond (+1), Slow (-2)
   function acOf(t) {
     let ac = t.ac || (charForToken(t) || {}).ac || (srdOf(t) || {}).ac || 10;
+    const gr = gearOf(t); if (gr) { if (gr.acSet) ac = Math.max(ac, gr.acSet); ac += gr.ac; } // armour and bonuses from the DM's items
     const mk = spellsOn(t), c = new Set(t.conditions || []);
     for (const m of mk) if (m.acBase) ac = Math.max(ac, m.acBase + dexMod(t));
     for (const m of mk) if (m.ac) ac += m.ac;
@@ -507,6 +509,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   // so "nonmagical" clauses don't count for them), a character's resistances from D&D Beyond
   function takes(t, type, magical = true) {
     if (!type) return 1;
+    const gr = gearOf(t); if (gr && gr.resist.includes(type)) return 0.5;
+    if ((t.marks || []).some((m) => m.potionResist === type)) return 0.5;
+    // fully under water, everything resists fire
+    if (type === 'fire') for (const scn of Object.values(state.scenes)) if (scn.underwater && scn.tokens[t.id] === t) return 0.5;
     // Stoneskin, Protection from Energy, Warding Bond, Fire Shield, Aura of Life…
     if (spellsOn(t).some((m) => m.resist === 'all' || (Array.isArray(m.resist) && m.resist.includes(type)))) return 0.5;
     const ch = charForToken(t); if (ch) return (ch.resist || []).includes(type) ? 0.5 : 1;
@@ -584,6 +590,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if ((abl === 'STR' || abl === 'DEX') && ['paralyzed', 'stunned', 'unconscious', 'petrified'].some((c) => conds.has(c))) return { ok: false, auto: true, abl, notes: ['fails automatically'], total: 0 };
     let bonus = abl ? saveBonus(t, abl) : 0, extra = '', adv = o.adv ? 1 : 0, dis = 0;
     if (abl === 'DEX' && conds.has('restrained')) { dis++; notes.push('Restrained'); }
+    if (abl === 'DEX' && conds.has('dodging') && !['incapacitated', 'unconscious', 'paralyzed', 'stunned'].some((c) => conds.has(c))) { adv++; notes.push('Dodge'); }
+    if (abl === 'DEX' && (conds.has('cover-half') || conds.has('cover-3q'))) { bonus += conds.has('cover-3q') ? 5 : 2; notes.push('cover'); }
     if (abl === 'DEX' && conds.has('hasted')) adv++;
     if (abl === 'DEX' && conds.has('slowed')) bonus -= 2;
     if (abl === 'DEX' && (t.marks || []).some((m) => /irresistible dance/i.test(m.spell) && m.c === 'charmed')) dis++;
@@ -592,6 +600,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (o.conc && conds.has('muddled')) extra += '-1d6';
     if (conds.has('exhaustion')) bonus -= 2 * (t.exhaustion || 1);
     if (conds.has('holyaura')) adv++;
+    { const gr = gearOf(t); if (gr && gr.saves && abl) bonus += gr.saves; }
     for (const mk of spellsOn(t)) { if (mk.saves) bonus += mk.saves; if ((mk.advSaves || []).includes(abl || 'death')) adv++; if (mk.advSpell && o.spell) adv++; }
     const m = srdOf(t), tr = m ? FX.traits(m) : null;
     if (o.spell && tr && tr.magicResistance) { adv++; notes.push('Magic Resistance'); }
@@ -638,17 +647,43 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   //  Invisible, Blur → Disadvantage · Blade Ward -1d4 · Protection from Evil and Good against its creature types ·
   //  Sanctuary: the attacker saves first or loses the attack · a hit on a Paralyzed or Unconscious creature from within
   //  5 feet is a critical hit
+  // the gap between two creatures' spaces, in squares (0: next to each other)
+  const sqDist = (a, b) => Math.max(0, Math.max(a.x - (b.x + b.size), b.x - (a.x + a.size)), Math.max(a.y - (b.y + b.size), b.y - (a.y + a.size))) + 1; // in squares, 1 = adjacent
+  const foes = (a, b) => isPC(a) !== isPC(b);
+  const canAct = (t) => !(t.conditions || []).some((c) => ['incapacitated', 'unconscious', 'paralyzed', 'stunned', 'petrified', 'dead'].includes(c)) && t.hp !== 0;
+  const UNDERWATER_MELEE = /dagger|javelin|shortsword|spear|trident/i, UNDERWATER_RANGED = /crossbow|net|javelin|spear|trident|dart/i;
   function attackRoll(sc, src, t, bonus, o = {}) {
     const a = new Set((src && src.conditions) || []), d = new Set(t.conditions || []), notes = [];
+    if (d.has('blinking')) return { blocked: true, ethereal: true, notes: ['Blink'] }; // in the Ethereal Plane until its turn
     let adv = 0, dis = 0, extra = '';
-    const near = src ? Math.max(Math.abs(src.x - t.x), Math.abs(src.y - t.y)) <= Math.max(1, src.size || 1) : true, melee = o.melee != null ? o.melee : near;
+    const dist = src ? sqDist(src, t) : 1, near = dist <= 1, melee = o.melee != null ? o.melee : near;
+    // range: past the normal range Disadvantage, past the long range it can't hit
+    if (src && !melee && o.range) { const ft = dist * 5; if (o.range.long && ft > o.range.long) return { blocked: true, outOfRange: true, notes: [`out of range (${ft} ft, ${o.range.long} ft at most)`] }; if (ft > o.range.normal) { dis++; notes.push('long range'); } }
+    if (src && melee && o.reach && dist > Math.max(1, o.reach / 5)) return { blocked: true, outOfRange: true, notes: ['out of reach'] };
+    // a ranged attack with a foe right next to you
+    if (src && !melee && Object.values(sc.tokens).some((x) => x !== src && x !== t && foes(x, src) && canAct(x) && !x.hidden && sqDist(x, src) <= 1)) { dis++; notes.push('foe within 5 ft'); }
     for (const c of ['blinded', 'frightened', 'poisoned', 'prone', 'restrained']) if (a.has(c)) { dis++; notes.push('attacker ' + c); }
-    if (a.has('invisible') && !d.has('blinded')) adv++;
+    if ((a.has('invisible') || a.has('hidden')) && !d.has('blinded')) { adv++; notes.push('unseen attacker'); }
     if (a.has('blessed')) extra += '+1d4'; if (a.has('baned')) extra += '-1d4'; if (a.has('muddled')) extra += '-1d6';
     if (a.has('exhaustion')) extra += '-' + 2 * ((src && src.exhaustion) || 1);
-    for (const c of ['blinded', 'paralyzed', 'petrified', 'restrained', 'stunned', 'unconscious', 'outlined']) if (d.has(c)) { adv++; notes.push('target ' + c); }
+    if (a.has('sapped')) { dis++; notes.push('Sap'); }
+    if (a.has('dancing') || (src && (src.marks || []).some((m) => /irresistible dance/i.test(m.spell) && m.c === 'charmed'))) dis++;
+    for (const c of ['blinded', 'paralyzed', 'petrified', 'restrained', 'stunned', 'unconscious', 'outlined', 'distracted']) if (d.has(c)) { adv++; notes.push('target ' + c); }
     if (d.has('prone')) { if (melee) adv++; else dis++; }
-    if (d.has('invisible') && !d.has('outlined')) { dis++; notes.push('target invisible'); }
+    if ((d.has('invisible') || d.has('hidden')) && !d.has('outlined')) { dis++; notes.push('unseen target'); }
+    if (d.has('dodging') && !a.has('hidden') && canAct(t)) { dis++; notes.push('Dodge'); }
+    const vex = (t.marks || []).find((m) => m.c === 'vexed' && src && m.by === keyOf(src)); if (vex) { adv++; notes.push('Vex'); }
+    // the DM's optional flanking rule: a friend of the attacker on the opposite side of the target
+    if (sc.flanking && src && melee && near) {
+      const cx = t.x + t.size / 2, cy = t.y + t.size / 2, ax = src.x + src.size / 2 - cx, ay = src.y + src.size / 2 - cy;
+      if (Object.values(sc.tokens).some((x) => x !== src && x !== t && !foes(x, src) && canAct(x) && sqDist(x, t) <= 1 && ((x.x + x.size / 2 - cx) * ax + (x.y + x.size / 2 - cy) * ay) / (Math.hypot(ax, ay) * Math.hypot(x.x + x.size / 2 - cx, x.y + x.size / 2 - cy) || 1) < -0.9)) { adv++; notes.push('flanking'); }
+    }
+    // underwater: most melee weapons and ranged attacks have Disadvantage (a swimmer's natural weapons don't)
+    if (sc.underwater && src && o.weapon != null) {
+      const swims = /swim/i.test(((srdOf(src) || {}).speed) || '');
+      if (melee && !swims && !UNDERWATER_MELEE.test(o.weapon)) { dis++; notes.push('underwater'); }
+      if (!melee) { if (o.range && dist * 5 > o.range.normal) return { blocked: true, outOfRange: true, notes: ['underwater: misses past normal range'] }; if (!UNDERWATER_RANGED.test(o.weapon)) { dis++; notes.push('underwater'); } }
+    }
     const marks = spellsOn(t);
     if (marks.some((m) => m.disAgainst)) { dis++; notes.push('Blur'); }
     const once = marks.find((m) => m.advAgainst); if (once) { adv++; notes.push(once.spell); }
@@ -658,11 +693,43 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     const sanct = marks.find((m) => m.sanctuary);
     if (sanct && src && !o.noSanctuary) { const sv = saveRoll(sc, src, 'WIS', { dc: sanct.dc, spell: true }); if (sv.r) showRoll(src, { label: 'Sanctuary: WIS save', expr: sv.expr, ...sv.r }); if (!sv.ok) return { blocked: true, notes: ['Sanctuary'] }; }
     const mode = adv && !dis ? 'adv' : dis && !adv ? 'dis' : '';
-    const expr = String(bonus).startsWith('1d20') ? String(bonus) + extra + mode : '1d20' + sgnS(+bonus || 0) + extra + mode, r = rollDice(expr), ac = acOf(t);
+    const cover = d.has('cover-3q') ? 5 : d.has('cover-half') ? 2 : 0;
+    const expr = String(bonus).startsWith('1d20') ? String(bonus) + extra + mode : '1d20' + sgnS(+bonus || 0) + extra + mode, r = rollDice(expr), ac = acOf(t) + cover;
+    if (cover) notes.push(cover === 5 ? 'three-quarters cover' : 'half cover');
     const autoCrit = melee && near && (d.has('paralyzed') || d.has('unconscious'));
-    const hit = r.crit === 'nat20' || (r.crit !== 'nat1' && r.total >= ac), crit = hit && (r.crit === 'nat20' || autoCrit);
-    if (hit && once && once.advAgainst === 'once') { const b = { ...t }; liftMarks(t, sameSpell(once)); tokenChanged(sc, t, b); }
+    let hit = r.crit === 'nat20' || (r.crit !== 'nat1' && r.total >= ac); const crit = hit && (r.crit === 'nat20' || autoCrit);
+    // used up: Help, Guiding Bolt, Vex on the target; Sap on the attacker; attacking gives a hidden attacker away
+    const b1 = { ...t }; let tch = false;
+    if (once && once.advAgainst === 'once' && hit) { liftMarks(t, sameSpell(once)); tch = true; }
+    if (d.has('distracted')) { t.conditions = t.conditions.filter((c) => c !== 'distracted'); liftMarks(t, (m) => m.c === 'distracted'); tch = true; }
+    if (vex) { liftMarks(t, (m) => m === vex); tch = true; }
+    if (tch) tokenChanged(sc, t, b1);
+    if (src && (a.has('sapped') || a.has('hidden'))) { const b2 = { ...src }; src.conditions = src.conditions.filter((c) => c !== 'sapped' && c !== 'hidden'); liftMarks(src, (m) => m.c === 'sapped' || m.c === 'hidden'); tokenChanged(sc, src, b2); }
+    // Mirror Image: a duplicate may take the hit (a d6 for each, 3 or higher)
+    const mi = hit && (t.marks || []).find((m) => m.c === 'mirrored' && m.dupes > 0);
+    if (mi) { const x = rollDice(mi.dupes + 'd6'); if (x.dice.some((dd) => dd.v >= 3)) { const b3 = { ...t }; mi.dupes--; if (!mi.dupes) liftMarks(t, (m) => m === mi); tokenChanged(sc, t, b3); return { hit: false, duplicate: true, left: mi.dupes, total: r.total, expr, r, ac, mode, notes }; } }
     return { hit, crit, total: r.total, expr, r, ac, mode, notes };
+  }
+  const missWhy = (a, who) => (a.ethereal ? `👻 ${who} is in the Ethereal Plane (Blink)` : a.outOfRange ? `📏 ${who}: ${a.notes[0]}` : a.duplicate ? `🪞 ${who}: a Mirror Image duplicate takes the hit${a.left ? ` (${a.left} left)` : ' (the last one)'}` : `🕊 ${who} is protected by Sanctuary`);
+  // a creature leaving a foe's reach without Disengaging: that foe may make an opportunity attack (in combat, once per round)
+  const reachOf = (t) => { const ch = charForToken(t); if (ch) return Math.max(5, ...(ch.attacks || []).filter((a) => !a.ranged).map((a) => a.reach || 5)); const m = srdOf(t); if (!m) return 5; return Math.max(5, ...(m.actions || []).map((a) => FX.meta(a, m).reach || 0)); };
+  function oppAttacks(sc, mover, from) {
+    const c = sc.combat; if (!c || !c.active || !c.started) return;
+    if ((mover.conditions || []).some((x) => ['disengaged', 'dead'].includes(x)) || mover.hp === 0) return;
+    for (const o of Object.values(sc.tokens)) {
+      if (o === mover || !foes(o, mover) || !canAct(o) || o.hidden) continue;
+      const r = Math.max(1, reachOf(o) / 5), was = sqDist(o, { ...mover, x: from.x, y: from.y }) <= r, now = sqDist(o, mover) <= r;
+      if (!was || now) continue;
+      if (o.reactionRound === c.round + ':' + (c.turnId || '')) continue;
+      const to = isPC(o) ? [o.owner, 'DM'] : ['DM'];
+      post({ kind: 'chat', who: 'Monsters', to, text: `⚔ ${mover.label || '?'} leaves ${o.label || '?'}'s reach: ${o.label || '?'} can make an opportunity attack (its Reaction)${isPC(o) ? '. Use 🎯 on your weapon.' : '. Use its attack from the stat block.'}`, time: Date.now(), cast: true });
+    }
+  }
+  // the Resistance cantrip: the first damage of its type each turn is reduced by 1d4
+  function reduceBy(sc, t, n, type) {
+    const mk = (t.marks || []).find((m) => m.reduce && m.reduce.type === type); if (!mk || !(n > 0)) return n;
+    const k = turnKey(sc); if (mk.used === k) return n; mk.used = k;
+    return Math.max(0, n - rollDice(mk.reduce.dice || '1d4').total);
   }
   // Armor of Agathys: a creature that hits it up close takes cold damage while the temporary hit points last
   function retaliate(sc, src, t, melee) {
@@ -677,7 +744,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   const spellsOn = (t) => { const seen = new Map(); for (const m of t.marks || []) { const k = m.by + '|' + m.spell; if (!seen.has(k)) seen.set(k, m); } return [...seen.values()]; };
   const sameSpell = (a) => (m) => m.by === a.by && m.spell === a.spell;
   const FIELDS = ['end', 'start', 'hurt', 'escape', 'escapeDc', 'checkAbl', 'skill', 'expire', 'tick', 'count', 'manual', 'note', 'afterEnd', 'temp', 'breakConc',
-    'ac', 'acBase', 'acMin', 'saves', 'resist', 'disAgainst', 'advAgainst', 'atkAgainst', 'disFrom', 'sanctuary', 'deathWard', 'advSaves', 'maxHeal', 'agathys', 'weaponDmg', 'immune', 'advSpell', 'weaponHit'];
+    'ac', 'acBase', 'acMin', 'saves', 'resist', 'disAgainst', 'advAgainst', 'atkAgainst', 'disFrom', 'sanctuary', 'deathWard', 'advSaves', 'maxHeal', 'agathys', 'weaponDmg', 'immune', 'advSpell', 'weaponHit', 'dupes', 'blink', 'reduce'];
   // put an effect's conditions on a token and remember how they end
   function putOn(sc, t, rule, ctx) {
     const before = { ...t }, immune = immuneTo(t);
@@ -776,6 +843,10 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   }
   function endOfTurn(sc, t) {
     if (!t) return;
+    zonesAtTurn(sc, t, 'end');
+    // Blink: a d20 at the end of its turn, 11 or higher and it's in the Ethereal Plane until the start of its next turn
+    const bl = (t.marks || []).find((m) => m.blink);
+    if (bl) { const x = rollDice('1d20'); showRoll(t, { label: 'Blink', expr: '1d20', ...x }); if (x.total >= 11) { putOn(sc, t, { add: ['blinking'], expire: 'tgtStart' }, { by: bl.by, spell: 'Blink (ethereal)', dc: 0 }); tellAbout(sc, t, `👻 ${t.label || '?'} blinks into the Ethereal Plane (${x.total}) until the start of its next turn`); } else tellAbout(sc, t, `${t.label || '?'} stays put (Blink: ${x.total})`); }
     for (const mk of spellsOn(t)) {
       if (mk.tick && mk.tick.when === 'end' && !mk.tick.onFail) tickOn(sc, t, mk);
       if (mk.end) retry(sc, t, mk);
@@ -784,6 +855,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     }
     // timed effects ending now: its own "until the end of its next turn", and what it put on others "until the end of its next turn"
     const key = keyOf(t);
+    for (const mk of spellsOn(t)) if (mk.expire === 'thisTurn') tellAbout(sc, t, liftSpell(sc, t, mk, `⌛ ${mk.spell} ends for ${t.label || '?'}`));
     for (const o of Object.values(sc.tokens)) for (const mk of spellsOn(o)) {
       if (!((o === t && mk.expire === 'tgtEnd') || (mk.by === key && mk.expire === 'srcEnd'))) continue;
       if (mk.skip) { for (const m of o.marks || []) if (sameSpell(mk)(m)) m.skip = 0; continue; } // put on during this very turn: next time
@@ -792,6 +864,15 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   }
   function startOfTurn(sc, t) {
     if (!t) return;
+    zonesAtTurn(sc, t, 'start');
+    // a monster's turn: its spent Recharge abilities roll to come back, its legendary actions refresh
+    const mon = srdOf(t);
+    if (mon && t.uses) for (const a of [...(mon.actions || []), ...(mon.traits || []), ...(mon.legendary || [])]) {
+      const mt = FX.meta(a, mon), nm = a.n.replace(/\s*\(.*?\)\s*$/, '');
+      if (mt.recharge && t.uses[nm] === 'spent') { const x = rollDice('1d6'); const back = x.total >= mt.recharge; if (back) delete t.uses[nm]; post({ kind: 'chat', who: 'Monsters', to: ['DM'], text: `🔋 ${t.label || '?'}'s ${nm}: ${x.total} on the recharge roll${back ? ', ready again' : ', not yet'}`, time: Date.now(), cast: true }); }
+    }
+    if (mon && (mon.legendary || []).length) t.legLeft = FX.legendaryCount(mon);
+    if (mon) toDMs({ type: 'token', sceneId: sc.id, token: t });
     const key = keyOf(t);
     // what this creature put on others "until the start of its next turn" ends; its "at the start of each of its turns" damage happens
     for (const o of Object.values(sc.tokens)) for (const mk of spellsOn(o)) {
@@ -810,6 +891,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   // a new round: effects with a set time (1 minute = 10 rounds) run out; concentration runs out at the spell's duration
   function newRound(sc) {
     const c = sc.combat;
+    let gone = 0; for (const [id, z] of Object.entries(sc.zones || {})) if (z.until && c.round > z.until) { delete sc.zones[id]; gone++; }
+    if (gone) { sendZones(sc); zoneInside(sc); }
     for (const t of Object.values(sc.tokens)) for (const mk of spellsOn(t)) if (mk.until && c.round > mk.until) tellAbout(sc, t, liftSpell(sc, t, mk, `⌛ ${mk.spell} runs out on ${t.label || '?'}`));
     for (const [k, ch] of Object.entries(state.characters)) if (ch.concOn && ch.concUntil && ch.concScene === sc.id && c.round > ch.concUntil) {
       const { spell, freed } = endConc('p:' + k); post({ kind: 'chat', who: ch.player || k, text: `⌛ ${spell || 'The spell'} runs out${freed.length ? ': it ends for ' + freed.join(', ') : ''}`, time: Date.now(), cast: true });
@@ -841,7 +924,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   function spellInfo() {
     if (SPELL_INFO) return SPELL_INFO;
     SPELL_INFO = {};
-    try { for (const e of require('../public/spells.json').spells) { const sp = RULES.fromDb(e, { level: 5 }), c = sp.cond || {}; const i = {}; if (c.options) i.options = c.options.map((o) => o.name); if (sp.types) i.types = sp.types; if (sp.multi) i.multi = { n: sp.multi.n, word: sp.multi.word, up: sp.multi.up }; if (c.ally) i.ally = 1; if (c.self || sp.selfOnly) i.self = 1; if (sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi) i.lands = 1; SPELL_INFO[e.name.toLowerCase()] = i; } } catch { /* the table is missing */ }
+    try { for (const e of require('../public/spells.json').spells) { const sp = RULES.fromDb(e, { level: 5 }), c = sp.cond || {}; const i = {}; if (c.options) i.options = c.options.map((o) => o.name); if (sp.types) i.types = sp.types; if (sp.multi) i.multi = { n: sp.multi.n, word: sp.multi.word, up: sp.multi.up }; if (c.ally) i.ally = 1; if (c.self || sp.selfOnly) i.self = 1; if (sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi) i.lands = 1; if (sp.targets && !sp.multi) i.targets = sp.targets; SPELL_INFO[e.name.toLowerCase()] = i; } } catch { /* the table is missing */ }
     return SPELL_INFO;
   }
   // ----- casting a spell on tokens, for a player or a monster (1.17): healing, temporary hit points, revival, darts and
@@ -849,6 +932,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   // cast: { caster (token or null), at (slot level), up (levels above), dc, mod (spellcasting modifier), option, raw (target ids with repeats) }
   function castSpell(sc, sp, targets, cast, ctx) {
     const lines = ctx.lines, roll = ctx.roll, who = (t) => t.label || '?', up = cast.up || 0, dc = cast.dc;
+    // how many it can target (Bless: three, and one more for each slot level above 1st)
+    if (sp.targets && !sp.multi) { const max = sp.targets.n + (sp.targets.up || 0) * up; if (targets.length > max) { lines.push(`ℹ ${sp.name} can target ${max} at this level: ${targets.slice(max).map(who).join(', ')} left out`); targets = targets.slice(0, max); } }
     const hp = (t) => (isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'}${t.tempHp ? ' +' + t.tempHp + ' temp' : ''})` : t.hp === 0 ? ' (down)' : '');
     let rule = sp.cond ? { ...sp.cond } : null, name = ctx.name;
     if (rule && rule.options) { const o = rule.options[clamp(int(cast.option, 0), 0, rule.options.length - 1)]; rule = { ...rule, ...o, options: undefined }; if (!o.add) rule.add = rule.add || []; }
@@ -918,7 +1003,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         const t = sc.tokens[id]; let amount = 0, hits = 0, crits = 0;
         if (sp.attack) for (let i = 0; i < k; i++) {
           const a = attackRoll(sc, caster, t, sp.attack, { melee: false });
-          if (a.blocked) { lines.push(`🕊 ${who(t)} is protected by Sanctuary`); break; }
+          if (a.blocked || a.duplicate) { lines.push(missWhy(a, who(t))); if (a.blocked) break; continue; }
           ctx.atk(`${sp.name} ${M.word} → ${who(t)}`, a);
           if (a.hit) { hits++; if (a.crit) crits++; amount += roll(a.crit ? doubleDice(M.dice) : M.dice, sp.name + ' damage').total; }
         } else { hits = k; amount = roll(times(M.dice, k), `${sp.name} → ${who(t)}`).total; }
@@ -932,11 +1017,11 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       for (const t of targets) {
         if (sp.attack) { // a spell attack, with everything that changes it; a critical hit doubles the dice
           const a = attackRoll(sc, caster, t, sp.attack, { melee: /melee/i.test(sp.attackKind || '') || /touch|self/i.test(sp.range || '') });
-          if (a.blocked) { lines.push(`🕊 ${who(t)} is protected by Sanctuary: the spell goes elsewhere`); continue; }
+          if (a.blocked || a.duplicate) { lines.push(missWhy(a, who(t))); continue; }
           ctx.atk(`${sp.name} → ${who(t)}`, a);
           if (!a.hit) { lines.push(`💨 ${who(t)}: miss (${a.total} vs AC ${a.ac}${a.mode ? ', ' + (a.mode === 'adv' ? 'Advantage' : 'Disadvantage') : ''})`); continue; }
           hitIds.add(t.id); let dealt = 0; const bits = [];
-          for (const d of parts) { const x = roll(a.crit ? doubleDice(d.dice) : d.dice, sp.name + ' damage'), k = takes(t, d.type), n = Math.floor(x.total * k); dealt += n; bits.push(`${n} ${d.type}${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}`); }
+          for (const d of parts) { const x = roll(a.crit ? doubleDice(d.dice) : d.dice, sp.name + ' damage'), k = takes(t, d.type), n = reduceBy(sc, t, Math.floor(x.total * k), d.type); dealt += n; bits.push(`${n} ${d.type}${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}`); }
           hpTo(sc, t, -dealt);
           lines.push(`💥 ${who(t)}: ${a.crit ? 'critical hit! ' : `hit (${a.total} vs AC ${a.ac}) `}${bits.join(' + ')} damage${hp(t)}${retaliate(sc, caster, t, false)}`);
           if (rule && rule.drain && caster) { const back = Math.floor(dealt * rule.drain); hpTo(sc, caster, back); lines.push(`🩸 ${who(caster)} regains ${back} hit points`); }
@@ -948,12 +1033,15 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           if (same) condDone.add(t.id);
         } else { // no attack, no save: it just hits (Divine Smite, Power Word…)
           let dealt = 0; const bits = [];
-          for (const d of parts) { const x = ctx.shared[d.dice + d.type] = ctx.shared[d.dice + d.type] || roll(d.dice, sp.name + ' damage'), k = takes(t, d.type), n = Math.floor(x.total * k); dealt += n; bits.push(`${n} ${d.type}`); }
+          // Divine Smite: another 1d8 against a fiend or undead
+          const mt = srdOf(t), vs = rule && rule.vsTypes && mt && rule.vsTypes.types.some((ty) => new RegExp(ty, 'i').test(mt.type || '')) ? [{ dice: rule.vsTypes.dice, type: parts[0].type }] : [];
+          for (const d of [...parts, ...vs]) { const x = ctx.shared[d.dice + d.type] = ctx.shared[d.dice + d.type] || roll(d.dice, sp.name + ' damage'), k = takes(t, d.type), n = Math.floor(x.total * k); dealt += n; bits.push(`${n} ${d.type}`); }
           hpTo(sc, t, -dealt); hitIds.add(t.id); lines.push(`💥 ${who(t)}: ${bits.join(' + ')} damage${hp(t)}`);
         }
       }
     }
     // conditions and protections: Hold Person, Bless, Shield, Stoneskin, Faerie Fire…
+    if (cast.first) startZone(sc, sp, cast, ctx, parts, rule, targets);
     // a save with no damage or condition, just an outcome (Counterspell: the other caster's spell fails)
     if (rule && rule.saveOnly && rule.save) for (const t of targets) { const r = saveRoll(sc, t, rule.save, { dc, spell: true }); if (r.r) showRoll(t, { label: `${sp.name}: ${rule.save} save`, expr: r.expr, ...r.r }); lines.push(r.ok ? `🛡 ${who(t)} saves against ${sp.name}` : `✖ ${who(t)} fails the save: ${rule.saveOnly}`); }
     if (rule && targets.length && !(rule.reaction && cast.first) && ((rule.add || []).length || rule.divine || rule.hpCap)) {
@@ -966,8 +1054,143 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       }
     }
   }
+  // ----- areas that keep working: a creature entering, starting or ending its turn there (1.18) -----
+  const tplL = (t) => t.size / 5;
+  function tplHas(t, px, py) { // the same shapes the map draws
+    const dx = px - t.x, dy = py - t.y, e = 1e-6;
+    if (t.shape === 'sphere' || t.shape === 'cylinder') return dx * dx + dy * dy <= tplL(t) * tplL(t) + e;
+    if (t.shape === 'cube') { const sx = Math.cos(t.angle) >= -1e-9 ? 1 : -1, sy = Math.sin(t.angle) >= -1e-9 ? 1 : -1; return dx * sx >= -e && dx * sx <= tplL(t) + e && dy * sy >= -e && dy * sy <= tplL(t) + e; }
+    const c = Math.cos(t.angle), sn = Math.sin(t.angle), along = dx * c + dy * sn, perp = Math.abs(-dx * sn + dy * c);
+    if (along < -e || along > tplL(t) + e) return false;
+    if (t.shape === 'cone') return perp <= along / 2 + e;
+    if (t.shape === 'line') return perp <= (t.width || 5) / 10 + e;
+    return perp <= tplL(t) / 2 + e;
+  }
+  function zoneShape(sc, z) {
+    if (z.follow) { const c = sc.tokens[z.follow]; return c ? { shape: 'sphere', x: c.x + c.size / 2, y: c.y + c.size / 2, size: z.radius + 2.5 * c.size, angle: 0 } : null; }
+    return (sc.templates || {})[z.tpl] || null;
+  }
+  // is any square of this token inside the area (at this position)?
+  function inZone(sc, z, t, pos) {
+    const s = zoneShape(sc, z); if (!s) return false;
+    const x0 = pos ? pos.x : t.x, y0 = pos ? pos.y : t.y;
+    if (z.follow === t.id) return false; // the caster itself
+    for (let y = y0; y < y0 + t.size; y++) for (let x = x0; x < x0 + t.size; x++) if (tplHas(s, x + 0.5, y + 0.5)) return true;
+    return false;
+  }
+  const turnKey = (sc) => (sc.combat && sc.combat.active && sc.combat.started ? `${sc.combat.round}:${sc.combat.turnId}` : 'ooc:' + Math.floor(Date.now() / 6000));
+  // the area does its thing to a creature (once a turn for each creature)
+  function zoneHit(sc, z, t, when, extra) {
+    const eff = z.on && z.on[when]; if (!eff || !t || (t.conditions || []).includes('dead')) return;
+    if (z.others && isPC(t) === z.pcSide) return; // Spirit Guardians: the caster's foes only
+    const k = turnKey(sc); z.hits = z.hits || {}; if (z.hits[t.id] === k && when !== 'move') return; z.hits[t.id] = k;
+    const lines = [], ctx = { by: z.by, spell: true, conc: z.conc, dc: z.dc, name: z.spell, shared: {}, lines, roll: (e, l) => { const r = rollDice(e); post({ who: z.who || 'Monsters', ...(z.pc ? {} : { to: ['DM'] }), label: str(l, 30), expr: e, ...r, private: false, time: Date.now(), skin: z.pc ? skinOf(z.who) : null }); return r; } };
+    const verb = when === 'enter' ? 'moves into' : when === 'start' ? 'starts its turn in' : when === 'end' ? 'ends its turn in' : 'moves through';
+    if (when === 'move') { // Spike Growth: damage for every 5 feet moved there
+      const n = extra || 1, x = ctx.roll(eff.dice.replace(/^(\d+)/, (_, a) => String(+a * n)), z.spell + ' damage'), k2 = takes(t, eff.type), dealt = Math.floor(x.total * k2);
+      hpTo(sc, t, -dealt); lines.push(`💥 ${t.label || '?'}: ${dealt} ${eff.type} damage`);
+    } else landOn(sc, t, { ...eff, spell: true }, ctx);
+    const vis = t.hidden ? { to: ['DM'] } : {};
+    post({ kind: 'chat', who: z.who || 'Monsters', ...vis, text: (`🌀 ${t.label || '?'} ${verb} ${z.spell}\n` + lines.join('\n')).slice(0, 1200), time: Date.now(), cast: true });
+  }
+  // conditions only while inside (Silence: deafened, Hunger of Hadar: blinded)
+  function zoneInside(sc) {
+    for (const t of Object.values(sc.tokens)) {
+      const want = new Map();
+      for (const z of Object.values(sc.zones || {})) if (z.inside && inZone(sc, z, t)) for (const c of z.inside) want.set(c + '|' + z.id, { c, z });
+      const have = (t.marks || []).filter((m) => m.zone);
+      const before = { ...t }; let changed = false;
+      for (const m of have) if (!want.has(m.c + '|' + m.zone)) { liftMarks(t, (x) => x.zone === m.zone && x.c === m.c); changed = true; }
+      for (const [k, { c, z }] of want) if (!have.some((m) => m.c + '|' + m.zone === k)) { t.marks = [...(t.marks || []), { c, by: z.by, spell: z.spell, zone: z.id, conc: z.conc }]; t.conditions = [...new Set([...(t.conditions || []), c])]; changed = true; }
+      if (changed) tokenChanged(sc, t, before);
+    }
+  }
+  // a token moved (or an area moved): who just came into which area
+  function zonesAfterMove(sc, moved, from) {
+    if (!sc.zones || !Object.keys(sc.zones).length) return;
+    for (const z of Object.values(sc.zones)) {
+      const followMoved = z.follow && moved && z.follow === moved.id;
+      if (followMoved) { // the area moved into creatures' spaces
+        const old = sc.tokens[z.follow], cur = { x: old.x, y: old.y };
+        old.x = from.x; old.y = from.y; const was = new Set(Object.values(sc.tokens).filter((t) => inZone(sc, z, t)).map((t) => t.id)); old.x = cur.x; old.y = cur.y;
+        for (const t of Object.values(sc.tokens)) if (!was.has(t.id) && inZone(sc, z, t)) zoneHit(sc, z, t, 'enter');
+      } else if (moved && from) {
+        const was = inZone(sc, z, moved, from), now = inZone(sc, z, moved);
+        if (now && !was && z.on.enter) zoneHit(sc, z, moved, 'enter');
+        if (now && z.on.move) zoneHit(sc, z, moved, 'move', Math.max(1, Math.max(Math.abs(moved.x - from.x), Math.abs(moved.y - from.y))));
+      }
+    }
+    zoneInside(sc);
+  }
+  // an area's template moved or changed shape
+  function zonesAfterTemplate(sc, tplId, before) {
+    for (const z of Object.values(sc.zones || {})) if (z.tpl === tplId && before) {
+      const cur = sc.templates[tplId]; sc.templates[tplId] = before; const was = new Set(Object.values(sc.tokens).filter((t) => inZone(sc, z, t)).map((t) => t.id)); sc.templates[tplId] = cur;
+      for (const t of Object.values(sc.tokens)) if (!was.has(t.id) && inZone(sc, z, t)) zoneHit(sc, z, t, 'enter');
+    }
+    zoneInside(sc);
+  }
+  function zonesAtTurn(sc, t, when) { for (const z of Object.values(sc.zones || {})) if (z.on[when] && inZone(sc, z, t)) zoneHit(sc, z, t, when); }
+  const sendZones = (sc) => toScene(sc.id, { type: 'zones', sceneId: sc.id, zones: sc.zones || {} });
+  function endZones(key) {
+    for (const scn of Object.values(state.scenes)) {
+      let n = 0; for (const [id, z] of Object.entries(scn.zones || {})) if (z.by === key && z.conc) { delete scn.zones[id]; n++; }
+      if (n) { for (const t of Object.values(scn.tokens)) { const b = { ...t }; if (liftMarks(t, (m) => m.zone && !scn.zones[m.zone])) tokenChanged(scn, t, b); } sendZones(scn); }
+    }
+  }
+  // a spell with a lasting area is cast: remember the area (its template, or the caster for Spirit Guardians)
+  function startZone(sc, sp, cast, ctx, parts, rule, targets) {
+    const Z = RULES.ZONES[sp.name.toLowerCase()]; if (!Z) return;
+    const caster = cast.caster, tpl = Z.follow ? null : Object.values(sc.templates || {}).filter((t) => (cast.tplOwner ? t.owner === cast.tplOwner : !t.owner)).pop();
+    if (!Z.follow && !tpl) { ctx.lines.push(`ℹ Place ${sp.name}'s area on the map (◎ Area) before casting, and it will hit creatures that move into it or stay there`); return; }
+    if (Z.follow && !caster) return;
+    const saveAbl = sp.save ? ((/\b(STR|DEX|CON|INT|WIS|CHA)\b/i.exec(sp.save) || [])[1] || '') : '';
+    const fromSpell = { save: saveAbl ? { abl: saveAbl, dc: cast.dc } : null, fail: parts, half: !!sp.half, ...(rule && (rule.add || []).length && !rule.ally ? { ...rule, save: saveAbl || rule.save ? { abl: saveAbl || rule.save, dc: cast.dc } : null } : {}) };
+    const own = (x) => (x === 'spell' ? fromSpell : x === 'nosave' ? { save: null, fail: parts } : x ? { save: x.save ? { abl: x.save, dc: cast.dc } : null, fail: x.dmg || [], half: false } : null);
+    const id = uid(), c = sc.combat && sc.combat.active ? sc.combat : null;
+    const z = { id, spell: sp.name, by: ctx.by, who: cast.who || '', pc: ctx.by.startsWith('p:'), pcSide: caster ? isPC(caster) : ctx.by.startsWith('p:'), conc: !!sp.conc, dc: cast.dc, tpl: tpl ? tpl.id : null, follow: Z.follow && caster ? caster.id : null, radius: Z.follow || 0,
+      others: !!Z.others, inside: Z.inside || null, on: { enter: own(Z.enter), start: own(Z.start), end: own(Z.end), move: Z.move || null }, until: c && sp.duration ? c.round + (RULES.roundsOf(sp.duration) || 0) : null, hits: {} };
+    const k = turnKey(sc); for (const t of targets) z.hits[t.id] = k; // what the casting itself hit isn't hit again this turn
+    sc.zones = sc.zones || {}; sc.zones[id] = z; sendZones(sc); zoneInside(sc);
+    ctx.lines.push(`🌀 ${sp.name} stays: creatures that move into it${Z.start ? ' or start their turn there' : Z.end ? ' or end their turn there' : ''} are hit`);
+  }
+  // ----- 1.18: items the DM makes and gives to players -----
+  //  kind: weapon · armor · shield · potion · scroll · wand (a spell with charges) · wondrous (an effect with a save, or
+  //  bonuses while worn) · gear. Each player's are kept apart from their D&D Beyond sheet, so bringing it in again keeps them.
+  const ITEM_KINDS = ['weapon', 'armor', 'shield', 'potion', 'scroll', 'wand', 'wondrous', 'gear'];
+  const TYPES = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
+  const DICE = /^(\d{1,2}d\d{1,3}([+-]\d{1,3})?|\d{1,3})$/;
+  function itemFields(m) {
+    const it = { name: str(m.name, 40).trim() || 'Item', kind: ITEM_KINDS.includes(m.kind) ? m.kind : 'gear', desc: str(m.desc, 1500), rarity: str(m.rarity, 20), value: str(m.value, 20), attune: !!m.attune };
+    const dice = (v) => (DICE.test(String(v || '').replace(/\s/g, '')) ? String(v).replace(/\s/g, '') : '');
+    if (it.kind === 'weapon') it.weapon = { dice: dice(m.weapon && m.weapon.dice) || '1d6', type: TYPES.includes(m.weapon && m.weapon.type) ? m.weapon.type : 'slashing', bonus: clamp(int(m.weapon && m.weapon.bonus, 0), 0, 3), ability: ['STR', 'DEX', 'finesse', 'spell'].includes(m.weapon && m.weapon.ability) ? m.weapon.ability : 'STR',
+      range: /^\d{1,3}\/\d{1,4}$/.test(String(m.weapon && m.weapon.range || '')) ? m.weapon.range : '', reach: clamp(int(m.weapon && m.weapon.reach, 5), 5, 15), extra: m.weapon && dice(m.weapon.extraDice) ? { dice: dice(m.weapon.extraDice), type: TYPES.includes(m.weapon.extraType) ? m.weapon.extraType : 'fire' } : null, mastery: str(m.weapon && m.weapon.mastery, 10) };
+    if (it.kind === 'armor' || it.kind === 'shield') it.armor = { base: clamp(int(m.armor && m.armor.base, it.kind === 'shield' ? 2 : 11), 0, 20), dexMax: m.armor && m.armor.dexMax === '' ? null : clamp(int(m.armor && m.armor.dexMax, 99), 0, 99), bonus: clamp(int(m.armor && m.armor.bonus, 0), 0, 3) };
+    if (it.kind === 'potion') it.potion = { heal: dice(m.potion && m.potion.heal), temp: dice(m.potion && m.potion.temp), cures: (Array.isArray(m.potion && m.potion.cures) ? m.potion.cures : []).filter((c) => CONDITIONS.has(c)).slice(0, 6), resist: TYPES.includes(m.potion && m.potion.resist) ? m.potion.resist : '' };
+    if (it.kind === 'scroll' || it.kind === 'wand') { const e = RULES.dbSpell(m.spell && m.spell.name); it.spell = e ? { name: e.name, level: clamp(int(m.spell.level, e.level), e.level, 9), dc: m.spell.dc === 'yours' ? 'yours' : clamp(int(m.spell.dc, 13), 1, 30), attack: m.spell.attack === 'yours' ? 'yours' : clamp(int(m.spell.attack, 5), -5, 20) } : null; }
+    if (it.kind === 'wand' || it.kind === 'wondrous' || it.kind === 'weapon') it.charges = m.charges && int(m.charges.max, 0) > 0 ? { max: clamp(int(m.charges.max, 1), 1, 50), regain: dice(m.charges.regain) || '' } : null;
+    if (it.kind === 'wondrous' && m.effect && CONDITIONS.has(m.effect.cond)) it.effect = { cond: m.effect.cond, save: ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'].includes(m.effect.save) ? m.effect.save : null, dc: clamp(int(m.effect.dc, 13), 1, 30), how: str(m.effect.how, 12), dice: dice(m.effect.dice), type: TYPES.includes(m.effect.type) ? m.effect.type : '' };
+    it.bonus = { ac: clamp(int(m.bonus && m.bonus.ac, 0), 0, 5), saves: clamp(int(m.bonus && m.bonus.saves, 0), 0, 5), resist: (Array.isArray(m.bonus && m.bonus.resist) ? m.bonus.resist : []).filter((x) => TYPES.includes(x)).slice(0, 4), attack: clamp(int(m.bonus && m.bonus.attack, 0), 0, 3) };
+    return it;
+  }
+  const invOf = (name) => (state.inventory[String(name).toLowerCase()] = state.inventory[String(name).toLowerCase()] || []);
+  // what a character's worn DM items add: AC (armour, shield, a Cloak of Protection), saves, resistances
+  function gearOf(t) {
+    const ch = charForToken(t); if (!ch || !ch.player) return null;
+    const inv = (state.inventory[String(ch.player).toLowerCase()] || []).filter((x) => x.equipped);
+    if (!inv.length) return null;
+    const g = { acSet: null, ac: 0, saves: 0, resist: [], attack: 0 }, dex = ((ch.abilities || [])[1] || {}).mod || 0;
+    for (const x of inv) {
+      if (x.item.kind === 'armor' && x.item.armor) g.acSet = Math.max(g.acSet || 0, x.item.armor.base + Math.min(dex, x.item.armor.dexMax == null ? 99 : x.item.armor.dexMax) + x.item.armor.bonus);
+      if (x.item.kind === 'shield' && x.item.armor) g.ac += x.item.armor.base + x.item.armor.bonus;
+      if (x.item.bonus) { g.ac += x.item.bonus.ac || 0; g.saves += x.item.bonus.saves || 0; g.resist.push(...(x.item.bonus.resist || [])); g.attack += x.item.bonus.attack || 0; }
+    }
+    return g;
+  }
+  const sendInv = (name) => { const key = String(name).toLowerCase(); for (const c of clients()) if (!c.user.isDM && c.user.name.toLowerCase() === key) send(c, { type: 'inventory', items: state.inventory[key] || [] }); toDMs({ type: 'inventories', inventories: state.inventory }); };
   // ----- concentration -----
   function endConc(key) {
+    endZones(key);
     let spell = '';
     const ch = key.startsWith('p:') ? charOf(key.slice(2)) : null;
     if (ch) { spell = ch.concOn || ''; delete ch.concOn; delete ch.concUntil; delete ch.concScene; }
@@ -1014,6 +1237,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   // ctx: { by, spell (true for spells), conc, dc, rounds, shared: { rolls by dice }, roll(expr, label), lines }
   function landOn(sc, t, eff, ctx, prev) {
     const who = t.label || '?', lines = ctx.lines;
+    if ((t.conditions || []).includes('blinking')) { lines.push(`👻 ${who} is in the Ethereal Plane (Blink): unaffected`); return null; }
     let res = null;
     if (eff.save && eff.save.abl) {
       if (prev) res = prev;
@@ -1031,7 +1255,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
       if (!failed && !eff.half) continue;
       if (!failed && evasion) { lines.push(`🛡 ${who} saves and takes no damage (Evasion)`); continue; }
       const roll = ctx.shared[d.dice + d.type] = ctx.shared[d.dice + d.type] || ctx.roll(d.dice, `${ctx.name} damage`);
-      const amt = failed && !evasion ? roll.total : Math.floor(roll.total / 2), k = takes(t, d.type, !!ctx.spell), dealt = Math.floor(amt * k);
+      const amt = failed && !evasion ? roll.total : Math.floor(roll.total / 2), k = takes(t, d.type, !!ctx.spell), dealt = reduceBy(sc, t, Math.floor(amt * k), d.type);
       full += Math.floor(roll.total * k); dealtTotal += dealt;
       if (dealt) hpTo(sc, t, -dealt);
       if (dealt || k === 0) lines.push(`💥 ${who}: ${label ? label + ', ' : ''}${dealt} ${d.type} damage${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}${isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'})` : t.hp === 0 ? ' (down)' : ''}`);
@@ -1082,7 +1306,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
   }
   function viewFor(u) {
     const effects = u.isDM ? { presets: FEATS.PRESETS.map((x) => ({ name: x.name, dc: x.dc, save: x.save })), spells: Object.entries(RULES.RULES).filter(([, r]) => !r.ally && ((r.add || []).length || r.divine)).map(([k, r]) => ({ name: k, save: r.save || r.endSave || '', options: (r.options || []).map((o) => o.name) })), info: spellInfo() } : null;
-    const base = { effects, diceSkin: skinOf(u.name), character: u.isDM ? null : charOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
+    const base = { effects, items: u.isDM ? state.items : null, inventories: u.isDM ? state.inventory : null, inventory: u.isDM ? null : state.inventory[u.name.toLowerCase()] || [], diceSkin: skinOf(u.name), character: u.isDM ? null : charOf(u.name), activeScene: u.isDM ? state.activeScene : viewOf(u), log: state.log.filter((e) => canSee(u, e)), myMacros: state.macros[u.name] || [], sound: soundOut(), now: Date.now() };
     if (u.isDM) { Object.values(state.scenes).forEach(syncFog); return { ...base, characters: state.characters, scenes: state.scenes, order: state.order, library: state.library, table: tableSettings(), handouts: state.handouts || [], encounters: state.encounters || [], audio: state.audio }; }
     u.view = viewOf(u);
     return { ...base, scene: playerScene(state.scenes[u.view], u), handouts: (state.handouts || []).filter((h) => forPlayer(h, u.name)) };
@@ -1126,6 +1350,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
     if (m.hidden != null) t.hidden = !!m.hidden;
     if (m.icon !== undefined) t.icon = typeof m.icon === 'string' && ICONS.has(m.icon) ? m.icon : null;
     if (m.img !== undefined) t.img = typeof m.img === 'string' && UPLOAD_URL.test(m.img) ? m.img : null;
+    if (m.frame !== undefined) t.frame = ['gold', 'silver', 'bronze', 'iron', 'wood', 'color'].includes(m.frame) ? m.frame : '';
+    if (m.imgPos !== undefined) t.imgPos = m.imgPos && typeof m.imgPos === 'object' ? { x: clamp(num(m.imgPos.x, 0), -1, 1), y: clamp(num(m.imgPos.y, 0), -1, 1), z: clamp(num(m.imgPos.z, 1), 1, 4) } : null;
     const hpVal = (v, lo) => (v === null || v === '' ? null : clamp(int(v, 0), lo, 99999));
     if (m.hp !== undefined) t.hp = hpVal(m.hp, -999);
     if (m.maxHp !== undefined) t.maxHp = hpVal(m.maxHp, 0);
@@ -1368,7 +1594,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         { const before = { ...tok };
           tok.x = clamp(int(msg.x, tok.x), 0, sc.cols - tok.size);
           tok.y = clamp(int(msg.y, tok.y), 0, sc.rows - tok.size);
-          tokenChanged(sc, tok, before); }
+          tokenChanged(sc, tok, before);
+          if (before.x !== tok.x || before.y !== tok.y) { zonesAfterMove(sc, tok, before); oppAttacks(sc, tok, before); } }
         if (visionOn(sc) && (tok.owner || tok.light)) scheduleVision(sc);
         save();
         break;
@@ -1387,7 +1614,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (!u.isDM && !mine) return;
         const before = { ...tok };
         // players can only change their own character's health, conditions and initiative bonus
-        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision', 'ddb', 'exhaustion'].filter((k) => k in msg).map((k) => [k, msg[k]]));
+        const m = u.isDM ? msg : Object.fromEntries(['hp', 'maxHp', 'tempHp', 'conditions', 'initBonus', 'light', 'darkvision', 'ddb', 'exhaustion', 'frame', 'imgPos', 'img'].filter((k) => k in msg).map((k) => [k, msg[k]]));
         Object.assign(tok, tokenFields({ ...m, x: m.x ?? tok.x, y: m.y ?? tok.y, size: m.size ?? tok.size }, sc, tok));
         tokenChanged(sc, tok, before);
         // concentration taken off by hand: the spell's conditions go too
@@ -1449,12 +1676,13 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (!u.isDM) list = list.filter((e) => sc.tokens[e.id].owner === u.name);
         if (msg.onlyUnrolled) list = list.filter((e) => e.init == null);
         for (const e of list.slice(0, 100)) {
-          const t = sc.tokens[e.id], b = t.initBonus || 0;
-          const r = rollDice('1d20' + (b ? (b > 0 ? '+' : '') + b : ''));
+          const t = sc.tokens[e.id], b = t.initBonus || 0, surprised = (t.conditions || []).includes('surprised');
+          const r = rollDice('1d20' + (b ? (b > 0 ? '+' : '') + b : '') + (surprised ? 'dis' : '')); // 2024: surprised rolls initiative with Disadvantage
+          if (surprised) { const b0 = { ...t }; t.conditions = t.conditions.filter((x) => x !== 'surprised'); tokenChanged(sc, t, b0); }
           e.init = r.total;
           // monsters' rolls stay between the DM and the dice
           const who = u.isDM && !t.owner ? 'DM' : u.name;
-          const entry = { who, label: t.label === who ? 'Initiative' : `${t.label} · Initiative`, expr: '1d20' + (b ? (b > 0 ? '+' : '') + b : ''), ...r, private: u.isDM && !t.owner, time: Date.now(), skin: skinOf(u.name) };
+          const entry = { who, label: t.label === who ? 'Initiative' : `${t.label} · Initiative`, expr: '1d20' + (b ? (b > 0 ? '+' : '') + b : '') + (surprised ? 'dis' : ''), ...r, private: u.isDM && !t.owner, time: Date.now(), skin: skinOf(u.name) };
           if (u.isDM) delete entry.dice; // a whole room of monsters rolling at once stays in the log
           state.log.push(entry);
           clients().forEach((cl) => canSee(cl.user, entry) && send(cl, { type: 'roll', entry }));
@@ -1572,7 +1800,9 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (!t) return;
         t.id = id; t.owner = old ? old.owner : (u.isDM ? '' : u.name); t.by = old ? old.by : u.name;
         sc.templates[id] = t;
-        toScene(sc.id, { type: 'template', sceneId: sc.id, tpl: t }); save();
+        toScene(sc.id, { type: 'template', sceneId: sc.id, tpl: t });
+        if (old && (old.x !== t.x || old.y !== t.y || old.size !== t.size || old.angle !== t.angle)) zonesAfterTemplate(sc, id, old);
+        save();
         break;
       }
       case 'templateRemove': { // one by id; or all of the sender's ("mine"); or the DM clears the lot ("all")
@@ -1582,6 +1812,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
           && (u.isDM || t.owner === u.name)).map((t) => t.id);
         if (!ids.length) return;
         ids.forEach((id) => delete sc.templates[id]);
+        if (sc.zones) { for (const [zid, z] of Object.entries(sc.zones)) if (ids.includes(z.tpl)) delete sc.zones[zid]; sendZones(sc); zoneInside(sc); }
         toScene(sc.id, { type: 'templateRemove', sceneId: sc.id, ids }); save();
         break;
       }
@@ -1930,6 +2161,8 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         for (const sl of ch.pact || []) sl.used = 0;
         for (const r of ch.resources || []) if (long || r.reset === 'short') r.used = 0;
         if (long && ch.concOn) endConc('p:' + u.name.toLowerCase());
+        if (long) for (const hd of ch.hitDice || []) hd.used = 0; // 2024: a long rest gives back every Hit Die
+        if (long) { for (const x of invOf(u.name)) if (x.item.charges && x.used) { const back = x.item.charges.regain ? rollDice(x.item.charges.regain).total : x.item.charges.max; x.used = Math.max(0, x.used - back); } sendInv(u.name); } // items' charges come back at dawn
         if (long) { for (const sl of ch.slots || []) sl.used = 0; ch.spellUses = {}; }
         if (long) for (const scn of Object.values(state.scenes)) for (const t of Object.values(scn.tokens)) if (t.owner === u.name && t.ddb === ch.link) {
           const before = { ...t }; if (ch.maxHp) t.maxHp = ch.maxHp; if (t.maxHp) t.hp = t.maxHp; t.tempHp = 0; t.conditions = (t.conditions || []).filter((c) => c !== 'concentrating' && c !== 'unconscious'); tokenChanged(scn, t, before);
@@ -1981,7 +2214,7 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
             const ctx = { by: 'p:' + u.name.toLowerCase(), spell: true, conc: !!sp.conc, dc, rounds: (rule && rule.rounds) || 0, name, shared: {}, roll: (e, l) => rollOut(e, l), lines,
               atk: (l, a) => rolls.push({ who: u.name, label: str(l, 30), expr: a.expr, ...a.r, private: false, time: Date.now(), skin: skinOf(u.name) }) };
             const caster = Object.values(sc.tokens).find((t) => t.owner === u.name && t.ddb === ch.link) || null;
-            castSpell(sc, sp, targets, { caster, at, up, dc, mod: ch.casting ? ch.casting.dc - 8 - (ch.prof || 2) : 0, option: msg.option, type: msg.dmgType, raw, first: !!msg.cast }, ctx);
+            castSpell(sc, sp, targets, { caster, at, up, dc, mod: ch.casting ? ch.casting.dc - 8 - (ch.prof || 2) : 0, option: msg.option, type: msg.dmgType, raw, first: !!msg.cast, tplOwner: u.name, who: u.name }, ctx);
           }
         } catch (e) { return send(ws, { type: 'error', message: e.message }); }
         for (const entry of rolls) { state.log.push(entry); clients().forEach((c) => canSee(c.user, entry) && send(c, { type: 'roll', entry })); }
@@ -2034,28 +2267,52 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         if (!u.isDM || !sc) return;
         const src = sc.tokens[msg.src], m = src ? srdOf(src) : null; if (!m) return send(ws, { type: 'error', message: 'Select the monster on the map first' });
         const list = { actions: m.actions, legendary: m.legendary, reactions: m.reactions, traits: m.traits }[msg.kind] || [], act = list[int(msg.idx, -1)]; if (!act) return;
-        const P = FX.parse(act.d, m.name, msg.kind), v = P.variants[clamp(int(msg.variant, 0), 0, Math.max(0, P.variants.length - 1))] || null;
         const targets = [...new Set((Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string'))].slice(0, 30).map((id) => sc.tokens[id]).filter(Boolean);
-        const who = src.label || m.name, name = act.n.replace(/\s*\(.*?\)\s*$/, '') + (v && P.variants.length > 1 ? ` (${v.name})` : ''), lines = [], dmRolls = [];
-        const roll = (e, l) => { const r = rollDice(e); dmRolls.push({ who: 'Monsters', to: ['DM'], label: str(`${who}: ${l}`, 30), expr: e, ...r, private: false, time: Date.now() }); return r; };
-        const ctx = { by: 't:' + src.id, spell: /\bspell\b/i.test(act.d) && msg.kind !== 'actions', dc: v && v.save ? v.save.dc : 10, rounds: (v && v.rounds) || 0, name: `${who}'s ${name}`, shared: {}, roll, lines };
-        for (const t of targets) {
-          if (P.attack != null) { // the attack roll stays with the DM; the table hears hit or miss
-            const melee = /Melee/i.test(act.d) && !/Ranged Weapon Attack/i.test(act.d);
-            const at = attackRoll(sc, src, t, P.attack, { melee });
-            if (at.blocked) { lines.push(`🕊 ${t.label || '?'} is protected by Sanctuary: ${who} must pick another target`); continue; }
-            dmRolls.push({ who: 'Monsters', to: ['DM'], label: str(`${who}: ${name} → ${t.label || '?'}`, 30), expr: at.expr, ...at.r, private: false, time: Date.now() });
-            if (!at.hit) { lines.push(`💨 ${who}'s ${name} misses ${t.label || '?'}`); continue; }
-            const crit = at.crit; let dealt = 0; const parts = [];
-            for (const d of P.hit) { const x = roll(crit ? doubleDice(d.dice) : d.dice, `${name} damage`), k = takes(t, d.type, false), n = Math.floor(x.total * k); dealt += n; parts.push(`${n} ${d.type}`); }
-            const back = retaliate(sc, src, t, melee); // while it still has Armor of Agathys's temporary hit points
-            if (dealt) hpTo(sc, t, -dealt, 0, { crit });
-            lines.push(`🗡 ${who}'s ${name} hits ${t.label || '?'}${crit ? ' (critical!)' : ''}${parts.length ? ': ' + parts.join(' + ') + ' damage' : ''}${isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'})` : ''}${back}`);
-          }
-          if (v) landOn(sc, t, { ...v }, ctx);
+        const who = src.label || m.name, lines = [], dmRolls = [], meta = FX.meta(act, m), short = act.n.replace(/\s*\(.*?\)\s*$/, '');
+        // how often: Recharge 5–6, 3/Day, after a rest, legendary actions left this round
+        src.uses = src.uses || {};
+        if ((meta.recharge || meta.rest) && src.uses[short] === 'spent') return send(ws, { type: 'error', message: `${who}'s ${short} ${meta.recharge ? 'is recharging (it rolls at the start of its turns)' : 'comes back after a rest'}` });
+        if (meta.perDay && (src.uses[short] || 0) >= meta.perDay) return send(ws, { type: 'error', message: `${who} has used ${short} ${meta.perDay} times today` });
+        if (msg.kind === 'legendary') {
+          const max = FX.legendaryCount(m); if (src.legLeft == null) src.legLeft = max;
+          const cost = meta.cost || 1; if (src.legLeft < cost) return send(ws, { type: 'error', message: `${who} has ${src.legLeft} legendary action${src.legLeft === 1 ? '' : 's'} left this round` });
+          src.legLeft -= cost; lines.push(`(${src.legLeft} legendary action${src.legLeft === 1 ? '' : 's'} left)`);
         }
+        if (meta.recharge || meta.rest) src.uses[short] = 'spent'; else if (meta.perDay) src.uses[short] = (src.uses[short] || 0) + 1;
+        const roll = (e, l) => { const r = rollDice(e); dmRolls.push({ who: 'Monsters', to: ['DM'], label: str(`${who}: ${l}`, 30), expr: e, ...r, private: false, time: Date.now() }); return r; };
+        // one action on its targets (a Multiattack runs each of its attacks in turn, sharing out the targets)
+        const useOne = (a, tlist, variant) => {
+          const P = FX.parse(a.d, m.name, msg.kind), v = P.variants[clamp(int(variant, 0), 0, Math.max(0, P.variants.length - 1))] || null, am = FX.meta(a, m);
+          const name = a.n.replace(/\s*\(.*?\)\s*$/, '') + (v && P.variants.length > 1 ? ` (${v.name})` : '');
+          const ctx = { by: 't:' + src.id, spell: /\bspell\b/i.test(a.d) && msg.kind !== 'actions', dc: v && v.save ? v.save.dc : 10, rounds: (v && v.rounds) || 0, name: `${who}'s ${name}`, shared: {}, roll, lines };
+          for (const t of tlist) {
+            if (P.attack != null) { // the attack roll stays with the DM; the table hears hit or miss
+              const melee = /Melee/i.test(a.d) && !/^Ranged/i.test(a.d.trim()) && !(/Ranged Weapon Attack/i.test(a.d) && !/Melee or Ranged/i.test(a.d)) && (!am.range || sqDist(src, t) <= Math.max(1, (am.reach || 5) / 5));
+              const at = attackRoll(sc, src, t, P.attack, { melee, range: melee ? null : am.range, reach: melee ? am.reach || 5 : null, weapon: a.n });
+              if (at.blocked || at.duplicate) { lines.push(missWhy(at, t.label || '?')); continue; }
+              dmRolls.push({ who: 'Monsters', to: ['DM'], label: str(`${who}: ${name} → ${t.label || '?'}`, 30), expr: at.expr, ...at.r, private: false, time: Date.now() });
+              if (!at.hit) { lines.push(`💨 ${who}'s ${name} misses ${t.label || '?'}`); continue; }
+              const crit = at.crit; let dealt = 0; const parts = [];
+              for (const d of P.hit) { const x = roll(crit ? doubleDice(d.dice) : d.dice, `${name} damage`), k = takes(t, d.type, false), n = reduceBy(sc, t, Math.floor(x.total * k), d.type); dealt += n; parts.push(`${n} ${d.type}`); }
+              const back = retaliate(sc, src, t, melee); // while it still has Armor of Agathys's temporary hit points
+              if (dealt) hpTo(sc, t, -dealt, 0, { crit });
+              lines.push(`🗡 ${who}'s ${name} hits ${t.label || '?'}${crit ? ' (critical!)' : ''}${parts.length ? ': ' + parts.join(' + ') + ' damage' : ''}${isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'})` : ''}${back}`);
+            }
+            if (v) landOn(sc, t, { ...v }, ctx);
+          }
+        };
+        if (meta.multi && meta.multi.length) {
+          let i = 0;
+          for (const part of meta.multi) for (let k = 0; k < part.n; k++) {
+            const a = (m.actions || []).find((y) => y.n.replace(/\s*\(.*?\)\s*$/, '') === part.name); if (!a || !targets.length) continue;
+            const isSave = !/to hit/i.test(a.d); // Frightful Presence and the like reach everyone chosen
+            useOne(a, isSave ? targets : [targets[i++ % targets.length]], 0);
+          }
+        } else useOne(act, targets, msg.variant);
         for (const r of dmRolls) post(r);
+        const name = short + (msg.variant != null && FX.parse(act.d, m.name, msg.kind).variants.length > 1 ? ` (${(FX.parse(act.d, m.name, msg.kind).variants[int(msg.variant, 0)] || {}).name || ''})` : '');
         post({ kind: 'chat', who: 'Monsters', ...(src.hidden ? { to: ['DM'] } : {}), text: (`⚔ ${who} uses ${name}${targets.length ? ' on ' + targets.map((t) => t.label || '?').join(', ') : ''}\n` + lines.join('\n')).slice(0, 1500), time: Date.now(), cast: true });
+        toDMs({ type: 'token', sceneId: sc.id, token: src });
         save();
         break;
       }
@@ -2079,37 +2336,205 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         }
         const ctx = { by, spell: true, conc: !!sp.conc, dc, rounds: (sp.cond && sp.cond.rounds) || 0, name: sp.name, shared: {}, lines,
           roll: (ex, l) => { const r = rollDice(ex); secret(l, { expr: ex, r }); return r; }, atk: (l, a) => secret(l, a) };
-        try { castSpell(sc, sp, targets, { caster: src, at, up, dc, mod, option: msg.option, type: msg.dmgType, raw, first: !msg.again }, ctx); } catch (err) { return send(ws, { type: 'error', message: err.message }); }
+        try { castSpell(sc, sp, targets, { caster: src, at, up, dc, mod, option: msg.option, type: msg.dmgType, raw, first: !msg.again, tplOwner: '', who: '' }, ctx); } catch (err) { return send(ws, { type: 'error', message: err.message }); }
         post({ kind: 'chat', who: 'Monsters', ...(src && src.hidden ? { to: ['DM'] } : {}), text: lines.join('\n').slice(0, 1500), time: Date.now(), cast: true });
         save();
         break;
       }
       case 'attackEffect': { // a player's weapon attack on a token: Advantage and Disadvantage, AC, crits, Hex, Hunter's Mark, Divine Favor
         if (u.isDM || !sc) return; const ch = charOf(u.name); if (!ch) return;
-        const w = (ch.attacks || []).find((x) => x.name === msg.name && x.damage); if (!w) return;
+        let w0 = (ch.attacks || []).find((x) => x.name === msg.name && x.damage);
+        // a weapon the DM made: its dice and bonus, with Strength, Dexterity (or the better, for finesse) or your spellcasting ability
+        const invW = msg.inv && invOf(u.name).find((y) => y.id === msg.inv && y.item.kind === 'weapon');
+        if (invW) {
+          const W = invW.item.weapon, A = (ch.abilities || []).map((x) => x.mod || 0), abil = W.ability === 'DEX' ? A[1] : W.ability === 'finesse' ? Math.max(A[0], A[1]) : W.ability === 'spell' ? (ch.casting ? ch.casting.attack - (ch.prof || 2) : A[0]) : A[0];
+          if (invW.item.charges && msg.useCharge) { if (invW.used >= invW.item.charges.max) return send(ws, { type: 'error', message: `${invW.item.name} has no charges left` }); invW.used++; sendInv(u.name); }
+          w0 = { name: invW.item.name, base: invW.item.name, mastery: W.mastery || '', hit: '1d20' + sgnS(abil + (ch.prof || 2) + W.bonus), damage: W.dice + sgnS(abil + W.bonus).replace(/^\+0$/, ''), type: W.type, mod: abil + W.bonus, range: W.range, ranged: !!W.range && W.ability === 'DEX', reach: W.reach, extra: W.extra };
+        }
+        if (!w0) return; const w = { ...w0 };
         const t = sc.tokens[msg.target]; if (!t || !tokVisible(sc, t, u)) return;
         const me = Object.values(sc.tokens).find((x) => x.owner === u.name && x.ddb === ch.link) || null, key = 'p:' + u.name.toLowerCase();
         const lines = [], rolls = [], R2 = (ex, l) => { const r = rollDice(ex); rolls.push({ who: u.name, label: str(l, 30), expr: ex, ...r, private: false, time: Date.now(), skin: skinOf(u.name) }); return r; };
-        const melee = !/bow|crossbow|sling|dart|blowgun|javelin|net/i.test(w.name) || (me && Math.max(Math.abs(me.x - t.x), Math.abs(me.y - t.y)) <= 1);
-        const plus = me ? spellsOn(me).reduce((n, mk) => n + (mk.weaponHit || 0), 0) : 0;
-        const a = attackRoll(sc, me, t, plus ? w.hit + sgnS(plus) : w.hit, { melee });
-        if (a.blocked) { post({ kind: 'chat', who: u.name, text: `🕊 ${t.label || '?'} is protected by Sanctuary: pick another target`, time: Date.now(), cast: true }); break; }
+        const melee = w.ranged === true ? false : w.ranged === false ? true : !/bow|crossbow|sling|dart|blowgun|javelin|net/i.test(w.name) || (me && Math.max(Math.abs(me.x - t.x), Math.abs(me.y - t.y)) <= 1);
+        const plus = (me ? spellsOn(me).reduce((n, mk) => n + (mk.weaponHit || 0), 0) : 0) + ((me && gearOf(me)) || { attack: 0 }).attack;
+        // True Strike: the weapon, but your spellcasting ability for the attack and damage, and Radiant damage if you like
+        const ts = !!msg.trueStrike && (ch.spells || []).some((x) => /^true strike$/i.test(x.name)), smod = ch.casting ? ch.casting.attack - (ch.prof || 2) : 0;
+        if (ts) { w.hit = '1d20' + sgnS(ch.casting ? ch.casting.attack : 0); w.damage = (/^\d+d\d+/.exec(w.damage) || ['1'])[0] + sgnS(smod); if (msg.radiant) w.type = 'Radiant'; }
+        const range = (() => { const m = /(\d+)\/(\d+)/.exec(w.range || w.name || ''); return m ? { normal: +m[1], long: +m[2] } : null; })();
+        const a = attackRoll(sc, me, t, plus ? w.hit + sgnS(plus) : w.hit, { melee, range, weapon: w.name, reach: w.reach });
+        if (a.blocked || a.duplicate) { post({ kind: 'chat', who: u.name, text: missWhy(a, t.label || '?'), time: Date.now(), cast: true }); save(); break; }
         rolls.push({ who: u.name, label: str(`${w.name} → ${t.label || '?'}`, 30), expr: a.expr, ...a.r, private: false, time: Date.now(), skin: skinOf(u.name) });
-        if (!a.hit) lines.push(`💨 ${ch.name.split(' ')[0]}'s ${w.name} misses ${t.label || '?'} (${a.total} vs AC ${a.ac}${a.mode ? ', ' + (a.mode === 'adv' ? 'Advantage' : 'Disadvantage') : ''})`);
+        const mastery = ch.mastery && !ts ? (w.mastery || FEATS.masteryOf(w.base || w.name)) : '';
+        if (!a.hit) {
+          lines.push(`💨 ${ch.name.split(' ')[0]}'s ${w.name} misses ${t.label || '?'} (${a.total} vs AC ${a.ac}${a.mode ? ', ' + (a.mode === 'adv' ? 'Advantage' : 'Disadvantage') : ''})`);
+          if (mastery === 'Graze' && (w.mod || 0) > 0) { const n = reduceBy(sc, t, Math.floor((w.mod || 0) * takes(t, String(w.type || '').toLowerCase(), false)), String(w.type || '').toLowerCase()); hpTo(sc, t, -n); lines.push(`🗡 Graze: ${t.label || '?'} still takes ${n} ${String(w.type || '').toLowerCase()} damage`); }
+        }
         else {
           const parts = [{ dice: w.damage, type: String(w.type || '').toLowerCase() }];
           // Hex and Hunter's Mark on this target from this character, Divine Favor and Elemental Weapon on the character
           for (const mk of spellsOn(t)) if (mk.by === key && mk.c === 'hexed') parts.push({ dice: '1d6', type: 'necrotic', from: 'Hex' }); else if (mk.by === key && mk.c === 'marked' && /hunter/i.test(mk.spell)) parts.push({ dice: '1d6', type: 'force', from: "Hunter's Mark" });
           if (me) for (const mk of spellsOn(me)) if (mk.weaponDmg) parts.push({ ...mk.weaponDmg, type: mk.weaponDmg.type || parts[0].type, from: mk.spell });
+          if (w.extra) parts.push({ dice: w.extra.dice, type: w.extra.type, from: w.name });
+          if (ts) { const lv = RULES.levelOf(ch), n = lv >= 17 ? 3 : lv >= 11 ? 2 : lv >= 5 ? 1 : 0; if (n) parts.push({ dice: n + 'd6', type: 'radiant', from: 'True Strike' }); }
           let dealt = 0; const bits = [];
-          for (const d of parts) { const x = R2(a.crit ? doubleDice(d.dice) : d.dice, `${d.from || w.name} damage`), k = takes(t, d.type, false), n = Math.max(0, Math.floor(x.total * k)); dealt += n; bits.push(`${n} ${d.type}${d.from ? ' (' + d.from + ')' : ''}${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}`); }
+          for (const d of parts) { const x = R2(a.crit ? doubleDice(d.dice) : d.dice, `${d.from || w.name} damage`), k = takes(t, d.type, false), n = reduceBy(sc, t, Math.max(0, Math.floor(x.total * k)), d.type); dealt += n; bits.push(`${n} ${d.type}${d.from ? ' (' + d.from + ')' : ''}${k === 0 ? ' (immune)' : k === 0.5 ? ' (resists)' : k === 2 ? ' (vulnerable)' : ''}`); }
           const back = retaliate(sc, me, t, melee);
-          hpTo(sc, t, -dealt, 0, { crit: a.crit });
+          // knocking a creature out: a melee attack that drops it leaves it unconscious and stable instead
+          if (msg.knockout && melee && dealt >= (t.hp ?? 0) && (t.hp ?? 0) > 0) { const b0 = { ...t }; t.hp = 0; t.conditions = [...new Set([...(t.conditions || []).filter((x) => x !== 'dead'), 'unconscious'])]; t.death = { s: 0, f: 0, stable: true }; tokenChanged(sc, t, b0); lines.push(`😵 ${t.label || '?'} is knocked out: unconscious and stable`); dealt = 0; }
+          else hpTo(sc, t, -dealt, 0, { crit: a.crit });
           lines.push(`🗡 ${ch.name.split(' ')[0]}'s ${w.name} hits ${t.label || '?'}${a.crit ? ' (critical!)' : ` (${a.total} vs AC ${a.ac})`}: ${bits.join(' + ')} damage${isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'})` : t.hp === 0 ? ' (down)' : ''}${back}`);
+          // Weapon Mastery: what the weapon does on a hit
+          if (mastery && t.hp > 0) {
+            const k = 'p:' + u.name.toLowerCase(), dcM = 8 + (ch.prof || 2) + (w.mod || 0);
+            if (mastery === 'Sap') { putOn(sc, t, { add: ['sapped'], expire: 'srcStart' }, { by: k, spell: 'Sap', dc: 0 }); lines.push(`⚔ Sap: ${t.label || '?'} has Disadvantage on its next attack`); }
+            else if (mastery === 'Slow') { putOn(sc, t, { add: ['hobbled'], expire: 'srcStart' }, { by: k, spell: 'Slow (weapon)', dc: 0 }); lines.push(`⚔ Slow: ${t.label || '?'}'s Speed is 10 feet lower until your next turn`); }
+            else if (mastery === 'Vex') { putOn(sc, t, { add: ['vexed'], expire: 'srcEnd' }, { by: k, spell: 'Vex', dc: 0 }); lines.push(`⚔ Vex: your next attack on ${t.label || '?'} has Advantage`); }
+            else if (mastery === 'Topple') { const sv = saveRoll(sc, t, 'CON', { dc: dcM }); if (sv.r) showRoll(t, { label: 'Topple: CON save', expr: sv.expr, ...sv.r }); if (!sv.ok) { const b0 = { ...t }; t.conditions = [...new Set([...(t.conditions || []), 'prone'])]; tokenChanged(sc, t, b0); } lines.push(sv.ok ? `⚔ Topple: ${t.label || '?'} keeps its feet` : `⚔ Topple: ${t.label || '?'} is knocked prone`); }
+            else if (mastery === 'Push') lines.push(`⚔ Push: you can push ${t.label || '?'} 10 feet away (move its token)`);
+            else if (mastery === 'Cleave') lines.push(`⚔ Cleave: you can attack another creature within 5 feet of ${t.label || '?'} (once a turn, no ability bonus to its damage)`);
+            else if (mastery === 'Nick') lines.push('⚔ Nick: your Light weapon\'s extra attack is part of this Attack action');
+          }
         }
         for (const r of rolls) post(r);
         post({ kind: 'chat', who: u.name, text: lines.join('\n'), time: Date.now(), cast: true });
         save();
+        break;
+      }
+      // ----- 1.18: the actions anyone can take, and the other combat rules from the books -----
+      case 'combatAction': { // Dodge, Disengage, Help, Hide, Dash, Ready: by the DM for any token, by a player for their own
+        if (!tok || !(u.isDM || (tok.owner && tok.owner === u.name))) return;
+        const who = tok.label || '?', act = String(msg.action || ''), k = keyOf(tok), target = msg.target && sc.tokens[msg.target];
+        let text = '';
+        if (act === 'dodge') { putOn(sc, tok, { add: ['dodging'], expire: 'tgtStart' }, { by: k, spell: 'Dodge', dc: 0 }); text = `🛡 ${who} takes the Dodge action: attacks against it have Disadvantage and it has Advantage on Dexterity saves until its next turn`; }
+        else if (act === 'disengage') { putOn(sc, tok, { add: ['disengaged'], expire: 'thisTurn' }, { by: k, spell: 'Disengage', dc: 0 }); text = `🏃 ${who} Disengages: no opportunity attacks against it this turn`; }
+        else if (act === 'help') { if (!target) return send(ws, { type: 'error', message: 'Pick the foe to help against' }); putOn(sc, target, { add: ['distracted'], expire: 'srcStart' }, { by: k, spell: 'Help', dc: 0 }); text = `🤝 ${who} Helps: the next attack against ${target.label || '?'} by an ally has Advantage`; }
+        else if (act === 'hide') {
+          const ch = charForToken(tok), m = srdOf(tok); let bonus = 0;
+          if (ch) { const sk = (ch.skills || []).find((x) => x.name === 'Stealth'); bonus = sk ? sk.bonus : ((ch.abilities || [])[1] || {}).mod || 0; } else if (m) { const h = /Stealth ([+-]\d+)/.exec(m.skills || ''); bonus = h ? +h[1] : Math.floor(((m.abl || [])[1] - 10) / 2) || 0; }
+          const r = rollDice('1d20' + sgnS(bonus)); showRoll(tok, { label: 'Hide: Stealth', expr: '1d20' + sgnS(bonus), ...r });
+          if (r.total >= 15) { const b = { ...tok }; tok.conditions = [...new Set([...(tok.conditions || []), 'hidden'])]; tokenChanged(sc, tok, b); text = `🫥 ${who} hides (${r.total} against DC 15): it's unseen until it attacks or is found`; } else text = `👀 ${who} tries to hide but is seen (${r.total})`;
+        }
+        else if (act === 'dash') text = `🏃 ${who} Dashes: double movement this turn`;
+        else if (act === 'ready') text = `⏳ ${who} Readies an action: it uses its Reaction when the trigger happens`;
+        else return;
+        tellAbout(sc, tok, text); save();
+        break;
+      }
+      case 'stabilize': { // a Wisdom (Medicine) check, DC 10, to stabilise a dying creature
+        if (!tok || tok.hp !== 0 || (tok.conditions || []).includes('dead') || (tok.death && tok.death.stable)) return;
+        const ch = u.isDM ? null : charOf(u.name), sk = ch && (ch.skills || []).find((x) => x.name === 'Medicine'), bonus = sk ? sk.bonus : ch ? ((ch.abilities || [])[4] || {}).mod || 0 : 0;
+        const r = rollDice('1d20' + sgnS(bonus)), helper = ch ? ch.name.split(' ')[0] : 'The DM';
+        post({ who: u.name, label: 'Medicine (stabilise)', expr: '1d20' + sgnS(bonus), ...r, private: false, time: Date.now(), skin: skinOf(u.name), ...(u.isDM ? { to: ['DM'] } : {}) });
+        if (r.total >= 10) { const b = { ...tok }; tok.death = { ...(tok.death || { s: 0, f: 0 }), stable: true }; tokenChanged(sc, tok, b); tellAbout(sc, tok, `🩹 ${helper} stabilises ${tok.label || '?'} (${r.total})`); }
+        else tellAbout(sc, tok, `✖ ${helper} fails to stabilise ${tok.label || '?'} (${r.total} against DC 10)`);
+        save();
+        break;
+      }
+      case 'hitDie': { // spend a Hit Die on a short rest: the die plus Constitution back
+        if (u.isDM) return; const ch = charOf(u.name); if (!ch || !sc) return;
+        const hd = (ch.hitDice || []).find((x) => x.used < x.max && (!msg.die || x.die === int(msg.die, 0))); if (!hd) return send(ws, { type: 'error', message: 'No Hit Dice left until a long rest' });
+        const con = ((ch.abilities || [])[2] || {}).mod || 0, r = rollDice('1d' + hd.die + sgnS(con)), amt = Math.max(1, r.total); hd.used++;
+        post({ who: u.name, label: 'Hit Die', expr: '1d' + hd.die + sgnS(con), ...r, private: false, time: Date.now(), skin: skinOf(u.name) });
+        const t = Object.values(sc.tokens).find((x) => x.owner === u.name && x.ddb === ch.link); if (t) hpTo(sc, t, amt);
+        post({ kind: 'chat', who: u.name, text: `🎲 ${ch.name.split(' ')[0]} spends a Hit Die (d${hd.die}) and regains ${amt} hit points${t ? ` (${t.hp}/${t.maxHp})` : ''}`, time: Date.now(), cast: true });
+        send(ws, { type: 'character', character: ch, quiet: true }); toDMs({ type: 'characters', characters: state.characters }); save();
+        break;
+      }
+      case 'hazard': { // falling: 1d6 bludgeoning per 10 feet (at most 20d6), and prone if it took damage
+        if (!u.isDM || !sc) return;
+        const ts = (Array.isArray(msg.ids) ? msg.ids : [msg.id]).map((id) => sc.tokens[id]).filter(Boolean).slice(0, 30); if (!ts.length) return;
+        const feet = clamp(int(msg.feet, 10), 0, 1000), n = Math.min(20, Math.floor(feet / 10)), lines = [`🪂 A fall of ${feet} feet`];
+        for (const t of ts) {
+          if (!n) { lines.push(`${t.label || '?'}: no damage`); continue; }
+          const r = rollDice(n + 'd6'); post({ who: 'Monsters', to: ['DM'], label: `Fall: ${t.label || '?'}`.slice(0, 30), expr: n + 'd6', ...r, private: false, time: Date.now() });
+          const dealt = Math.floor(r.total * takes(t, 'bludgeoning', false)); hpTo(sc, t, -dealt);
+          if (dealt) { const b = { ...t }; t.conditions = [...new Set([...(t.conditions || []), 'prone'])]; tokenChanged(sc, t, b); }
+          lines.push(`💥 ${t.label || '?'}: ${dealt} bludgeoning damage${dealt ? ', lands prone' : ''}${isPC(t) ? ` (${t.hp}/${t.maxHp ?? '?'})` : ''}`);
+        }
+        post({ kind: 'chat', who: 'Monsters', text: lines.join('\n'), time: Date.now(), cast: true }); save();
+        break;
+      }
+      case 'sceneFlags': { // the DM's combat options for this map: under water, the optional flanking rule
+        if (!u.isDM || !sc) return;
+        if ('underwater' in msg) sc.underwater = !!msg.underwater;
+        if ('flanking' in msg) sc.flanking = !!msg.flanking;
+        toScene(sc.id, { type: 'sceneFlags', sceneId: sc.id, underwater: !!sc.underwater, flanking: !!sc.flanking }); save();
+        break;
+      }
+      case 'monsterRest': { // a new day: every monster on this map gets its daily and rest-recharged uses back
+        if (!u.isDM || !sc) return;
+        for (const t of Object.values(sc.tokens)) if (t.uses || t.lrLeft != null) { delete t.uses; delete t.lrLeft; toDMs({ type: 'token', sceneId: sc.id, token: t }); }
+        post({ kind: 'chat', who: 'Monsters', to: ['DM'], text: '🌅 The monsters on this map have their daily uses, rest abilities and Legendary Resistances back', time: Date.now(), cast: true }); save();
+        break;
+      }
+      // ----- items the DM makes and hands out -----
+      case 'itemSave': { // the DM makes or changes an item in the item list
+        if (!u.isDM || !msg.item) return;
+        const id = typeof msg.item.id === 'string' && /^[a-z0-9]{4,16}$/.test(msg.item.id) ? msg.item.id : uid();
+        if (!state.items[id] && Object.keys(state.items).length >= 500) return send(ws, { type: 'error', message: 'That\'s 500 items already' });
+        state.items[id] = { id, ...itemFields(msg.item) };
+        toDMs({ type: 'items', items: state.items }); save();
+        break;
+      }
+      case 'itemDelete': { if (!u.isDM) return; delete state.items[msg.id]; toDMs({ type: 'items', items: state.items }); save(); break; }
+      case 'itemGive': { // the DM gives an item (a copy, so changing the list later doesn't change what they hold) to a player
+        if (!u.isDM) return; const it = state.items[msg.id], name = str(msg.player, 24).trim(); if (!it || !name) return;
+        const inv = invOf(name), qty = clamp(int(msg.qty, 1), 1, 99);
+        const same = inv.find((x) => x.item.name === it.name && ['potion', 'scroll', 'gear'].includes(it.kind));
+        if (same) same.qty += qty; else { if (inv.length >= 100) return; inv.push({ id: uid(), item: JSON.parse(JSON.stringify(it)), qty, used: 0, equipped: false }); }
+        sendInv(name);
+        for (const c of clients()) if (!c.user.isDM && c.user.name.toLowerCase() === name.toLowerCase()) send(c, { type: 'note', text: `🎁 The DM gives you ${qty > 1 ? qty + ' × ' : ''}${it.name}` });
+        post({ kind: 'chat', who: 'DM', to: [name], text: `🎁 ${name} receives ${qty > 1 ? qty + ' × ' : ''}${it.name}`, time: Date.now(), cast: true });
+        save(); break;
+      }
+      case 'itemTake': { if (!u.isDM) return; const inv = invOf(str(msg.player, 24)); const i = inv.findIndex((x) => x.id === msg.inv); if (i >= 0) inv.splice(i, 1); sendInv(msg.player); save(); break; }
+      case 'itemEquip': { // wear it or not: armour, a shield, a cloak or ring with bonuses
+        if (u.isDM) return; const x = invOf(u.name).find((y) => y.id === msg.inv); if (!x) return;
+        x.equipped = !!msg.on;
+        if (x.equipped && x.item.kind === 'armor') for (const y of invOf(u.name)) if (y !== x && y.item.kind === 'armor') y.equipped = false;
+        sendInv(u.name);
+        if (sc) for (const t of Object.values(sc.tokens)) if (t.owner === u.name && charForToken(t)) { tokenChanged(sc, t, { ...t }); send(ws, { type: 'note', text: `${x.equipped ? 'Wearing' : 'Took off'} ${x.item.name}: your AC is ${acOf(t)}` }); break; }
+        save(); break;
+      }
+      case 'itemDrop': { if (u.isDM) return; const inv = invOf(u.name), i = inv.findIndex((y) => y.id === msg.inv); if (i >= 0) inv.splice(i, 1); sendInv(u.name); save(); break; }
+      case 'itemUse': { // drink a potion, read a scroll, use a wand's charge, a wondrous item's effect
+        if (u.isDM || !sc) return; const ch = charOf(u.name); if (!ch) return send(ws, { type: 'error', message: 'Bring in your character first' });
+        const x = invOf(u.name).find((y) => y.id === msg.inv); if (!x) return; const it = x.item;
+        if (it.charges && x.used >= it.charges.max) return send(ws, { type: 'error', message: `${it.name} has no charges left` });
+        const me = Object.values(sc.tokens).find((t) => t.owner === u.name && t.ddb === ch.link) || null;
+        let targets = [...new Set((Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string'))].slice(0, 30).map((id) => sc.tokens[id]).filter((t) => t && tokVisible(sc, t, u));
+        const raw = (Array.isArray(msg.targets) ? msg.targets : []).filter((id) => typeof id === 'string' && sc.tokens[id]).slice(0, 40);
+        const first = ch.name.split(' ')[0], lines = [], rolls = [], key = 'p:' + u.name.toLowerCase();
+        const R2 = (e, l) => { const r = rollDice(e); rolls.push({ who: u.name, label: str(l, 30), expr: e, ...r, private: false, time: Date.now(), skin: skinOf(u.name) }); return r; };
+        if (it.kind === 'potion') {
+          if (!targets.length && me) targets = [me];
+          const t = targets[0]; if (!t) return send(ws, { type: 'error', message: 'Put your token on the map first' });
+          lines.push(`🧪 ${first} ${t === me ? 'drinks' : 'gives ' + (t.label || '?')} ${it.name}`);
+          if (it.potion.heal) { const r = R2(it.potion.heal, it.name); hpTo(sc, t, r.total); lines.push(`💚 ${t.label || '?'} regains ${r.total} hit points (${t.hp}/${t.maxHp ?? '?'})`); }
+          if (it.potion.temp) { const r = /d/.test(it.potion.temp) ? R2(it.potion.temp, it.name) : { total: +it.potion.temp }; hpTo(sc, t, 0, r.total); lines.push(`🛡 ${t.label || '?'} gains ${r.total} temporary hit points`); }
+          if ((it.potion.cures || []).some((c) => (t.conditions || []).includes(c))) { const b = { ...t }; liftMarks(t, (m) => it.potion.cures.includes(m.c)); t.conditions = (t.conditions || []).filter((c) => !it.potion.cures.includes(c)); tokenChanged(sc, t, b); lines.push(`✨ ${t.label || '?'}: no longer ${it.potion.cures.map(condName).join(' or ')}`); }
+          if (it.potion.resist) { putOn(sc, t, { add: ['warded'], rounds: 600 }, { by: key, spell: it.name, dc: 0 }); (t.marks || []).forEach((m) => { if (m.spell === it.name) m.potionResist = it.potion.resist; }); lines.push(`🛡 ${t.label || '?'} resists ${it.potion.resist} damage for an hour`); }
+          x.qty--; if (x.qty <= 0) invOf(u.name).splice(invOf(u.name).indexOf(x), 1);
+        } else if ((it.kind === 'scroll' || it.kind === 'wand') && it.spell) {
+          const e = RULES.dbSpell(it.spell.name); if (!e) return;
+          const dc = it.spell.dc === 'yours' ? (ch.casting || {}).dc || 13 : it.spell.dc, attack = it.spell.attack === 'yours' ? (ch.casting || {}).attack || 5 : it.spell.attack;
+          const sp = RULES.fromDb(e, { dc, attack, mod: ch.casting ? ch.casting.dc - 8 - (ch.prof || 2) : 0, level: RULES.levelOf(ch) }), at = Math.max(sp.level, it.spell.level || sp.level);
+          lines.push(`${it.kind === 'scroll' ? '📜' : '🪄'} ${first} uses ${it.name}: ${sp.name}${at > sp.level ? ` at ${ORD(at)} level` : ''}${targets.length ? ' on ' + targets.map((t) => t.label || '?').join(', ') : ''}`);
+          if (sp.conc) lines.push(...startConc(sc, u, ch, sp));
+          const ctx = { by: key, spell: true, conc: !!sp.conc, dc, rounds: (sp.cond && sp.cond.rounds) || 0, name: sp.name, shared: {}, roll: R2, lines, atk: (l, a) => rolls.push({ who: u.name, label: str(l, 30), expr: a.expr, ...a.r, private: false, time: Date.now(), skin: skinOf(u.name) }) };
+          castSpell(sc, sp, targets, { caster: me, at, up: at - sp.level, dc, mod: 0, option: msg.option, type: msg.option, raw, first: true, tplOwner: u.name, who: u.name }, ctx);
+          if (it.kind === 'scroll') { x.qty--; if (x.qty <= 0) invOf(u.name).splice(invOf(u.name).indexOf(x), 1); } else x.used++;
+        } else if (it.kind === 'wondrous' && it.effect) {
+          const ef = it.effect, rule = { add: [ef.cond], save: ef.save };
+          if (ef.how === 'end') rule.end = true; else if (ef.how === 'start') rule.start = true; else if (ef.how === 'hurtEnd') rule.hurt = 'end'; else if (ef.how === 'athletics' || ef.how === 'grapple') { rule.escape = ef.how; rule.escapeDc = ef.dc; } else if (ef.how === 'tgtEnd') rule.expire = 'tgtEnd';
+          lines.push(`✨ ${first} uses ${it.name}${targets.length ? ' on ' + targets.map((t) => t.label || '?').join(', ') : ''}`);
+          const ctx = { by: key, spell: false, dc: ef.dc, name: it.name, shared: {}, roll: R2, lines };
+          for (const t of targets) landOn(sc, t, { ...rule, save: ef.save ? { abl: ef.save, dc: ef.dc } : null, saveAbl: ef.save, fail: ef.dice ? [{ dice: ef.dice, type: ef.type }] : [], half: false }, ctx);
+          if (it.charges) x.used++;
+        } else return send(ws, { type: 'error', message: `${it.name} has nothing to use` });
+        for (const r of rolls) post(r);
+        post({ kind: 'chat', who: u.name, text: lines.join('\n').slice(0, 1500), time: Date.now(), cast: true });
+        sendInv(u.name); save();
         break;
       }
       case 'markAdd': { // the DM puts an effect with a way out on a token: a Dungeon Master's Guide item, poison or hazard, a monster's spell, or their own
@@ -2165,6 +2590,16 @@ function startServer({ port = 3000, host = '0.0.0.0', dataDir, dmKey, network = 
         }
         if (visionOn(sc)) scheduleVision(sc);
         save();
+        break;
+      }
+      case 'tokenPicture': { // a picture for a token (a portrait): the DM for any token, a player for their own
+        if (!tok || !(u.isDM || (tok.owner && tok.owner === u.name))) return;
+        const hit = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(String(msg.img || ''));
+        if (!hit || msg.img.length > 1200 * 1024) return send(ws, { type: 'error', message: 'Use a PNG, JPG or WebP picture' });
+        const buf = Buffer.from(hit[2], 'base64'), name = crypto.createHash('sha1').update(buf).digest('hex').slice(0, 16) + (hit[1] === 'jpeg' ? '.jpg' : '.' + hit[1]);
+        try { fs.mkdirSync(uploads, { recursive: true }); fs.writeFileSync(path.join(uploads, name), buf); } catch { return send(ws, { type: 'error', message: 'Could not save the picture' }); }
+        const before = { ...tok }; tok.img = '/uploads/' + name; tok.imgPos = null; if (!tok.frame) tok.frame = 'gold';
+        tokenChanged(sc, tok, before); save();
         break;
       }
       case 'diceSkin': { // the look of this person's dice: a built-in skin, or their own picture
