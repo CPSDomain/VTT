@@ -2,6 +2,7 @@
 const { app, BrowserWindow, Menu, shell } = require('electron');
 const path = require('path');
 const { checkForUpdates } = require('../shared/update');
+const { saveGuide } = require('../shared/guides');
 
 process.on('uncaughtException', (e) => { try { require('electron').dialog.showErrorBox('Tabletop hit a problem', String((e && e.stack) || e)); } catch { /* not ready yet */ } });
 app.setName('Tabletop Player'); // own settings folder and single-instance lock, separate from the DM app
@@ -42,7 +43,8 @@ function create() {
     ] },
     { label: 'Help', submenu: [
       { label: 'Check for updates…', click: () => checkForUpdates(win, { manual: true }) },
-      { label: 'Player guide', click: () => shell.openExternal('https://github.com/CPSDomain/VTT/blob/HEAD/docs/PLAYER-GUIDE.md') },
+      { label: 'Download the player guide (PDF)…', click: () => saveGuide(win, 'player') },
+      { label: 'Player guide on GitHub', click: () => shell.openExternal('https://github.com/CPSDomain/VTT/blob/HEAD/docs/PLAYER-GUIDE.md') },
       { type: 'separator' },
       { label: `About Tabletop Player ${require("../../package.json").version}`, enabled: false }
     ] }

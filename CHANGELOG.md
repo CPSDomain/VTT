@@ -2,6 +2,15 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.19.2] - 2026-11-14
+
+### Added
+- **Guides as PDFs, inside the apps:**
+  - **Tabletop DM:** **Help → Download the DM guide (PDF)…** and **Download the player guide (PDF)…** (to hand out).
+  - **Tabletop Player:** **Help → Download the player guide (PDF)…**.
+  - **Saving:** the app asks where to save (Downloads by default) and opens the PDF. It works offline, since the PDFs ship with the apps.
+  - **The PDFs:** a cover page, contents and page numbers, with the screenshots. They're made from the guides by `build/make-guides.py`.
+
 ## [1.19.1] - 2026-11-14
 
 ### Added

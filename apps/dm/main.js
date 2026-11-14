@@ -5,6 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { startServer } = require('../../src/server');
 const { checkForUpdates } = require('../shared/update');
+const { saveGuide } = require('../shared/guides');
 const { openPort } = require('../../src/upnp');
 
 process.on('uncaughtException', (e) => { try { require('electron').dialog.showErrorBox('Tabletop hit a problem', String((e && e.stack) || e)); } catch { /* not ready yet */ } });
@@ -104,6 +105,8 @@ async function boot() {
     ] },
     { label: 'Help', submenu: [
       { label: 'Check for updates…', click: () => checkForUpdates(win, { manual: true }) },
+      { label: 'Download the DM guide (PDF)…', click: () => saveGuide(win, 'dm') },
+      { label: 'Download the player guide (PDF)…', click: () => saveGuide(win, 'player') },
       { label: 'Guides and releases on GitHub', click: () => shell.openExternal('https://github.com/CPSDomain/VTT') },
       { type: 'separator' },
       { label: 'Server info', click: () => dialog.showMessageBox(win, {

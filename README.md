@@ -53,6 +53,7 @@ Full walkthroughs: **[DM guide](docs/DM-GUIDE.md)** · **[Player guide](docs/PLA
 - Spell areas like Spirit Guardians and Spike Growth hit creatures that move into them; Dodge, Disengage, Help, Hide, opportunity attack alerts, cover, Weapon Mastery, Multiattack, recharge and legendary actions follow the 2024 rules
 - The DM makes magic weapons, armour, potions, scrolls, wands and wondrous items and gives them to players, who use them in combat
 - Round portrait tokens from any picture, with a frame
+- The DM and player guides as PDFs, from **Help** in each app
 - Reactions by the rules: one-click opportunity attacks and Counterspell, asked of whoever can react; grappled creatures are dragged along
 - Summon spells put their creatures on the map with their attacks; Misty Step and Dimension Door teleport where you click; Thunderwave and Weapon Mastery push
 

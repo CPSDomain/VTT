@@ -12,6 +12,7 @@
   "files": [
     "apps/player/**",
     "apps/shared/**",
+    "public/guides/Tabletop-Player-Guide.pdf",
     "build/icon.png",
     "package.json",
     "!**/*.map"

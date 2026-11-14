@@ -76,3 +76,13 @@ The apps aren't code-signed, so Windows shows "Windows protected your PC" the fi
 ## What goes in git, and what doesn't
 
 `.gitignore` keeps out `node_modules/`, `dist/` (built apps and zips) and `data/` (save files from the headless server). The apps belong on the Releases page, not in the repository: GitHub rejects files over 100 MB in a normal push, and each zip is about 110 MB.
+
+## The PDF guides
+
+The apps ship `public/guides/Tabletop-DM-Guide.pdf` and `Tabletop-Player-Guide.pdf` (Help → Download the … guide). After changing `docs/DM-GUIDE.md` or `docs/PLAYER-GUIDE.md`, make them again before tagging:
+
+```
+pip install markdown playwright
+playwright install chromium
+python build/make-guides.py
+```

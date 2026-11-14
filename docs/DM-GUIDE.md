@@ -10,6 +10,8 @@ Everything you need to run a session in Tabletop: starting the server, getting p
 4. Windows Firewall asks whether to allow Tabletop DM. Tick **Private networks** and click **Allow**. Without this, players can't reach you.
 5. The DM window opens. Top right shows **Players connect to 192.168.x.x:3000**: give that address to your players. The Copy button copies it.
 
+**This guide as a PDF:** **Help → Download the DM guide (PDF)…** saves it wherever you like; **Help → Download the player guide (PDF)…** gives you the players' one to hand out.
+
 **Updates:** when a new version is out, Tabletop DM tells you once a day (or **Help → Check for updates…**). Download the new installer and run it over the old version.
 
 Your maps, tokens, token library and rolls save automatically to `%APPDATA%\Tabletop DM\data`. **File → Back up table** saves a copy, and **File → Restore from backup…** puts one back (it saves a safety copy of the current table first); **File → Open data folder** shows it. Updating to a new version keeps all of it.

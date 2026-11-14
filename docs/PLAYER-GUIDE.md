@@ -10,6 +10,8 @@
 
 ![Connect screen](images/player-connect.jpg)
 
+**This guide as a PDF:** **Help → Download the player guide (PDF)…** in Tabletop Player saves it wherever you like.
+
 The app remembers the address and your name. **Table → Disconnect** (Ctrl+D) goes back to this screen.
 
 **Updates:** when there's a new version the app says so; click **Update now** and it downloads and installs itself (or use **Help → Check for updates…**). New features of the table itself come from the DM's PC, so you get those as soon as your DM updates.

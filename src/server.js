@@ -14,7 +14,7 @@ const FX = require('../public/js/monsterfx.js');
 const SUMS = require('./summons');
 const ddb = require('./ddb');
 
-const VERSION = '1.19.1';
+const VERSION = '1.19.2';
 const PUBLIC = path.join(__dirname, '..', 'public');
 const VISION = require(path.join(PUBLIC, 'js', 'vision.js'));
 const CATALOG = JSON.parse(fs.readFileSync(path.join(PUBLIC, 'catalog.json'), 'utf8'));
