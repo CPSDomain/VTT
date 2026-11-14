@@ -1,3 +1,4 @@
+const SUMS = require('./summons');
 // What a spell does beyond its dice, by the 2024 Player's Handbook: the conditions it puts on its targets, how each
 // target gets out of it again, and spells split into darts, rays or beams. Worked out from the spell's name (and its
 // description for darts and rays), so it also fills in characters brought in from D&D Beyond before these rules existed.
@@ -265,6 +266,10 @@ function enrich(sp, level) {
     const s = sp.save && /\b(STR|DEX|CON|INT|WIS|CHA)\b/.exec(sp.save); if (save && s && !c.options) save = s[1];
     sp.cond = { ...JSON.parse(JSON.stringify(c)), save, ally: !!c.ally, rounds: roundsOf(sp.duration) };
   }
+  // a summon (its forms are the choice when casting: Air, Land or Water), a teleport, a push (1.19)
+  const SUM = SUMS.SUMMONS[key];
+  if (SUM) { sp.summon = true; if (SUM.forms.length > 1 && !(sp.cond && sp.cond.options)) sp.cond = { ...(sp.cond || {}), options: SUM.forms.map((f) => ({ name: f.name })), add: (sp.cond && sp.cond.add) || [], rounds: roundsOf(sp.duration) }; }
+  if (SUMS.TELEPORTS[key]) sp.move = 'teleport'; else if (SUMS.PUSHES[key]) sp.move = 'push';
   // darts, rays or beams: each one picks its own target
   let m = /creates? (\w+) (?:glowing )?(dart|ray|beam)s?/i.exec(d) || /\b(two|three|four|five|six) (?:[a-z]+ )?(dart|ray|beam)s\b/i.exec(d);
   let n = m ? num(m[1]) : 0, word = m ? m[2].toLowerCase() : '';

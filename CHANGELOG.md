@@ -2,6 +2,38 @@
 
 All notable changes to Tabletop. Newest first. Each version's section is used as the release notes on GitHub.
 
+## [1.19.0] - 2026-11-14
+
+The last gaps from the combat pass: the 2024 monsters, reactions, grapples that drag, summons and teleports on the map.
+
+### Added
+- **The 2024 monsters:** the 330 stat blocks of the SRD 5.2 (Goblin Warrior, Archmage, the 2024 dragons…), next to the 334 older ones.
+  - **Encounter builder:** pick **2024 monsters**, **2014 monsters** or **Both**.
+  - **Stat blocks:** Bonus Actions; spells cast from Bonus Actions and Reactions (Misty Step, Counterspell) are buttons; "(level 7 version)" spells are cast at that level.
+  - **On tokens:** 2024 attack rolls, saves, Multiattacks (177 of 178), recharges and legendary actions all work.
+- **Opportunity attacks in one click:**
+  - **The prompt:** when a creature leaves a foe's reach, the foe's player (or the DM, for a monster) gets a card with its melee attacks.
+  - **The attack:** one click makes it, and it uses that creature's Reaction until its next turn.
+- **Counterspell (2024):**
+  - **Who's asked:** a spell cast within 60 feet of a foe who has Counterspell holds until that foe answers (15 seconds at most). That's a player with a level 3+ slot, or a monster whose stat block lists it.
+  - **Countered:** the caster makes a Constitution save. On a failure the spell fizzles and no slot is spent.
+- **Grapples:**
+  - **No moving:** a grappled, restrained, paralyzed, stunned or unconscious character can't be moved by its player.
+  - **Dragging:** a grappler drags what it holds.
+  - **Escaping:** pushed or teleported out of reach, the grapple ends.
+- **Summons on the map:**
+  - **Spells:** Find Familiar, Find Steed, the Summon spells (Beast, Fey, Undead, Aberration, Construct, Elemental, Celestial, Fiend, Dragon), Giant Insect, Animate Dead, Create Undead, Animate Objects, Spiritual Weapon, Bigby's Hand, Mordenkainen's Sword and more.
+  - **Their numbers:** hit points and AC for the spell's level, and attacks with the caster's spell attack bonus.
+  - **Players:** they move their summons and attack from **Your summons**.
+  - **Ending:** spirits vanish at 0 hit points or when concentration ends.
+  - **Areas:** Conjure Animals and Conjure Elemental carry an area that moves with their token.
+- **Teleports and pushes:**
+  - **Teleports:** Misty Step, Dimension Door (with a companion) and Steel Wind Strike ask where to appear, with the reach shown on the map.
+  - **Pushes:** Thunderwave, Gust of Wind, Thorn Whip, Lightning Lure and Weapon Mastery Push move the target, stopping at walls and creatures.
+
+### Fixed
+- **Monster damage:** flat damage ("1 Piercing damage") is now counted. Extra damage that only applies sometimes ("if the attack roll had Advantage") is left out.
+
 ## [1.18.0] - 2026-11-14
 
 The rest of combat: spell areas that work when creatures move, the actions every creature can take on its turn, dying and falling, monster abilities used by the rules, items the DM makes and gives out, and round portrait tokens.

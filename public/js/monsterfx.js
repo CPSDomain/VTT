@@ -7,8 +7,8 @@
 (function () {
   const ABL = { strength: 'STR', dexterity: 'DEX', constitution: 'CON', intelligence: 'INT', wisdom: 'WIS', charisma: 'CHA' };
   const CONDS = 'blinded|charmed|deafened|frightened|grappled|incapacitated|paralyzed|petrified|poisoned|prone|restrained|stunned|unconscious';
-  const dmgRe = /(\d+)\s*\((\d+d\d+(?:\s*[+-]\s*\d+)?)\)\s*(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\s+damage/gi;
-  const dmgIn = (s) => { const out = []; let m; dmgRe.lastIndex = 0; while ((m = dmgRe.exec(s))) out.push({ dice: m[2].replace(/\s/g, ''), type: m[3].toLowerCase() }); return out; };
+  const dmgRe = /(\d+)(?:\s*\((\d+d\d+(?:\s*[+-]\s*\d+)?)\))?\s*(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)\s+damage/gi;
+  const dmgIn = (s) => { const out = []; let m; dmgRe.lastIndex = 0; while ((m = dmgRe.exec(s))) out.push({ dice: (m[2] || m[1]).replace(/\s/g, ''), type: m[3].toLowerCase() }); return out; };
   const condsIn = (s) => {
     const found = new Set();
     // not "immunity to being charmed and frightened", nor what happens once it's out ("exiting prone", "regurgitate…falls prone")
@@ -74,9 +74,10 @@
     // the monster's own saving throws ("the behir must succeed on a DC 14 Constitution saving throw… or regurgitate") aren't the target's
     const me = monster ? String(monster).toLowerCase().split(' ').pop() : '';
     if (me) t = t.replace(new RegExp("(^|\\.\\s+)(?:If [^.,]*,\\s*)?(?:the|a) " + me + " (?:must|makes?)[^.]*saving throw[^.]*\\.", 'gi'), '$1');
-    const atk = /([+-]\d+) to hit/i.exec(t);
+    const atk = /([+-]\d+) to hit(?! with spell)/i.exec(t) || /Attack Roll:\s*([+-]\d+)/i.exec(t);
     const out = { attack: atk ? +atk[1] : null, hit: [], variants: [] };
-    if (atk) { const hit = ((/Hit:([^]*?)(?:\.|$)(?:\s|$)/i.exec(t) || [])[1] || '').split(/DC \d+|saving throw/i)[0]; out.hit = dmgIn(hit); }
+    // extra damage only sometimes ("plus 2 (1d4) if the attack roll had Advantage", "or 7 (1d10 + 2) if used with two hands") isn't counted
+    if (atk) { const hit = ((/Hit:([^]*?)(?:\.|$)(?:\s|$)/i.exec(t) || [])[1] || '').split(/DC \d+|saving throw/i)[0].replace(/,?\s*(?:plus|or) \d+ \([^)]*\) \w+ damage,? (?:if|when|while|against)[^.]*/gi, ''); out.hit = dmgIn(hit); }
     // split at each saving throw (a breath weapon has one; a beholder's eye rays have many)
     // by sentence: each one naming a DC starts a new effect; what comes before the first belongs to the first
     const parts = [], titles = []; let lead = '', title = '';
@@ -115,16 +116,18 @@
   // a monster's Spellcasting (or Innate Spellcasting) trait: its spell save DC, attack bonus, caster level and spell lists
   function spellcasting(m) {
     const out = [];
-    for (const t of [...(m.traits || []), ...(m.actions || [])]) {
-      if (!/Spellcasting/i.test(t.n)) continue;
+    for (const t of [...(m.traits || []), ...(m.actions || []), ...(m.bonus || []), ...(m.reactions || [])]) {
+      if (!t.cast && !/Spellcasting/i.test(t.n)) continue;
       const d = String(t.d || ''), dc = /spell save DC (\d+)/i.exec(d), atk = /([+-]\d+) to hit with spell attacks/i.exec(d), lv = /(\d+)(?:st|nd|rd|th)-level spellcaster/i.exec(d);
       const abil = /(?:spellcasting ability is|ability is) (Strength|Dexterity|Constitution|Intelligence|Wisdom|Charisma)/i.exec(d);
       const lists = [];
       for (const line of d.split(/\n+/)) {
         const m2 = /^\s*[-•]?\s*([^:]{2,40}):\s*(.+)$/.exec(line); if (!m2) continue;
-        const label = m2[1].trim(), slot = /^(\d+)(?:st|nd|rd|th) level/i.exec(label), names = m2[2].split(/,\s*/).map((x) => x.replace(/\(.*?\)|\*/g, '').trim()).filter(Boolean);
+        const label = m2[1].trim(), slot = /^(\d+)(?:st|nd|rd|th) level/i.exec(label) || /^Level (\d+)/i.exec(label), raw = m2[2].split(/,\s*/), names = raw.map((x) => x.replace(/\(.*?\)|\*/g, '').trim()).filter(Boolean);
+        // "Lightning Bolt (level 7 version)": cast with a higher slot
+        const levels = {}; for (const x of raw) { const lv = /\(level (\d) version\)/i.exec(x); if (lv) levels[x.replace(/\(.*?\)|\*/g, '').trim()] = +lv[1]; }
         if (!/cantrip|level|will|day|each/i.test(label)) continue;
-        lists.push({ label, level: slot ? +slot[1] : /cantrip|will/i.test(label) ? 0 : null, spells: names });
+        lists.push({ label, level: slot ? +slot[1] : /cantrip|will/i.test(label) ? 0 : null, spells: names, levels });
       }
       out.push({ name: t.n, dc: dc ? +dc[1] : null, attack: atk ? +atk[1] : null, level: lv ? +lv[1] : null, ability: abil ? ABL[abil[1].toLowerCase()] : null, lists });
     }
@@ -140,7 +143,7 @@
     if (/Recharges after a (?:Short or )?Long Rest/i.test(n)) out.rest = true;
     if ((x = /\((\d+)\/Day/i.exec(n))) out.perDay = +x[1];
     if ((x = /Costs (\d+) Actions/i.exec(n))) out.cost = +x[1];
-    if (/^Multiattack/i.test(n) && Array.isArray(a.ma)) out.multi = a.ma.filter((y) => (m.actions || []).some((z) => z.n.replace(/\s*\(.*?\)\s*$/, '') === y.name && (/to hit|saving throw/i.test(z.d))));
+    if (/^Multiattack/i.test(n) && Array.isArray(a.ma)) out.multi = a.ma.filter((y) => (m.actions || []).some((z) => z.n.replace(/\s*\(.*?\)\s*$/, '') === y.name && (/to hit|saving throw|Attack Roll/i.test(z.d))));
     else if (/^Multiattack/i.test(n)) {
       const names = [...(m.actions || [])].map((y) => y.n.replace(/\s*\(.*?\)\s*$/, '')).filter((y) => !/^Multiattack/i.test(y));
       const list = [];
@@ -155,7 +158,7 @@
     const range = /range (\d+)\/(\d+) ft/i.exec(d); if (range) out.range = { normal: +range[1], long: +range[2] };
     return out;
   }
-  const legendaryCount = (m) => { const x = /can take (\d+) legendary actions/i.exec(JSON.stringify(m.legendary || []) + JSON.stringify(m.traits || [])); return x ? +x[1] : (m.legendary || []).length ? 3 : 0; };
+  const legendaryCount = (m) => { if (m.legN) return m.legN; const x = /can take (\d+) legendary actions/i.exec(JSON.stringify(m.legendary || []) + JSON.stringify(m.traits || [])); return x ? +x[1] : (m.legendary || []).length ? 3 : 0; };
   const api = { parse, traits, condsIn, spellcasting, meta, legendaryCount };
   if (typeof module === 'object' && module.exports) module.exports = api; else globalThis.monsterFx = api;
 })();

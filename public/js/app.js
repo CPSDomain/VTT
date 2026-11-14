@@ -105,10 +105,10 @@ function onMessage(msg) {
     case 'network': netInfo = msg.network; if (!$('netChip')) fetch('/api/info?key=' + encodeURIComponent(dmKey)).then((r) => r.json()).then(showConn).catch(() => {}); else renderNet(); break;
     case 'denied': showDenied(msg.reason); break;
     case 'library': library = msg.library; if (!$('libModal').hidden) renderLibrary(); break;
-    case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (myChar && msg.token.ddb === myChar.link) renderChar(); if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
+    case 'token': if (s) { const before = s.tokens[msg.token.id]; if (before && msg.sceneId === editing) reactTo(s, before, msg.token); s.tokens[msg.token.id] = msg.token; if (myChar && (msg.token.ddb === myChar.link || (msg.token.sum && msg.token.owner === me.name && !before))) renderChar(); if (msg.token.id === selected) renderEditor(); if (msg.sceneId === editing) renderInit(); } break;
     case 'combat': if (s) { s.combat = msg.combat; if (msg.sceneId === editing) { renderInit(); renderEditor(); turnBanner(s); } } break;
     case 'moment': if (msg.sceneId === editing && !document.hidden) moment(msg.kind); break;
-    case 'removeToken': if (s) { delete s.tokens[msg.id]; if (selected === msg.id) select(null); renderInit(); } break;
+    case 'removeToken': if (s) { const gone = s.tokens[msg.id]; delete s.tokens[msg.id]; if (gone && gone.sum && myChar) renderChar(); if (selected === msg.id) select(null); renderInit(); } break;
     case 'tiles': if (s) for (const [x, y, t] of msg.cells) { if (t === null) delete s.tiles[x + ',' + y]; else s.tiles[x + ',' + y] = t; } break;
     case 'prop': if (s) s.props[msg.prop.id] = msg.prop; break;
     case 'fog': if (s) { const a = fogArr(s); for (const [x, y] of msg.cells) a[y * s.cols + x] = msg.reveal ? 1 : 0; fogDirty = true; fogRevN++; if (fogTool === 'room' && hover) fogPreview = roomCells(s, hover); } break;
@@ -170,6 +170,9 @@ function onMessage(msg) {
     case 'character': { const first = !myChar; myChar = msg.character; charBusy = false; renderChar(); if (myChar && !msg.quiet) toast(first ? `${myChar.name} is here. Put your token on the map when you're ready.` : `${myChar.name} is up to date`); break; }
     case 'characterBusy': charBusy = msg.on; renderChar(); break;
     case 'note': toast(msg.text, 5000); break;
+    case 'prompt': showPrompt(msg); break;
+    case 'pickCell': startAim({ title: msg.title, cell: (c) => sendMsg({ type: 'teleport', id: msg.id, x: c.x, y: c.y }), from: msg.from, range: msg.range, size: msg.size, color: '#a855f7' }); break;
+    case 'promptClose': { const e = document.querySelector(`.prompt[data-id="${CSS.escape(msg.id)}"]`); if (e) e.remove(); break; }
     case 'characters': dmChars = msg.characters || {}; renderEditor(); break;
     case 'chat': {
       addLog(msg.entry, true); if (msg.entry.narrate) narrate(msg.entry.text); else speechBubble(msg.entry);
@@ -673,6 +676,11 @@ function render() {
   drawFog(s);
   drawTemplates(s);
   drawZones(s);
+  if (aim && aim.cell && aim.range) { // how far a teleport reaches
+    const r = aim.range / 5 + 0.5, x0 = (aim.from.x + (aim.size || 1) / 2) * CELL, y0 = (aim.from.y + (aim.size || 1) / 2) * CELL;
+    ctx.save(); ctx.fillStyle = 'rgba(168,85,247,.10)'; ctx.strokeStyle = '#a855f7'; ctx.lineWidth = 2 / view.zoom; ctx.setLineDash([8 / view.zoom, 6 / view.zoom]);
+    ctx.beginPath(); ctx.rect(x0 - r * CELL, y0 - r * CELL, 2 * r * CELL, 2 * r * CELL); ctx.fill(); ctx.stroke(); ctx.restore();
+  }
   drawLabels(s);
 
   // tokens (hidden ones only ever reach the DM, drawn faded)
@@ -1099,12 +1107,12 @@ function monsterOf(t) {
   if (!monsters || !t) return null;
   if (t.srd && monsterById.get(t.srd)) return monsterById.get(t.srd);
   const base = String(t.label || '').replace(/\s+\d+$/, '').toLowerCase();
-  return monsters.find((m) => m.name.toLowerCase() === base) || null;
+  return monsters.find((m) => m.ed === 2024 && m.name.toLowerCase() === base) || monsters.find((m) => m.name.toLowerCase() === base) || null; // the 2024 one first
 }
 async function openEncounters() {
   await loadMonsters();
   if (!$('encType').options.length || $('encType').options.length === 1) {
-    [...new Set(monsters.map((m) => m.type.split(' (')[0]))].sort().forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t[0].toUpperCase() + t.slice(1); $('encType').appendChild(o); });
+    [...new Set(monsters.map((m) => m.type.split(' (')[0]))].filter((t) => !/^swarm/.test(t)).sort().forEach((t) => { const o = document.createElement('option'); o.value = t; o.textContent = t[0].toUpperCase() + t.slice(1); $('encType').appendChild(o); });
     for (const sel of [$('encCrMin'), $('encCrMax')]) CRS.forEach((c) => { const o = document.createElement('option'); o.value = c; o.textContent = crText(c); sel.appendChild(o); });
     $('encCrMin').value = '0'; $('encCrMax').value = '30';
   }
@@ -1112,12 +1120,13 @@ async function openEncounters() {
   const owners = new Set(Object.values(sc().tokens).map((t) => t.owner).filter((o) => o && o !== '*'));
   if (owners.size) $('encSize').value = owners.size;
   $('encLevel').value = tryGet('tt-partyLevel') || $('encLevel').value;
+  if (tryGet('tt-monsterEd') != null) $('encEd').value = tryGet('tt-monsterEd');
   renderEncList(); renderEncPicked(); renderEncLoad();
   $('encModal').hidden = false; setTimeout(() => $('encSearch').focus(), 0);
 }
 function renderEncList() {
-  const q = $('encSearch').value.trim().toLowerCase(), type = $('encType').value, lo = Number($('encCrMin').value), hi = Number($('encCrMax').value);
-  const list = monsters.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q)) && (!type || m.type.startsWith(type)) && m.cr >= lo && m.cr <= hi);
+  const q = $('encSearch').value.trim().toLowerCase(), type = $('encType').value, ed = +$('encEd').value || 0, lo = Number($('encCrMin').value), hi = Number($('encCrMax').value);
+  const list = monsters.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.type.toLowerCase().includes(q)) && (!type || m.type.startsWith(type) || (type === 'beast' && /^swarm/.test(m.type))) && (!ed || m.ed === ed) && m.cr >= lo && m.cr <= hi);
   if (q) { const rank = (m) => (m.name.toLowerCase().startsWith(q) ? 0 : m.name.toLowerCase().includes(q) ? 1 : 2); list.sort((x, y) => rank(x) - rank(y)); } // name matches first
   $('encCount').textContent = `${list.length} monsters`;
   const box = $('encList'); box.innerHTML = '';
@@ -1125,7 +1134,7 @@ function renderEncList() {
   for (const m of list.slice(0, 400)) {
     const row = document.createElement('div'); row.className = 'mrow';
     const n = document.createElement('span'); n.className = 'mn'; n.textContent = m.name; n.title = 'Show the stat block';
-    const sm = document.createElement('small'); sm.textContent = m.type.split(' (')[0]; n.appendChild(sm); n.onclick = () => showStatBlock(m);
+    const sm = document.createElement('small'); sm.textContent = m.type.split(' (')[0] + (!ed ? ` · ${m.ed}` : ''); n.appendChild(sm); n.onclick = () => showStatBlock(m);
     const cr = document.createElement('span'); cr.className = 'cr'; cr.textContent = `CR ${crText(m.cr)}`;
     const xp = document.createElement('span'); xp.className = 'cr'; xp.textContent = `${m.xp.toLocaleString()} XP`;
     const add = document.createElement('button'); add.textContent = '+'; add.title = 'Add to the encounter'; add.onclick = () => { pick(m.id, 1); };
@@ -1221,12 +1230,12 @@ function showStatBlock(m, src = null) {
   el('hr');
   const section = (title, items, kind) => { if (!items || !items.length) return; if (title) el('h3', null, title); for (const [idx, it] of items.entries()) { const p = el('p'); const s = document.createElement('b'); s.textContent = it.n + '. '; s.style.fontStyle = 'italic'; p.appendChild(s); richText(p, it.d, (expr, what) => roll(expr, `${it.n}${what ? ' ' + what : ''}`));
     // use it on tokens: the attack (secret), the targets' saves, damage and conditions, and how they end
-    if (me.isDM && src && /Spellcasting/i.test(it.n) && globalThis.monsterFx) { // its spells, ready to cast at its DC and attack bonus
+    if (me.isDM && src && (it.cast || /Spellcasting/i.test(it.n)) && globalThis.monsterFx) { // its spells, ready to cast at its DC and attack bonus
       const sc0 = globalThis.monsterFx.spellcasting({ traits: [it] })[0];
       if (sc0) { const box = document.createElement('div'); box.className = 'sbspells';
         for (const l of sc0.lists) { const row = document.createElement('div'); row.append(Object.assign(document.createElement('span'), { textContent: l.label + ': ' }));
           for (const n of l.spells) { const b = document.createElement('button'); b.className = 'sbuse'; b.textContent = '✨ ' + n; b.title = `Cast ${n} (DC ${sc0.dc}, ${sgn(sc0.attack || 0)} to hit)`;
-            b.onclick = () => { $('statModal').hidden = true; dmCast(n, { src, who: (sc().tokens[src] || {}).label || m.name, level: l.level || 0, dc: sc0.dc, attack: sc0.attack }); }; row.append(b); }
+            b.onclick = () => { $('statModal').hidden = true; dmCast(n, { src, who: (sc().tokens[src] || {}).label || m.name, level: (l.levels || {})[n] || l.level || 0, dc: sc0.dc || (globalThis.monsterFx.spellcasting(m).find((x) => x.dc) || {}).dc, attack: sc0.attack || (globalThis.monsterFx.spellcasting(m).find((x) => x.attack) || {}).attack }); }; row.append(b); }
           box.append(row); }
         p.after(box); } }
     const P = globalThis.monsterFx && globalThis.monsterFx.parse(it.d, m.name, kind);
@@ -1240,19 +1249,19 @@ function showStatBlock(m, src = null) {
       b.onclick = () => { $('statModal').hidden = true; startAim({ title: `${(sc().tokens[src] || {}).label || m.name}: ${it.n}`, harm: true, color: '#ef4444', options: P.variants.length > 1 ? P.variants.map((v) => v.name) : null, send: (ids, amt, variant) => sendMsg({ type: 'monsterEffect', sceneId: editing, src, kind, idx, variant, targets: ids }) }); };
       p.appendChild(b);
     } } };
-  section(null, m.traits, 'traits'); section('Actions', m.actions, 'actions'); section('Reactions', m.reactions, 'reactions');
+  section(null, m.traits, 'traits'); section('Actions', m.actions, 'actions'); section('Bonus Actions', m.bonus, 'bonus'); section('Reactions', m.reactions, 'reactions');
   const tk = src && sc().tokens[src], lc = globalThis.monsterFx ? globalThis.monsterFx.legendaryCount(m) : 0;
   section((m.legendary || []).length ? `Legendary Actions${tk && lc ? ` (${tk.legLeft != null ? tk.legLeft : lc} of ${lc} left this round)` : ''}` : 'Legendary Actions', m.legendary, 'legendary');
-  const c = el('p', 'hint'); c.textContent = 'From the SRD 5.1 by Wizards of the Coast, CC BY 4.0.';
+  const c = el('p', 'hint'); c.textContent = `From the SRD ${m.ed === 2024 ? '5.2 (2024 rules)' : '5.1 (2014 rules)'} by Wizards of the Coast, CC BY 4.0.`;
   $('statModal').hidden = false;
 }
 function rollBtn(text, onclick) { const bt = document.createElement('button'); bt.className = 'roll'; bt.textContent = text; bt.title = 'Roll ' + text; bt.onclick = onclick; return bt; }
 // "+5 to hit" and "(2d6 + 3)" become buttons that roll
 function richText(p, text, roll) {
-  const re = /([+-]\d+) to hit|\((\d+d\d+(?:\s*[+-]\s*\d+)?)\)/g; let last = 0, m;
+  const re = /([+-]\d+) to hit|\((\d+d\d+(?:\s*[+-]\s*\d+)?)\)|(?<=Attack Roll: )([+-]\d+)/g; let last = 0, m;
   while ((m = re.exec(text))) {
     p.append(text.slice(last, m.index));
-    if (m[1]) { const expr = '1d20' + m[1]; p.appendChild(rollBtn(`${m[1]} to hit`, () => roll(expr, 'attack'))); }
+    if (m[1] || m[3]) { const b0 = m[1] || m[3], expr = '1d20' + b0; p.appendChild(rollBtn(m[1] ? `${b0} to hit` : b0, () => roll(expr, 'attack'))); }
     else { const expr = m[2].replace(/\s/g, ''); p.append('('); p.appendChild(rollBtn(m[2], () => roll(expr, 'damage'))); p.append(')'); }
     last = re.lastIndex;
   }
@@ -1262,6 +1271,7 @@ const rollWithPrivacy = (expr, label) => sendMsg({ type: 'roll', expr, label: la
 
 $('openEnc').onclick = () => openEncounters().catch((e) => toast('Couldn\'t load the monsters: ' + e.message));
 $('encSearch').oninput = () => renderEncList();
+$('encEd').onchange = () => { trySet('tt-monsterEd', $('encEd').value); renderEncList(); };
 $('encType').onchange = $('encCrMin').onchange = $('encCrMax').onchange = () => renderEncList();
 $('encSize').oninput = () => renderEncPicked();
 $('encLevel').oninput = () => { trySet('tt-partyLevel', $('encLevel').value); renderEncPicked(); };
@@ -1941,6 +1951,15 @@ function renderEditor() {
   drawPort(t);
   $('eDying').hidden = !(t.owner && t.hp === 0 && !(t.conditions || []).includes('dead') && !(t.death && t.death.stable));
   $('eSurp').checked = (t.conditions || []).includes('surprised');
+  // a summoned spirit: its attacks (the caster's spell attack bonus), and sending it away
+  const sb = $('eSummon'); sb.hidden = !(mine2 && t.sum); sb.innerHTML = '';
+  if (mine2 && t.sum) summonButtons(sb, t);
+}
+function summonButtons(box, t) {
+  for (const [i, a] of (t.sum.attacks || []).entries()) { const b = document.createElement('button'); b.textContent = '🎯 ' + a.name; b.title = `+${t.sum.attack} to hit, ${a.dice} ${a.type}${a.extra ? ` + ${a.extra.dice} ${a.extra.type}` : ''}${t.sum.multi > 1 ? ` · ${t.sum.multi} attacks a turn` : ''}`;
+    b.onclick = () => startAim({ title: `${t.label}: ${a.name}, click the target`, harm: true, one: true, color: '#ef4444', send: (ids) => ids[0] && sendMsg({ type: 'summonAttack', sceneId: editing, id: t.id, idx: i, target: ids[0] }) }); box.append(b); }
+  if (t.srd && !t.sum.attacks.length && !me.isDM) box.append(Object.assign(document.createElement('span'), { className: 'hint', textContent: 'The DM rolls its attacks' }));
+  const d = document.createElement('button'); d.textContent = 'Dismiss'; d.className = 'quiet'; d.onclick = () => sendMsg({ type: 'summonDismiss', sceneId: editing, id: t.id }); box.append(d);
 }
 let portDrag = null;
 function drawPort(t, pos) {
@@ -2264,6 +2283,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const p = toWorld(e), c = toCell(p);
   const building = me.isDM && mode === 'build';
 
+  if (aim && aim.cell) { const f = aim.cell; stopAim(); f(c); return; } // a square for a teleport
   if (aim) { // choosing targets for a spell: clicking a token adds it or takes it off
     const t = tokenAt(s, p);
     if (t && aim.pieces) { // darts, rays, beams: each click sends one more at it; Shift+click takes one back
@@ -3206,7 +3226,8 @@ function aimBar() {
   $('aimTitle').textContent = aim.title;
   const used = [...aim.count.values()].reduce((a, b) => a + b, 0);
   $('aimCount').textContent = aim.max && !aim.pieces && aim.ids.size ? `${aim.ids.size} of ${aim.max} chosen` : aim.pieces ? `${used} of ${aim.pieces} ${aim.word}s placed · Shift+click takes one back` : aim.ids.size ? `${aim.ids.size} chosen` : aim.harm ? 'Click the tokens it hits' : 'Click who it’s for';
-  $('aimArea').hidden = !!aim.one || !!aim.pieces;
+  $('aimArea').hidden = !!aim.one || !!aim.pieces || !!aim.cell; $('aimGo').hidden = !!aim.cell; $('aimSelf').hidden = me.isDM || !!aim.cell;
+  if (aim.cell) $('aimCount').textContent = 'Click a square';
   $('aimAmt').hidden = !aim.amount; if (aim.amount && !$('aimAmt').value) $('aimAmt').value = aim.amount;
   $('aimAmt').max = aim.amount || '';
   $('aimGo').disabled = !aim.ids.size && !aim.allowNone;
@@ -3290,7 +3311,7 @@ function renderSpells(d, c, el) {
       if (options.length > 1) { sel = el('select'); for (const o of options) { const op = el('option', '', o.t); op.value = o.v; sel.append(op); } }
       const cast = el('button', 'primary', sp.level === 0 ? 'Cast' : sp.usesSlot ? (options.length ? 'Cast' : 'No slots left') : sp.uses ? 'Cast (uses 1)' : 'Cast');
       cast.disabled = sp.level > 0 && sp.usesSlot && !options.length;
-      const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi);
+      const lands = !!(sp.dice || sp.heal || sp.temp || sp.maxUp || sp.cond || sp.multi || sp.summon || sp.move);
       const slotMsg = () => { const o = sel ? sel.value : options[0] && options[0].v; return { name: sp.name, slot: o ? +o.slice(1) : sp.level, pact: !!(o && o[0] === 'p') }; };
       const harm = ((sp.dice && !sp.heal && !sp.temp) || !!sp.multi || !!(sp.cond && !sp.cond.ally)) && !(sp.cond && sp.cond.ally);
       cast.onclick = () => {
@@ -3300,7 +3321,7 @@ function renderSpells(d, c, el) {
         const lv = lvAt(), pieces = sp.multi ? sp.multi.n + (sp.level > 0 ? sp.multi.up * (lv - sp.level) : 0) : 0, max = sp.targets && !sp.multi ? sp.targets.n + (sp.targets.up || 0) * (lv - sp.level) : 0;
         startAim({ title: `Cast ${sp.name}`, harm, pieces, max, word: sp.multi && sp.multi.word, color: harm ? '#ef4444' : '#22c55e', self: sp.selfOnly || (sp.cond && sp.cond.self), allowNone: true,
           options: sp.cond && sp.cond.options ? sp.cond.options.map((o) => o.name) : sp.types ? sp.types.map((x) => x[0].toUpperCase() + x.slice(1)) : null,
-          send: (ids, amt, option) => sendMsg(ids.length ? { type: 'spellEffect', cast: true, targets: ids, option, dmgType: option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
+          send: (ids, amt, option) => sendMsg(ids.length || sp.summon || sp.move ? { type: 'spellEffect', cast: true, targets: ids, option, dmgType: option, ...slotMsg() } : { type: 'charCast', ...slotMsg() }) });
       };
       // while it lasts, some spells do it again without a new slot: Sunbeam's new line, Bigby's Hand, a creature walking into the web
       if ((sp.cond && sp.cond.again && !sp.conc) || (sp.conc && c.concOn === sp.name && lands)) {
@@ -3363,12 +3384,24 @@ function renderChar() {
   if ((c.spells || []).length) section('Spells', true, (d) => renderSpells(d, c, el));
   fillGear(box, c, section, false, true);
   if (myItems.length) section('From the DM', true, (d) => renderMyItems(d, el));
+  const sums = sc() ? Object.values(sc().tokens).filter((t) => t.sum && t.owner === me.name) : [];
+  if (sums.length) section('Your summons', true, (d) => { for (const t of sums) { const row = el('div', 'dmitem'); const h = el('div', 'dmih'); h.append(el('b', '', t.label), el('small', '', [t.sum.spell, t.hp != null ? `${t.hp}/${t.maxHp} HP` : '', t.ac ? `AC ${t.ac}` : ''].filter(Boolean).join(' · '))); const r = el('div', 'row'); summonButtons(r, t); row.append(h, r); d.append(row); } });
   const foot = el('div', 'row'); foot.style.marginTop = '8px';
   const refresh = el('button', '', charBusy ? 'Reading…' : '↻ Update from D&D Beyond'); refresh.disabled = charBusy; refresh.title = 'After levelling up or changing gear. Your token on this map is updated too when you click Put my token on the map.';
   refresh.onclick = () => { charBusy = true; renderChar(); sendMsg({ type: 'ddbImport', link: c.link }); };
   const forget = el('button', 'fixed danger', '✕'); forget.title = 'Use a different character';
   forget.onclick = () => { if (forget.dataset.armed) return sendMsg({ type: 'charForget' }); forget.dataset.armed = 1; forget.textContent = 'Sure?'; setTimeout(() => { delete forget.dataset.armed; forget.textContent = '✕'; }, 3000); };
   foot.append(refresh, forget); box.append(foot);
+}
+// ---------- 1.19: a question from the table (an opportunity attack, Counterspell), with buttons and a timer ----------
+function showPrompt(p) {
+  const box = document.createElement('div'); box.className = 'prompt'; box.dataset.id = p.id;
+  const t = document.createElement('b'); t.textContent = p.title || ''; const tx = document.createElement('p'); tx.textContent = p.text || '';
+  const row = document.createElement('div'); row.className = 'row';
+  for (const [i, b] of (p.buttons || []).entries()) { const k = document.createElement('button'); k.textContent = b.label; if (i === 0) k.className = 'primary'; k.onclick = () => { sendMsg({ type: 'promptAnswer', id: p.id, value: b.value }); box.remove(); }; row.append(k); }
+  const bar = document.createElement('div'); bar.className = 'bar'; bar.animate([{ transform: 'scaleX(1)' }, { transform: 'scaleX(0)' }], { duration: p.ttl || 15000, fill: 'forwards' });
+  box.append(t, tx, row, bar); $('prompts').append(box);
+  setTimeout(() => box.remove(), (p.ttl || 15000) + 500);
 }
 // ---------- 1.18: items the DM made, in the player's panel ----------
 let myItems = [], dmItems = {}, dmInv = {}, itemEdit = null;

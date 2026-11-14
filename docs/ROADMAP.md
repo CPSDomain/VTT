@@ -36,18 +36,18 @@ Status: ✅ done · 🔨 in progress · 📋 planned · 💬 to discuss
 | 1.16 | Saving throws by the 2024 books: every PHB spell with a condition, monster abilities from the stat block, class features and feats, DMG items, poisons and hazards, save modifiers, Legendary Resistance, death saves |
 | 1.17 | Combat pass: the full 2024 spell table, monsters casting their spells, any spell from the DM, weapon attacks on targets, attack Advantage and Disadvantage by the rules, protections that change AC and damage |
 | 1.18 | The rest of combat: spell areas that trigger on movement, Smite, Mirror Image, Blink, True Strike and Resistance, target limits, Dodge/Disengage/Help/Hide/Dash/Ready, opportunity attack alerts, cover, range and reach, Weapon Mastery, dying, falls and Hit Dice, Multiattack, recharge and legendary actions, DM-made items, portrait tokens |
+| 1.19 | The 2024 monsters (SRD 5.2) with Bonus Actions and their spells, one-click opportunity attacks and Counterspell, grapples that drag, summon spells on the map with their attacks, teleports by clicking a square, pushes |
 
 ## Next
 
 The wish list, in the order we plan to build it. Each phase is one release; the order can change if the group needs something sooner.
 
-### Later — more map art 📋
+### Parked — more map art 📋
 Left over from the 1.7 plan:
 - **Your own asset packs (optional):** point Tabletop at a folder of PNG tiles and props you own (Forgotten Adventures, Tom Cartos and the like) and use them in the build palettes. They stay on your PC; Tabletop can't ship them.
-- **Portrait-style tokens** from uploaded art.
 
 ### Next 💬
-Whatever the table needs most after playing with 1.11.
+Whatever the table needs most after playing with 1.19.
 
 ### Parked — AI map generation
 - Claude designing a map from a free-text description (needs internet and an Anthropic API key). Parked in favour of the bigger built-in generator; can come back later.

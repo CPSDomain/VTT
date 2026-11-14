@@ -230,7 +230,7 @@ Click **⚔ Encounter builder…** under Add tokens.
 
 **Stat blocks:** select a monster on the map and click **📖 Stat block**. Attack bonuses, damage, hit dice and ability scores are buttons that roll; your rolls stay private unless you tick **Show rolls to the players**. Library tokens named like an SRD monster ("Goblin 3") have one too.
 
-The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under the Creative Commons Attribution 4.0 licence.
+**Two monster sets:** the 330 monsters of the 2024 rules (SRD 5.2: Goblin Warrior, Archmage…) and the 334 older ones (SRD 5.1). Pick **2024 monsters**, **2014 monsters** or **Both** next to the search box. 2024 stat blocks have Bonus Actions, and their spells (Misty Step, Counterspell) are buttons too. Both sets are used under the Creative Commons Attribution 4.0 licence.
 
 ## Combat
 
@@ -255,6 +255,13 @@ The monsters are the SRD 5.1 monsters (334, from Aboleth to Zombie), used under 
 - **Optional rules:** **Under water** and **Flanking** are tick boxes under the initiative list. **Surprised** in the token panel gives Disadvantage on initiative.
 - **Falls:** set the feet and click **🪂 Fall**.
 - **Dying:** a dying character can be stabilised with **🩺 Stabilise**.
+
+**Reactions (1.19):** each creature has one Reaction a round, back at the start of its turn.
+- **Opportunity attacks:** when a creature leaves a monster's reach, a card asks you which attack to make (or **Let them go**). Players get the same card for their character's weapons.
+- **Counterspell:** when someone casts a spell within 60 feet of a foe who has Counterspell (a player with a level 3+ slot, or a monster whose stat block lists it), that foe is asked first. The caster then makes a Constitution save; on a failure the spell fizzles and no slot is spent. Nobody answering within 15 seconds means no.
+- **Grapples:** a grappled creature can't move itself, and moves with its grappler. Pushed or teleported out of reach, it's free.
+
+**Summons and teleports:** Summon Beast, Find Familiar, Animate Dead, Spiritual Weapon, Bigby's Hand and the other summoning spells put their creatures next to the caster, owned by the caster's player. Their attacks are in the token panel and under **Your summons** in My character, and they vanish at 0 hit points or when concentration ends. Conjure Animals and Conjure Elemental make a token with an area that moves with it. Misty Step, Dimension Door and Steel Wind Strike ask the caster to click where to appear. Thunderwave, Gust of Wind and Weapon Mastery Push move the target.
 
 ## Items
 

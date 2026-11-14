@@ -10,6 +10,9 @@ Map art (terrain textures and props) is drawn in code by Tabletop.
 Monsters (public/monsters.json)
 This work includes material taken from the System Reference Document 5.1 ("SRD 5.1") by Wizards of the Coast LLC and available at https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.1 is licensed under the Creative Commons Attribution 4.0 International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 Data prepared by the 5e-database project (https://github.com/5e-bits/5e-database), MIT licence.
+The 2024 monsters include material taken from the System Reference Document 5.2 ("SRD 5.2") by Wizards of the Coast LLC and available at
+https://dnd.wizards.com/resources/systems-reference-document. The SRD 5.2 is licensed under the Creative Commons Attribution 4.0
+International License available at https://creativecommons.org/licenses/by/4.0/legalcode.
 
 
 Music and ambience (public/audio)

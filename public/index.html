@@ -240,6 +240,11 @@
   #gate input { width:100%; }
   #join { position:fixed; inset:0; background:rgba(0,0,0,.82); display:flex; align-items:center; justify-content:center; z-index:20; }
   #join form { background:var(--panel); padding:24px; border-radius:10px; width:320px; border-top:3px solid var(--accent); }
+  #eSummon[hidden] { display:none!important; }
+  #prompts { position:fixed; left:50%; top:118px; transform:translateX(-50%); display:flex; flex-direction:column; gap:8px; z-index:40; width:min(440px, 92vw); }
+  .prompt { background:#262626; border:1px solid rgba(255,255,255,.12); border-left:4px solid #f59e0b; border-radius:8px; padding:10px 12px; box-shadow:0 10px 30px rgba(0,0,0,.55); }
+  .prompt b { display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#f59e0b; margin-bottom:2px; } .prompt p { margin:0 0 8px; }
+  .prompt .row { flex-wrap:wrap; gap:6px; margin:0; } .prompt .bar { height:3px; background:#f59e0b; margin-top:8px; border-radius:2px; transform-origin:left; }
   #toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#2a2a2a; border-left:4px solid var(--accent); padding:10px 16px; border-radius:6px; box-shadow:0 8px 30px rgba(0,0,0,.5); opacity:0; transition:opacity .2s; pointer-events:none; z-index:30; max-width:60vw; }
   #toast.show { opacity:1; }
   #editSec.off, #initSec.off, #startSec.off { display:none !important; }
@@ -785,6 +790,7 @@
           </div>
         </details>
         <div class="row acts" id="eActs"><button data-act="dodge" title="Attacks against it have Disadvantage; Advantage on Dex saves, until its next turn">🛡 Dodge</button><button data-act="disengage" title="No opportunity attacks against it this turn">🏃 Disengage</button><button data-act="help" title="Pick a foe: an ally's next attack on it has Advantage">🤝 Help</button><button data-act="hide" title="Stealth check, DC 15">🫥 Hide</button><button data-act="dash">💨 Dash</button><button data-act="ready">⏳ Ready</button></div>
+        <div class="row acts" id="eSummon" hidden></div>
         <div class="row" id="eDying" hidden><button id="eStab" title="Wisdom (Medicine) check, DC 10">🩺 Stabilise</button></div>
         <div class="row dm-only"><label>Fall <input id="eFallFt" type="number" min="10" step="10" value="20" style="width:60px"> ft</label><button id="eFall" title="1d6 bludgeoning per 10 feet (20d6 at most), prone if hurt">🪂 Fall</button><label class="check" title="2024: Disadvantage on its initiative roll"><input type="checkbox" id="eSurp"> Surprised</label></div>
         <div class="row dm-only"><button id="eToInit">⚔ Add to initiative</button><button id="eDup">Duplicate</button><button id="delToken" class="danger">Delete</button></div>
@@ -849,7 +855,7 @@
       <button class="close" data-close>✕</button></div>
     <div class="encbody">
       <div class="enccol">
-        <div class="row" style="margin:0"><input id="encSearch" placeholder="Search monsters: goblin, dragon, undead…"><select id="encType" class="fixed"><option value="">Any kind</option></select></div>
+        <div class="row" style="margin:0"><input id="encSearch" placeholder="Search monsters: goblin, dragon, undead…"><select id="encType" class="fixed"><option value="">Any kind</option></select><select id="encEd" class="fixed" title="Which rules the stat blocks follow"><option value="2024">2024 monsters</option><option value="2014">2014 monsters</option><option value="">Both</option></select></div>
         <div class="row"><span class="fixed hint" style="margin:0">CR</span><select id="encCrMin"></select><span class="fixed hint" style="margin:0">to</span><select id="encCrMax"></select><span class="fixed hint" id="encCount" style="margin:0"></span></div>
         <div id="encList"></div>
       </div>
@@ -964,6 +970,7 @@
   <div class="row"><button class="primary">Join</button></div>
 </form></div>
 <div id="toast"></div>
+<div id="prompts"></div>
 
 <div class="modal" id="libModal" hidden>
   <div class="dialog wide">

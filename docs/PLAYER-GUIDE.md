@@ -102,6 +102,8 @@ When the DM shows you a handout (a letter, a picture, a clue), it pops up on you
 - **Attack a target:** click **🎯** next to a weapon in My character, then the target. Tabletop rolls against its AC and takes the damage off. Cast spells with **Cast** and click the targets.
 - **Actions:** select your token for **🛡 Dodge**, **🏃 Disengage**, **🤝 Help**, **🫥 Hide**, **💨 Dash** and **⏳ Ready**.
 - **Rests:** spend Hit Dice from My character after a **☾ Short rest**.
+- **Reactions:** when a foe leaves your reach, a card asks if you want to make an opportunity attack; when someone nearby casts a spell and you have Counterspell, a card asks if you want to counter it. Click a button or let it time out.
+- **Summons:** creatures you summon appear next to you. Drag them, and attack with them from **Your summons** in My character. Misty Step and Dimension Door ask you to click where you appear.
 
 ## Items from the DM
 
